@@ -89,6 +89,20 @@ function Install-BepInEx($game) {
     Copy-Item (Join-Path $inner '*') $game -Recurse -Force
 }
 
+function Place-Items($game, $from, $plug, $patch) {
+    foreach ($item in Get-ChildItem $from) {
+        switch ($item.Name.ToLower()) {
+            'bepinex'  { if ($item.PSIsContainer) { Place-Items $game $item.FullName $plug $patch } else { Copy-Item $item.FullName $plug -Force } }
+            'plugins'  { Copy-Item (Join-Path $item.FullName '*') $plug -Recurse -Force }
+            'patchers' { New-Item -ItemType Directory -Force -Path $patch | Out-Null; Copy-Item (Join-Path $item.FullName '*') $patch -Recurse -Force }
+            'config'   { $c = Join-Path $game 'BepInEx\config'; New-Item -ItemType Directory -Force -Path $c | Out-Null
+                         Get-ChildItem $item.FullName | ForEach-Object { $dst = Join-Path $c $_.Name; if (-not (Test-Path $dst)) { Copy-Item $_.FullName $dst -Recurse } } }
+            'core'     { Copy-Item (Join-Path $item.FullName '*') (Join-Path $game 'BepInEx\core') -Recurse -Force }
+            default    { Copy-Item $item.FullName $plug -Recurse -Force }
+        }
+    }
+}
+
 function Install-Library($game, $pkg) {
     # same layout a mod manager uses: plugins\<Ns-Name>, patchers\<Ns-Name>, config merged
     $full = "$($pkg.Ns)-$($pkg.Name)"
@@ -98,16 +112,7 @@ function Install-Library($game, $pkg) {
     $dir = Get-Package $pkg
     foreach ($d in $plug, $patch) { if (Test-Path $d) { Remove-Item $d -Recurse -Force } }
     New-Item -ItemType Directory -Force -Path $plug | Out-Null
-    foreach ($item in Get-ChildItem $dir) {
-        switch ($item.Name.ToLower()) {
-            'plugins'  { Copy-Item (Join-Path $item.FullName '*') $plug -Recurse -Force }
-            'patchers' { New-Item -ItemType Directory -Force -Path $patch | Out-Null; Copy-Item (Join-Path $item.FullName '*') $patch -Recurse -Force }
-            'config'   { $c = Join-Path $game 'BepInEx\config'; New-Item -ItemType Directory -Force -Path $c | Out-Null
-                         Get-ChildItem $item.FullName | ForEach-Object { $dst = Join-Path $c $_.Name; if (-not (Test-Path $dst)) { Copy-Item $_.FullName $dst -Recurse } } }
-            'core'     { Copy-Item (Join-Path $item.FullName '*') (Join-Path $game 'BepInEx\core') -Recurse -Force }
-            default    { Copy-Item $item.FullName $plug -Recurse -Force }
-        }
-    }
+    Place-Items $game $dir $plug $patch
     return $true
 }
 

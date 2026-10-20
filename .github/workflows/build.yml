@@ -57,7 +57,8 @@ jobs:
                   'BepInEx\plugins\RiskofThunder-R2API_Core\manifest.json', 'BepInEx\plugins\WilburMod\WilburMod.dll'
           $bad = $must | Where-Object { -not (Test-Path (Join-Path $game $_)) }
           Get-ChildItem (Join-Path $game 'BepInEx') -Recurse -Depth 2 | Select-Object -ExpandProperty FullName
-          foreach ($d in 'plugins', 'patchers') { Write-Host "== $d"; Get-ChildItem (Join-Path $game "BepInEx\$d") -Name }
+          foreach ($d in 'plugins', 'patchers') { Write-Host "== $d"; Get-ChildItem (Join-Path $game "BepInEx\$d") -Name -ErrorAction SilentlyContinue }
+          Get-ChildItem (Join-Path $game 'BepInEx') -Recurse -Filter *.dll | Where-Object { $_.FullName -match 'HookGen|FixPlugin|Seekers' } | Select-Object -ExpandProperty FullName
           if ($bad) { throw "Missing after install: $($bad -join ', ')" }
           $dlls = Get-ChildItem (Join-Path $game 'BepInEx') -Recurse -Filter *.dll
           foreach ($n in 'R2API.Core.dll','R2API.ContentManagement.dll','R2API.Language.dll','R2API.Networking.dll','R2API.Prefab.dll','R2API.Items.dll','R2API.RecalculateStats.dll','RoR2BepInExPack.dll','MiscFixes.dll','FixPluginTypesSerialization.dll','BepInEx.MonoMod.HookGenPatcher.dll','SeekersPatcher.dll') {
