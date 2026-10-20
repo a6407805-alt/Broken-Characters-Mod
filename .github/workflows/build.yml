@@ -44,6 +44,9 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
+          $log = Join-Path $env:RUNNER_TEMP 'install.log'
+          Start-Transcript $log | Out-Null
+          try {
           Expand-Archive Duelist-Install.zip pack
           $game = Join-Path $env:RUNNER_TEMP 'Risk of Rain 2'
           New-Item -ItemType Directory $game | Out-Null
@@ -61,6 +64,13 @@ jobs:
             if (-not ($dlls | Where-Object Name -eq $n)) { throw "Library dll missing: $n" }
           }
           Write-Host 'Installer OK'
+          } catch {
+            Write-Host "FAILED: $($_.Exception.Message) at $($_.InvocationInfo.PositionMessage)"
+            Stop-Transcript | Out-Null
+            $tail = (Get-Content $log | Select-Object -Last 60) -join '%0A'
+            Write-Host "::error::$tail"
+            exit 1
+          }
 
   publish:
     needs: test-installer
