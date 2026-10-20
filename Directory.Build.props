@@ -1,0 +1,9 @@
+<Project>
+  <!-- When the project sits inside BepInEx\plugins, keep the compiler's scratch copy of DuelistMod.dll
+       OUT of plugins: if BepInEx sees two DuelistMod.dll files it can run the duel/partner code from the
+       copy whose settings were never loaded, and everything throws NullReferenceException.
+       Anywhere else (a normal clone, GitHub's build servers) the default obj folder is fine. -->
+  <PropertyGroup Condition="$(MSBuildThisFileDirectory.Contains('plugins'))">
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)..\..\DuelistBuild\obj\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+</Project>

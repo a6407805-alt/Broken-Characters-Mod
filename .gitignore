@@ -1,0 +1,11 @@
+# build output
+bin/
+obj/
+*.user
+build_log.txt
+Duelist-Install.zip
+release/stage/
+# python / blender scratch
+__pycache__/
+*.pyc
+*.blend1

@@ -1,0 +1,42 @@
+# Builds the Duelist on GitHub's servers every time code is pushed, then publishes the result as the
+# "latest" release: Duelist-Install.zip. Friends (and you) just run "Update Duelist.bat" to get it.
+name: Build Duelist
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build
+        run: dotnet build DuelistMod.csproj -c Release -nologo
+
+      - name: Package Duelist-Install.zip
+        run: bash release/package.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Duelist-Install
+          path: Duelist-Install.zip
+
+      - name: Publish as the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest Duelist-Install.zip \
+            --title "Duelist (latest build)" \
+            --notes "Built automatically from commit ${GITHUB_SHA::7}. Download Duelist-Install.zip, extract it and run INSTALL.bat — or just run Update Duelist.bat if you already have it." \
+            --target "$GITHUB_SHA" --latest

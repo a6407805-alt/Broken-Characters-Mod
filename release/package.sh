@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Packages the built mod the same way "Make Release.bat" does, for GitHub's build servers.
+set -euo pipefail
+mod="$(cd "$(dirname "$0")/.." && pwd)"
+dll="$(find "$mod/bin/Release" -name DuelistMod.dll | head -1)"
+stage="$mod/release/stage"
+rm -rf "$stage" "$mod/Duelist-Install.zip"
+mkdir -p "$stage/Duelist"
+cp "$dll" "$stage/Duelist/"
+for f in "$mod"/*.bin; do gzip -9 -c "$f" > "$stage/Duelist/$(basename "$f").gz"; done
+for f in duel_mat.jpg duel_mat_glow.png; do [ -f "$mod/$f" ] && cp "$mod/$f" "$stage/Duelist/"; done
+[ -d "$mod/sounds" ] && cp -r "$mod/sounds" "$stage/Duelist/sounds"
+for f in INSTALL.bat UNINSTALL.bat install.ps1 README.txt manifest.json icon.png "Update Duelist.bat"; do
+  [ -f "$mod/release/$f" ] && cp "$mod/release/$f" "$stage/"
+done
+(cd "$stage" && zip -qr9 "$mod/Duelist-Install.zip" .)
+echo "Packaged $(du -h "$mod/Duelist-Install.zip" | cut -f1) -> Duelist-Install.zip"
