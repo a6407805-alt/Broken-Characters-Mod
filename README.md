@@ -2,7 +2,7 @@
 
 ## Play it (friends start here)
 1. You need Risk of Rain 2 with **BepInEx** and **R2API** (any r2modman setup has them).
-2. Go to **Releases → latest** on this page and download **Duelist-Install.zip**.
+2. Download **[Duelist-Install.zip](https://github.com/a6407805-alt/DuelistMod/releases/latest/download/Duelist-Install.zip)** (or open **Releases → latest** on this page).
 3. Right-click the zip → **Extract All**, then double-click **INSTALL.bat**.
 4. To update later, double-click **Update Duelist.bat** (it came in the zip). Close the game first.
 

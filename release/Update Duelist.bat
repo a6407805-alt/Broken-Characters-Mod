@@ -1,7 +1,7 @@
 @echo off
 title Update the Duelist
 rem Downloads the newest Duelist build from GitHub and installs it. Close Risk of Rain 2 first.
-set "REPO=OWNER/REPO"
+set "REPO=a6407805-alt/DuelistMod"
 tasklist /FI "IMAGENAME eq Risk of Rain 2.exe" 2>NUL | find /I "Risk of Rain 2.exe" >NUL
 if not errorlevel 1 (
     echo Risk of Rain 2 is running. Close it, then press any key.
