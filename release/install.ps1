@@ -7,6 +7,16 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'      # makes Invoke-WebRequest much faster
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+try { Start-Transcript (Join-Path $here 'install_log.txt') -Force | Out-Null } catch { }
+# files downloaded from the internet are 'blocked' by Windows; unblock the pack so nothing silently refuses to run
+try { Get-ChildItem $here -Recurse -File | Unblock-File -ErrorAction SilentlyContinue } catch { }
+trap {
+    Write-Host ''
+    Write-Host "Something went wrong: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host 'Send install_log.txt (in this folder) to whoever gave you the pack.' -ForegroundColor Red
+    try { Stop-Transcript | Out-Null } catch { }
+    exit 1
+}
 $modSrc = Join-Path $here 'Duelist'
 $extraSrc = Join-Path $here 'Mods'
 $modName = 'Duelist'
@@ -137,7 +147,8 @@ if ($games.Count -eq 0) {
     Add-Type -AssemblyName System.Windows.Forms
     $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
     $dlg.Description = 'Select your Risk of Rain 2 folder'
-    if ($dlg.ShowDialog() -eq 'OK' -and (Test-Path (Join-Path $dlg.SelectedPath 'Risk of Rain 2.exe'))) { $games = @($dlg.SelectedPath) }
+    $owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true; ShowInTaskbar = $false }   # keeps the picker in front
+    if ($dlg.ShowDialog($owner) -eq 'OK' -and (Test-Path (Join-Path $dlg.SelectedPath 'Risk of Rain 2.exe'))) { $games = @($dlg.SelectedPath) }
     else { Say "Cancelled (or that folder doesn't have Risk of Rain 2.exe)." 'Red'; exit 1 }
 }
 
@@ -198,3 +209,4 @@ if ($done -gt 0) {
 } else {
     Say $(if ($Uninstall) { 'Nothing to remove.' } else { 'Nothing was installed (see the messages above).' }) 'Red'
 }
+try { Stop-Transcript | Out-Null } catch { }
