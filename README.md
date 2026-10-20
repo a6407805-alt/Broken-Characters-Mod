@@ -8,6 +8,20 @@
 
 Everyone in a multiplayer lobby needs the same build, so update together.
 
+## The other mods in the pack
+The zip also installs our other mods (from the `mods/` folder) into `BepInEx\plugins\<Mod>`:
+AshwingDrake, ClayRebel, DropPodRevive, EffectBudgetFix, Emberwarden, Gravitos, InfestedGeneral,
+LocustHorde, MoreEnemiesMod, Nidus, OatsBrother, PhantomAssassin, Reaper, ScrollableLobby, WilburMod.
+
+**Get these from r2modman/Thunderstore first** (they're other people's libraries, so they aren't in this repo):
+- BepInExPack (BepInEx) and RoR2BepInExPack
+- R2API: Core, ContentManagement, Items, Language, Networking, Prefab, RecalculateStats
+- HookGenPatcher (with MMHOOK), FixPluginTypesSerialization, MiscFixes (score), SeekersPatcher (pseudopulse), BepInEx_GUI (optional)
+
+Left out on purpose: the `Sounds` folders of **InfestedGeneral**, **LocustHorde** and **OatsBrother**, because they
+contain audio from commercial games that can't be redistributed. Those mods still load without them, just quieter.
+To add or update a mod in the pack, drop its plugin folder into `mods/` and push.
+
 ## How builds work
 Every push to `main` is built by GitHub Actions (`.github/workflows/build.yml`), packaged by
 `release/package.sh`, and published as the **latest** release. Nobody needs .NET installed to play.

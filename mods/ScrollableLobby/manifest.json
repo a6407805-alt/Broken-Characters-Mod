@@ -1,0 +1,9 @@
+{
+  "name": "ScrollableLobby",
+  "version_number": "0.1.0",
+  "website_url": "",
+  "description": "Turns the character select survivor list into a clean, fixed-size grid you scroll through, so any number of modded survivors fit.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2121"
+  ]
+}

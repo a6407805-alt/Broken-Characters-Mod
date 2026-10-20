@@ -1,0 +1,10 @@
+{
+  "name": "EffectBudgetFix",
+  "version_number": "1.0.0",
+  "website_url": "",
+  "description": "Shows every effect (explosions, monster deaths) even when the game's effects budget is spent, e.g. with huge enemy counts.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2121",
+    "RiskofThunder-RoR2BepInExPack-1.41.0"
+  ]
+}

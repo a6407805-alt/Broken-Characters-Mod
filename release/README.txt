@@ -9,6 +9,8 @@ INSTALL
 
 It finds your game and every r2modman / Thunderstore / Gale profile by itself.
 You need BepInEx and R2API installed already (any modded RoR2 setup has them).
+It also installs the group's other mods from the Mods folder (see the GitHub page for the
+libraries they need: R2API Items/RecalculateStats, HookGenPatcher, MiscFixes, SeekersPatcher).
 Multiplayer: everyone in the lobby needs the same version.
 
 UPDATE   Double-click "Update Duelist.bat" (keep it somewhere handy): it downloads the newest

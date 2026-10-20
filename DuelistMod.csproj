@@ -21,6 +21,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- the bundled group mods (and release staging) are shipped as-is, never compiled into the Duelist -->
+    <Compile Remove="mods/**;release/**" />
+    <None Remove="mods/**;release/**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="duelist_model.bin" Condition="Exists('duelist_model.bin')" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $modSrc = Join-Path $here 'Duelist'
 $modName = 'Duelist'
+$extraSrc = Join-Path $here 'Mods'      # the group's other mods, each in its own folder
 
 function Say($text, $color = 'Gray') { Write-Host $text -ForegroundColor $color }
 
@@ -96,6 +97,15 @@ foreach ($t in $targets) {
     }
     Copy-Item $modSrc $dest -Recurse -Force
     Say "  Installed into $($t.Name)" 'Green'
+    if (Test-Path $extraSrc) {
+        foreach ($m in Get-ChildItem $extraSrc -Directory) {
+            $mDest = Join-Path $plugins $m.Name
+            New-Item -ItemType Directory -Force -Path $mDest | Out-Null
+            # copy over the top (never wipe the folder, so anything extra you keep there stays)
+            Copy-Item (Join-Path $m.FullName '*') $mDest -Recurse -Force
+        }
+        Say "    + $((Get-ChildItem $extraSrc -Directory).Count) group mods: $((Get-ChildItem $extraSrc -Directory | ForEach-Object Name) -join ', ')" 'Green'
+    }
     if (-not $hasR2) { Say '    (warning: R2API not found there - the Duelist needs R2API to load)' 'DarkYellow' }
     $done++
 }
