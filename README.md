@@ -1,26 +1,29 @@
 # The Duelist — a Yu-Gi-Oh!-style survivor for Risk of Rain 2
 
 ## Play it (friends start here)
-1. You need Risk of Rain 2 with **BepInEx** and **R2API** (any r2modman setup has them).
-2. Download **[Duelist-Install.zip](https://github.com/a6407805-alt/DuelistMod/releases/latest/download/Duelist-Install.zip)** (or open **Releases → latest** on this page).
-3. Right-click the zip → **Extract All**, then double-click **INSTALL.bat**.
-4. To update later, double-click **Update Duelist.bat** (it came in the zip). Close the game first.
+No mod manager needed.
+1. Download **[Duelist-Install.zip](https://github.com/a6407805-alt/DuelistMod/releases/latest/download/Duelist-Install.zip)**.
+2. Right-click it → **Extract All**. Close the game, then double-click **INSTALL.bat**.
+3. Launch Risk of Rain 2 from **Steam** like normal.
 
+INSTALL.bat sets up BepInEx and every library straight in the game folder (downloaded from thunderstore.io,
+pinned to the same versions for everyone), then the Duelist and the group mods.
+To update later, close the game and double-click **Update Duelist.bat** (it came in the zip).
 Everyone in a multiplayer lobby needs the same build, so update together.
+To switch all mods off, delete `winhttp.dll` from the game folder.
 
 ## The other mods in the pack
-The zip also installs our other mods (from the `mods/` folder) into `BepInEx\plugins\<Mod>`:
+The `mods/` folder holds the group's other mods, installed into `BepInEx\plugins\<Mod>`:
 AshwingDrake, ClayRebel, DropPodRevive, EffectBudgetFix, Emberwarden, Gravitos, InfestedGeneral,
 LocustHorde, MoreEnemiesMod, Nidus, OatsBrother, PhantomAssassin, Reaper, ScrollableLobby, WilburMod.
+To add or update one, drop its plugin folder into `mods/` and push.
 
-**Get these from r2modman/Thunderstore first** (they're other people's libraries, so they aren't in this repo):
-- BepInExPack (BepInEx) and RoR2BepInExPack
-- R2API: Core, ContentManagement, Items, Language, Networking, Prefab, RecalculateStats
-- HookGenPatcher (with MMHOOK), FixPluginTypesSerialization, MiscFixes (score), SeekersPatcher (pseudopulse), BepInEx_GUI (optional)
+The libraries (BepInExPack, RoR2BepInExPack, HookGenPatcher, FixPluginTypesSerialization, R2API modules,
+MiscFixes, SeekersPatcher) are other people's work, so they're downloaded at install time instead of stored here.
+Their versions are pinned at the top of `release/install.ps1`; bump them there to update everyone.
 
-Left out on purpose: the `Sounds` folders of **InfestedGeneral**, **LocustHorde** and **OatsBrother**, because they
-contain audio from commercial games that can't be redistributed. Those mods still load without them, just quieter.
-To add or update a mod in the pack, drop its plugin folder into `mods/` and push.
+Left out on purpose: the `Sounds` folders of InfestedGeneral, LocustHorde and OatsBrother (audio from
+commercial games that can't be redistributed). Those mods still load, just quieter.
 
 ## How builds work
 Every push to `main` is built by GitHub Actions (`.github/workflows/build.yml`), packaged by

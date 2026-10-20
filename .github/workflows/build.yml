@@ -31,12 +31,50 @@ jobs:
           name: Duelist-Install
           path: Duelist-Install.zip
 
+  test-installer:
+    # Runs INSTALL on a real Windows machine against a dummy game folder, twice (fresh, then re-run),
+    # so a broken installer never reaches the release.
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Duelist-Install
+      - name: Install into a dummy game folder
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Expand-Archive Duelist-Install.zip pack
+          $game = Join-Path $env:RUNNER_TEMP 'Risk of Rain 2'
+          New-Item -ItemType Directory $game | Out-Null
+          Set-Content (Join-Path $game 'Risk of Rain 2.exe') 'dummy'
+          & .\pack\install.ps1 -GameDir $game
+          & .\pack\install.ps1 -GameDir $game
+          $must = 'winhttp.dll', 'BepInEx\core\BepInEx.dll', 'BepInEx\plugins\Duelist\DuelistMod.dll',
+                  'BepInEx\plugins\RiskofThunder-R2API_Core\manifest.json', 'BepInEx\plugins\WilburMod\WilburMod.dll'
+          $bad = $must | Where-Object { -not (Test-Path (Join-Path $game $_)) }
+          Get-ChildItem (Join-Path $game 'BepInEx') -Recurse -Depth 2 | Select-Object -ExpandProperty FullName
+          foreach ($d in 'plugins', 'patchers') { Write-Host "== $d"; Get-ChildItem (Join-Path $game "BepInEx\$d") -Name }
+          if ($bad) { throw "Missing after install: $($bad -join ', ')" }
+          $dlls = Get-ChildItem (Join-Path $game 'BepInEx') -Recurse -Filter *.dll
+          foreach ($n in 'R2API.Core.dll','R2API.ContentManagement.dll','R2API.Language.dll','R2API.Networking.dll','R2API.Prefab.dll','R2API.Items.dll','R2API.RecalculateStats.dll','RoR2BepInExPack.dll','MiscFixes.dll','FixPluginTypesSerialization.dll','BepInEx.MonoMod.HookGenPatcher.dll','SeekersPatcher.dll') {
+            if (-not ($dlls | Where-Object Name -eq $n)) { throw "Library dll missing: $n" }
+          }
+          Write-Host 'Installer OK'
+
+  publish:
+    needs: test-installer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Duelist-Install
       - name: Publish as the latest release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest --yes --cleanup-tag || true
+          gh release delete latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
           gh release create latest Duelist-Install.zip \
             --title "Duelist (latest build)" \
             --notes "Built automatically from commit ${GITHUB_SHA::7}. Download Duelist-Install.zip, extract it and run INSTALL.bat — or just run Update Duelist.bat if you already have it." \
-            --target "$GITHUB_SHA" --latest
+            --target "$GITHUB_SHA" --latest -R "$GITHUB_REPOSITORY"
