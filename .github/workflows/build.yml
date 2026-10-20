@@ -23,6 +23,27 @@ jobs:
       - name: Build
         run: dotnet build DuelistMod.csproj -c Release -nologo
 
+      - name: Build the other mods from source (src/<Mod>/*.csproj)
+        # Each mod whose source lives in src/<Mod>/ is compiled here and its fresh dll replaces mods/<Mod>/.
+        # A mod that fails to build keeps its last good dll, so one broken mod never blocks the pack.
+        run: |
+          shopt -s nullglob
+          for proj in src/*/*.csproj; do
+            mod=$(basename "$(dirname "$proj")")
+            name=$(grep -oP '(?<=<AssemblyName>)[^<]+' "$proj" | head -1 || true)
+            [ -z "$name" ] && name=$(basename "$proj" .csproj)
+            echo "== building $mod ($name)"
+            if dotnet build "$proj" -c Release -nologo -o "build/$mod"; then
+              mkdir -p "mods/$mod"
+              for ext in dll pdb deps.json; do
+                if [ -f "build/$mod/$name.$ext" ]; then cp "build/$mod/$name.$ext" "mods/$mod/"; fi
+              done
+              echo "::notice::$mod built from source"
+            else
+              echo "::error::$mod failed to build - the pack keeps its previous $mod dll"
+            fi
+          done
+
       - name: Package Duelist-Install.zip
         run: bash release/package.sh
 
