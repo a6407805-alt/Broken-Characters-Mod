@@ -373,6 +373,7 @@ namespace DuelistMod
         public static ConfigEntry<float> EnemyResponseChance;
         public static ConfigEntry<bool> CritInBattle;
         public static ConfigEntry<bool> Hover;
+        public static ConfigEntry<bool> StartHovering;
         public static ConfigEntry<bool> FlowingOutfit;
         public static ConfigEntry<bool> NoRegenInDuel;
 
@@ -453,7 +454,8 @@ namespace DuelistMod
             EndPhaseHandLimit = cfg.Bind("Rules", "EndPhaseHandLimit", 6, "In your End Phase you discard down to this many cards (the card game uses 6).");
             EnemyResponseChance = cfg.Bind("Rules", "EnemyResponseChance", 0.6f, "Chance an enemy elite card chains a response when it's allowed to.");
             CritInBattle = cfg.Bind("Rules", "CritsDoubleAtk", true, "Your crit chance still matters: a critical attack doubles the attacker's ATK for that battle.");
-            Hover = cfg.Bind("Skills", "Hover", true, "The Duelist hovers and glides everywhere. Hold jump to rise; double-tap jump to land and walk (double-tap again to take off).");
+            Hover = cfg.Bind("Skills", "Hover", true, "Allow hovering: double-tap jump to take off and glide (hold jump to rise), double-tap again to land and walk.");
+            StartHovering = cfg.Bind("Skills", "StartHovering", false, "Start each stage already hovering instead of walking.");
             FlowingOutfit = cfg.Bind("Model", "FlowingOutfit", true, "The Duelist's coat tails, apron and chains flow and trail as he moves (the hem most, the coat body a little). Needs a restart.");
             NoRegenInDuel = cfg.Bind("Rules", "NoRegenDuringDuels", true, "During a duel nobody regenerates: your LP, the enemy's LP, enemy monsters, and your turrets and drones. Only heal cards restore LP.");
 
@@ -483,7 +485,7 @@ namespace DuelistMod
             LanguageAPI.Add(p + "FAIL", "..and so they vanished, their deck scattered across the stars.");
 
             LanguageAPI.Add(p + "PASSIVE_NAME", "Deckbuilder");
-            LanguageAPI.Add(p + "PASSIVE_DESC", "Every item, equipment and robot you pick up also becomes a <style=cIsDamage>card</style> for your duel deck, and items keep working as normal. White, green and red items are <style=cIsHealing>spells</style> (healing items are Quick-Play); equipment and void items are <style=cIsUtility>traps</style>, lunar items Counter Traps; drones you buy are <style=cIsDamage>monsters</style>. Deck limit 60, 40 recommended. The Duelist <style=cIsUtility>hovers</style>: hold jump to rise, double-tap jump to land or take off again.");
+            LanguageAPI.Add(p + "PASSIVE_DESC", "Every item, equipment and robot you pick up also becomes a <style=cIsDamage>card</style> for your duel deck, and items keep working as normal. White, green and red items are <style=cIsHealing>spells</style> (healing items are Quick-Play); equipment and void items are <style=cIsUtility>traps</style>, lunar items Counter Traps; drones you buy are <style=cIsDamage>monsters</style>. Deck limit 60, 40 recommended. Double-tap jump to <style=cIsUtility>hover</style> (hold jump to rise); double-tap again to land and walk.");
 
             LanguageAPI.Add(p + "PRIMARY_NAME", "Card Toss");
             LanguageAPI.Add(p + "PRIMARY_DESC", "Flick a razor card that <style=cIsUtility>tracks</style> the enemy nearest your crosshair for <style=cIsDamage>150% damage</style>. Every third throw is the <style=cIsDamage>Trump Card</style>: a huge golden card that pierces the line for <style=cIsDamage>375%</style>.");

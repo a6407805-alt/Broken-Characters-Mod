@@ -366,6 +366,7 @@ namespace DuelistMod
         private Quaternion _baseRot, _lastRot;
         private bool _has;
         private Vector3 _lean;
+        private float _float;
         private CharacterBody _body;
         private DuelistHover _hover;
 
@@ -384,13 +385,16 @@ namespace DuelistMod
             _has = true;
 
             Vector3 up = t.parent ? t.parent.InverseTransformDirection(Vector3.up) : Vector3.up;
-            float h = Height + Mathf.Sin(Time.time * 1.8f) * 0.07f;
+            // float only while actually hovering; walking keeps his feet on the ground
+            bool floating = _hover ? _hover.IsHovering : (_body == null && DuelConfig.Hover.Value && DuelConfig.StartHovering.Value);
+            _float = Mathf.MoveTowards(_float, floating ? 1f : 0f, Time.deltaTime * 3f);
+            float h = (Height + Mathf.Sin(Time.time * 1.8f) * 0.07f) * Mathf.SmoothStep(0f, 1f, _float);
             _lastSet = _base + up * h;
             t.localPosition = _lastSet;
 
             // lean into the glide: pitch forward with speed, bank into turns
             Vector3 want = Vector3.zero;
-            if (_hover && _hover.Hovering && _body && _body.characterMotor && t.parent)
+            if (_hover && _hover.IsHovering && _body && _body.characterMotor && t.parent)
             {
                 Vector3 v = _body.characterMotor.velocity; v.y = 0f;
                 Vector3 local = t.parent.InverseTransformDirection(v) / Mathf.Max(1f, _body.moveSpeed);
@@ -403,14 +407,14 @@ namespace DuelistMod
     }
 
     /// <summary>
-    /// The Duelist hovers everywhere he goes, a body-length above the ground, gliding with momentum like a
-    /// sorcerer on the wind. Hold jump to rise higher; double-tap jump to drop and walk (double-tap again
-    /// to take off). Turned off inside duels.
+    /// The Duelist walks normally; double-tap jump to take off and hover a body-length above the ground,
+    /// gliding with momentum like a sorcerer on the wind. Hold jump to rise higher; double-tap jump again to
+    /// land and walk. Turned off inside duels.
     /// </summary>
     [DefaultExecutionOrder(10000)]
     public class DuelistHover : MonoBehaviour
     {
-        public bool Hovering = true;
+        public bool Hovering = false;
         public const float BaseHeight = 1.1f;
         private CharacterBody _body;
         private float _extra, _lastTap = -10f, _airControl = -1f;
@@ -418,8 +422,13 @@ namespace DuelistMod
         private Animator _anim;
         private HashSet<string> _params;
 
-        private void Awake() => _body = GetComponent<CharacterBody>();
+        private void Awake()
+        {
+            _body = GetComponent<CharacterBody>();
+            Hovering = DuelConfig.StartHovering.Value;      // walking by default; double-tap jump to take off
+        }
 
+        public bool IsHovering => Active;
         private bool Active => Hovering && DuelConfig.Hover.Value && _body && !DuelDimensionState.ActiveDuelists.Contains(_body);
 
         private void Update()
