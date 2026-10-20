@@ -50,6 +50,7 @@ namespace DuelistMod
         private bool _padMode;
         private Vector2 _cursor = new Vector2(960f, 700f);
         private int _pendingClick = -1;
+        private bool _padClick;
         private Vector3 _lastMouse;
         private readonly List<Vector2> _snaps = new List<Vector2>();
         private List<MenuItem> _snappedMenu;
@@ -445,10 +446,9 @@ namespace DuelistMod
                     _pendingClick = -1;
                     Event saved = Event.current;
                     Event.current = new Event { type = EventType.MouseDown, mousePosition = _cursor, button = btn, clickCount = 1 };
-                    DrawAll();
-                    Event.current = new Event { type = EventType.MouseUp, mousePosition = _cursor, button = btn, clickCount = 1 };
-                    DrawAll();
-                    Event.current = saved;
+                    _padClick = true;
+                    try { DrawAll(); }
+                    finally { _padClick = false; Event.current = saved; }
                 }
                 Event.current.mousePosition = _cursor;
             }
@@ -604,6 +604,13 @@ namespace DuelistMod
                 if (right) { Session.CancelSelection(); e.Use(); return; }
             }
 
+            if (_padClick)
+            {
+                // a controller "click" is a single event, so press the turn buttons here rather than through GUI.Button
+                if (_nextRect.Contains(m)) { Session.NextPhase(); e.Use(); return; }
+                if (_endRect.Contains(m)) { Session.EndTurn(); e.Use(); return; }
+                if (_retreatRect.Contains(m)) { Session.Retreat(); e.Use(); return; }
+            }
             if (_endRect.Contains(m) || _nextRect.Contains(m) || _retreatRect.Contains(m)) return; // let the buttons handle it
             if (_helpBtnRect.Contains(m) || _logRect.Contains(m))
             {
