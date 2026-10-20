@@ -52,6 +52,7 @@ namespace DuelistMod
             WarnDuplicateCopies();
             DuelistTokens.Register();
             DuelNet.Register();
+            DuelVenom.Register();
 
             CreateBody();
             CreateDisplay();
@@ -333,6 +334,14 @@ namespace DuelistMod
         public static ConfigEntry<float> DefenseDamage;
         public static ConfigEntry<float> KillGoldBonus;
         public static ConfigEntry<float> VictoryGoldBonus;
+        public static ConfigEntry<float> VictoryJackpotChests;
+        public static ConfigEntry<int> VictoryLegendary;
+        public static ConfigEntry<int> VictoryUncommon;
+        public static ConfigEntry<bool> VictoryLevelUp;
+        public static ConfigEntry<float> VictoryBuffSeconds;
+        public static ConfigEntry<bool> VenomAura;
+        public static ConfigEntry<float> DuelVenomSeconds;
+        public static ConfigEntry<bool> Controller;
         public static ConfigEntry<float> CardTossSpell;
         public static ConfigEntry<float> HealCardFraction;
 
@@ -417,6 +426,14 @@ namespace DuelistMod
             DefenseDamage = cfg.Bind("Summoning", "DefenseDamageTaken", 0.5f, "Damage a monster in defense position takes (0.5 = half).");
             KillGoldBonus = cfg.Bind("Gold", "KillGoldBonus", 1.0f, "Extra gold per enemy killed in a duel, as a multiple of its normal gold (1.0 = double gold).");
             VictoryGoldBonus = cfg.Bind("Gold", "VictoryGoldBonus", 0.5f, "Winning the duel pays this fraction of your duel bonus again.");
+            VictoryJackpotChests = cfg.Bind("Victory", "JackpotChests", 4f, "Winning a duel pays a gold jackpot worth this many small chests (scales with difficulty).");
+            VictoryLegendary = cfg.Bind("Victory", "LegendaryDrops", 1, "Legendary (red) items that drop when you win a duel. Beating a boss or the Director adds one more.");
+            VictoryUncommon = cfg.Bind("Victory", "UncommonDrops", 2, "Uncommon (green) items that drop when you win a duel.");
+            VictoryLevelUp = cfg.Bind("Victory", "LevelUp", true, "Winning a duel gives your team an instant level up.");
+            VictoryBuffSeconds = cfg.Bind("Victory", "GlorySeconds", 30f, "After a win: full heal plus Victor's Glory (big move and attack speed) for this many seconds. 0 = off.");
+            VenomAura = cfg.Bind("Visuals", "DuelVenom", true, "Anything hurt by a duel gets a purple venom aura on the map (everyone sees it) and purple damage numbers.");
+            DuelVenomSeconds = cfg.Bind("Visuals", "DuelVenomSeconds", 10f, "How long the purple venom aura lasts after the last duel hit.");
+            Controller = cfg.Bind("Controls", "ControllerCursor", true, "Play duels with a gamepad: left stick moves a cursor, D-pad jumps between buttons, A selects.");
             CardTossSpell = cfg.Bind("Cards", "CardTossSpellDamage", 2.0f, "Starter Card Toss spell damage (2.0 = 200%).");
             HealCardFraction = cfg.Bind("Cards", "ItemHealFraction", 0.12f, "Base max-HP fraction healed by an item heal spell.");
 

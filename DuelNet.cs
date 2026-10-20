@@ -76,6 +76,13 @@ namespace DuelistMod
             else Send(DuelOp.Heal, h, null, amount);
         }
 
+        public static void VictoryLoot(CharacterBody winner, bool boss)
+        {
+            if (!winner) return;
+            if (NetworkServer.active) DuelRewards.GrantOnServer(winner, boss);
+            else Send(DuelOp.VictoryLoot, winner, null, 0f, false, 0f, boss ? 1 : 0);
+        }
+
         public static void GiveMoney(CharacterMaster m, uint amount)
         {
             if (!m || amount == 0) return;
@@ -163,9 +170,10 @@ namespace DuelistMod
                 position = h.body ? h.body.corePosition : h.transform.position,
                 force = Vector3.zero,
                 procCoefficient = 0f,
-                damageColorIndex = DamageColorIndex.Default,
+                damageColorIndex = DuelVenom.NumberColor,
                 procChainMask = default(ProcChainMask)
             });
+            if (h.alive) DuelVenom.Mark(h);
             if (!h.alive && goldBonus > 0f && attacker)
             {
                 CharacterBody ab = attacker.GetComponent<CharacterBody>();
@@ -223,6 +231,9 @@ namespace DuelistMod
                     if (pm) pm.SetFocus(tb ? tb.mainHurtBox : null);
                     break;
                 }
+                case DuelOp.VictoryLoot:
+                    DuelRewards.GrantOnServer(target ? target.GetComponent<CharacterBody>() : null, m.Arg != 0);
+                    break;
                 case DuelOp.DeckRequest:
                     if (target && target.GetComponent<DuelistDeck>()) SyncDeck(target.GetComponent<DuelistDeck>());
                     break;
@@ -232,7 +243,7 @@ namespace DuelistMod
 
     public enum DuelOp : byte
     {
-        DamageEnemy, HurtBody, HealFraction, Heal, GiveMoney, TakeMoney, Invincible, UseAbility, PartnerFocus, DeckRequest
+        DamageEnemy, HurtBody, HealFraction, Heal, GiveMoney, TakeMoney, Invincible, UseAbility, PartnerFocus, DeckRequest, VictoryLoot
     }
 
     /// <summary>Client → host: one request.</summary>

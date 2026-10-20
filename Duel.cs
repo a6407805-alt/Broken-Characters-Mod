@@ -288,6 +288,9 @@ namespace DuelistMod
         public uint BaseGold;      // the normal gold those kills are worth
         public uint BonusGold;     // duel bonus paid on top, as kills happen
         public uint VictoryGold;   // paid at the end if you win
+        public uint JackpotGold;   // the victory jackpot (chests' worth of gold)
+        public int LootLegendary, LootUncommon;
+        public bool BossBeaten;
         public int DeckTotal;      // main deck size this duel
 
         public bool IsPlayerPhase => CurrentPhase <= Phase.End;
@@ -2555,10 +2558,10 @@ namespace DuelistMod
                 position = Player.corePosition,
                 force = Vector3.zero,
                 procCoefficient = 0f,
-                damageColorIndex = DamageColorIndex.Default,
+                damageColorIndex = DuelVenom.NumberColor,
                 procChainMask = default(ProcChainMask)
             };
-            if (NetworkServer.active) hc.TakeDamage(info);
+            if (NetworkServer.active) { hc.TakeDamage(info); DuelVenom.Mark(hc); }
             else DuelNet.HurtBody(Player, real, attacker);
             if (_hitVfx) EffectManager.SpawnEffect(_hitVfx, new EffectData { origin = Player.corePosition, scale = 2f }, true);
             if (Board) DuelFx.Shockwave(Board.transform, Player.footPosition, new Color(1f, 0.3f, 0.3f), 4f);
@@ -2673,13 +2676,13 @@ namespace DuelistMod
                     position = m.Body ? m.Body.corePosition : m.Health.transform.position,
                     force = Vector3.zero,
                     procCoefficient = 0f,
-                    damageColorIndex = DamageColorIndex.Default,
+                    damageColorIndex = DuelVenom.NumberColor,
                     procChainMask = default(ProcChainMask)
                 };
                 DeathRewards rewards = m.Body ? m.Body.GetComponent<DeathRewards>() : null;
                 uint worth = rewards ? rewards.goldReward : 0u;
                 bool killed;
-                if (NetworkServer.active) { m.Health.TakeDamage(info); killed = !m.Health.alive; }
+                if (NetworkServer.active) { m.Health.TakeDamage(info); killed = !m.Health.alive; if (!killed) DuelVenom.Mark(m.Health); }
                 else
                 {
                     // playing as a client: ask the host to deal it (it pays the kill bonus too); predict the kill locally
@@ -3018,10 +3021,15 @@ namespace DuelistMod
             if (outcome == Outcome.Victory)
             {
                 VictoryGold = (uint)Mathf.RoundToInt(BonusGold * Mathf.Max(0f, DuelConfig.VictoryGoldBonus.Value));
-                if (VictoryGold > 0 && Player.master) DuelNet.GiveMoney(Player.master, VictoryGold);
+                JackpotGold = DuelRewards.Jackpot();
+                if (VictoryGold + JackpotGold > 0 && Player.master) DuelNet.GiveMoney(Player.master, VictoryGold + JackpotGold);
+                BossBeaten = Commander == null;      // beating the Director itself counts as a boss
+                if (Commander != null) foreach (DuelMember m in Commander.Members) if (m.Body && m.Body.isChampion) BossBeaten = true;
+                LootLegendary = DuelRewards.Legendaries(BossBeaten);
+                LootUncommon = DuelRewards.Uncommons;
             }
             DuelSfx.Play(outcome == Outcome.Victory ? DuelSound.Victory : DuelSound.Defeat, Player.gameObject);
-            AddLog((outcome == Outcome.Victory ? "VICTORY. " : "DEFEAT. ") + reason + $" {KillCount} destroyed, ${BaseGold + BonusGold + VictoryGold} gold.");
+            AddLog((outcome == Outcome.Victory ? "VICTORY. " : "DEFEAT. ") + reason + $" {KillCount} destroyed, ${BaseGold + BonusGold + VictoryGold + JackpotGold} gold.");
             ShowBanner(outcome == Outcome.Victory ? "VICTORY!" : "DEFEAT");
             _finishTimer = showFor;
         }
@@ -3096,9 +3104,10 @@ namespace DuelistMod
             if (Result == Outcome.None) { Result = Outcome.Defeat; ResultReason = "The duel ended early."; }
             try
             {
-                uint total = BaseGold + BonusGold + VictoryGold;
+                uint total = BaseGold + BonusGold + VictoryGold + JackpotGold;
                 string head = Result == Outcome.Victory ? "<color=#f2c640>DUEL WON!</color>" : "<color=#ff6666>DUEL LOST.</color>";
-                Chat.AddMessage($"{head} {ResultReason} {KillCount} enemies destroyed, <color=#f2c640>${total}</color> gold earned (${BonusGold + VictoryGold} duel bonus).");
+                Chat.AddMessage($"{head} {ResultReason} {KillCount} enemies destroyed, <color=#f2c640>${total}</color> gold earned (${BonusGold + VictoryGold + JackpotGold} duel bonus)."
+                    + (Result == Outcome.Victory ? $" <color=#c77dff>Victory spoils: {LootLegendary} legendary + {LootUncommon} uncommon item{(LootUncommon == 1 ? "" : "s")}" + (DuelConfig.VictoryLevelUp.Value ? ", LEVEL UP" : "") + "!</color>" : ""));
             }
             catch { }
 
@@ -3125,6 +3134,12 @@ namespace DuelistMod
                 Teleport(Player, _returnPosition);
                 DuelNet.Invincible(Player, 1.5f);
                 if (_bigVfx) EffectManager.SpawnEffect(_bigVfx, new EffectData { origin = _returnPosition + Vector3.up, scale = 6f }, true);
+                if (Result == Outcome.Victory)
+                {
+                    Step("victory spoils", () => DuelNet.VictoryLoot(Player, BossBeaten));
+                    if (_bigVfx) for (int i = 0; i < 3; i++) EffectManager.SpawnEffect(_bigVfx, new EffectData { origin = _returnPosition + Vector3.up * (2f + i * 2.5f), scale = 9f + i * 3f, color = new Color(1f, 0.85f, 0.35f) }, true);
+                    Util.PlaySound("Play_UI_item_pickup", Player.gameObject);
+                }
             }
         }
 

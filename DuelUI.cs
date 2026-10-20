@@ -45,6 +45,18 @@ namespace DuelistMod
 
         private bool AnyPanel => _extraOpen || _pile != PileView.None || _menu != null;
 
+        // Gamepad: a cursor driven by the left stick (D-pad snaps between buttons/cards), A clicks.
+        private readonly DuelPad _pad = new DuelPad();
+        private bool _padMode;
+        private Vector2 _cursor = new Vector2(960f, 700f);
+        private int _pendingClick = -1;
+        private Vector3 _lastMouse;
+        private readonly List<Vector2> _snaps = new List<Vector2>();
+        private List<MenuItem> _snappedMenu;
+        private DuelClickable[] _clickables;
+        private float _clickablesAt = -10f;
+        private bool PadOn => _padMode && DuelConfig.Controller.Value;
+
         private static Texture2D _white;
         private GUIStyle _txt, _small, _tiny, _title, _num, _numSub, _banner, _btn, _pill, _pillBold, _tip;
         private bool _stylesReady;
@@ -125,6 +137,11 @@ namespace DuelistMod
 
         private void Update()
         {
+            try { UpdatePad(); }
+            catch (Exception e)
+            {
+                if (_errorSections.Add("controller")) DuelistPlugin.Log.LogError("Duel UI controller failed:\n" + e);
+            }
             try { UpdateWorld(); }
             catch (Exception e)
             {
@@ -140,7 +157,7 @@ namespace DuelistMod
             Camera cam = Session.Camera.SceneCamera;
             if (cam && !_overUi && !AnyPanel)
             {
-                Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+                Ray ray = cam.ScreenPointToRay(PointerScreen());
                 float best = float.MaxValue;
                 foreach (RaycastHit hit in Physics.RaycastAll(ray, 600f, ~0, QueryTriggerInteraction.Collide))
                 {
@@ -157,6 +174,132 @@ namespace DuelistMod
 
             bool hoverVisible = _hoverWorld && !(_hoverWorld.Kind == ClickKind.Rep && _hoverWorld.Index == ti);
             b.PlaceMarker(b.HoverMarker, hoverVisible ? HoverPos(_hoverWorld) : Vector3.zero, hoverVisible);
+        }
+
+        // ------------------------------------------------------------ gamepad
+
+        /// <summary>Where the pointer is on screen (pixels, bottom-left origin): the pad cursor or the mouse.</summary>
+        private Vector3 PointerScreen() => PadOn ? new Vector3(_cursor.x * _scale, Screen.height - _cursor.y * _scale, 0f) : Input.mousePosition;
+
+        private void UpdatePad()
+        {
+            if (Session == null || Session.Finished || !DuelConfig.Controller.Value) { _padMode = false; return; }
+            _pad.Poll();
+            Vector3 mouse = Input.mousePosition;
+            bool mouseUsed = (mouse - _lastMouse).sqrMagnitude > 4f || Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1);
+            _lastMouse = mouse;
+            if (_pad.AnyInput && !_padMode)
+            {
+                _padMode = true;
+                _cursor = new Vector2(mouse.x / _scale, (Screen.height - mouse.y) / _scale);   // start where the mouse was
+            }
+            else if (mouseUsed && !_pad.AnyInput) _padMode = false;
+            if (!_padMode) return;
+
+            // left stick: smooth cursor, faster the further you push
+            Vector2 st = _pad.Stick;
+            if (st != Vector2.zero)
+            {
+                float speed = Mathf.Lerp(250f, 1500f, Mathf.Clamp01((st.magnitude - 0.2f) / 0.8f));
+                _cursor += new Vector2(st.x, -st.y).normalized * Mathf.Min(1f, st.magnitude) * speed * Time.unscaledDeltaTime;
+            }
+            // D-pad: hop to the next button / card / zone in that direction
+            if (_pad.Left) Snap(new Vector2(-1f, 0f));
+            if (_pad.Right) Snap(new Vector2(1f, 0f));
+            if (_pad.Up) Snap(new Vector2(0f, -1f));
+            if (_pad.Down) Snap(new Vector2(0f, 1f));
+            _cursor.x = Mathf.Clamp(_cursor.x, 2f, _w - 2f);
+            _cursor.y = Mathf.Clamp(_cursor.y, 2f, RefH - 2f);
+
+            // a menu just opened: put the cursor on its first choice
+            if (_menu != null && _menu != _snappedMenu && _menuRects.Count > 0) { _cursor = _menuRects[0].center; _snappedMenu = _menu; }
+            if (_menu == null) _snappedMenu = null;
+
+            if (_pad.A) _pendingClick = 0;
+            else if (_pad.X) _pendingClick = 1;
+            else if (_pad.B)
+            {
+                if (Session.AwaitingResponse) Session.PassChain();
+                else if (AnyPanel || Session.Selecting != null) { _menu = null; _pile = PileView.None; _extraOpen = false; Session.CancelSelection(); }
+                else if (_helpOpen) _helpOpen = false;
+            }
+            else if (_pad.Y)
+            {
+                if (Session.AwaitingResponse) Session.PassChain();
+                else if (Session.Selecting != null) Session.ConfirmSelection();
+                else if (!AnyPanel) Session.NextPhase();
+            }
+            if (_pad.LB) Session.CycleTarget(-1);
+            if (_pad.RB) Session.CycleTarget(1);
+            if (_pad.LT) _extraOpen = !_extraOpen;
+            if (_pad.RT && Session.Selecting == null && !Session.AwaitingResponse) Session.EndTurn();
+            if (_pad.Back) _helpOpen = !_helpOpen;
+        }
+
+        private void Snap(Vector2 dir)
+        {
+            float best = float.MaxValue;
+            Vector2 pick = _cursor;
+            foreach (Vector2 p in _snaps)
+            {
+                Vector2 v = p - _cursor;
+                float along = Vector2.Dot(v, dir);
+                if (along < 12f) continue;
+                float side = Mathf.Abs(v.x * dir.y - v.y * dir.x);
+                float score = along + side * 2.2f;
+                if (score < best) { best = score; pick = p; }
+            }
+            _cursor = pick;
+        }
+
+        /// <summary>Everything the D-pad can hop to, gathered from the last repaint (only the open panel when one is up).</summary>
+        private void BuildSnaps()
+        {
+            if (!PadOn) return;
+            _snaps.Clear();
+            void AddAll(List<Rect> rs) { foreach (Rect r in rs) if (r.width > 0f) _snaps.Add(r.center); }
+            void Add(Rect r) { if (r.width > 0f) _snaps.Add(r.center); }
+
+            if (_menu != null) { AddAll(_menuRects); return; }
+            if (_pile != PileView.None) { AddAll(_pileRects); Add(_pileCloseRect); return; }
+            if (_extraOpen) { AddAll(_extraRects); Add(_extraCloseRect); return; }
+            if (Session.AwaitingResponse) { AddAll(_respRects); Add(_passRect); }
+            if (Session.Selecting != null) { Add(_selOkRect); Add(_selCancelRect); }
+            AddAll(_handRects);
+            AddAll(_phaseRects);
+            Add(_nextRect); Add(_endRect); Add(_helpBtnRect);
+
+            // the board: monsters, zones, piles, the enemy commander
+            if (Session.Board && Time.unscaledTime - _clickablesAt > 1f)
+            {
+                _clickables = Session.Board.GetComponentsInChildren<DuelClickable>();
+                _clickablesAt = Time.unscaledTime;
+            }
+            if (_clickables != null)
+                foreach (DuelClickable c in _clickables)
+                    if (c && c.isActiveAndEnabled && ToGui(HoverPos(c), out Vector2 g)) _snaps.Add(g);
+        }
+
+        private void DrawPadCursor()
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 6f);
+            float r = 14f + pulse * 3f;
+            Color ring = new Color(1f, 0.85f, 0.35f, 0.95f);
+            // a gold reticle: ring segments + a centre dot
+            for (int i = 0; i < 16; i++)
+            {
+                float a = i / 16f * Mathf.PI * 2f;
+                Vector2 p = _cursor + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r;
+                Box(new Rect(p.x - 2.5f, p.y - 2.5f, 5f, 5f), ring);
+            }
+            Box(new Rect(_cursor.x - 3f, _cursor.y - 3f, 6f, 6f), Color.white);
+
+            string hint = "<b>A</b> select   <b>X</b> options   <b>B</b> back   <b>Y</b> " + (Session.AwaitingResponse ? "don't respond" : Session.Selecting != null ? "confirm" : "next phase") +
+                          "   <b>LB/RB</b> target   <b>LT</b> Extra Deck   <b>RT</b> end turn   <b>D-pad</b> jump   <b>View</b> help";
+            Rect hr = new Rect(_w * 0.5f - 470f, RefH - 30f, 940f, 26f);
+            Box(hr, new Color(0f, 0f, 0f, 0.55f));
+            GUI.Label(hr, hint, new GUIStyle(_tiny) { alignment = TextAnchor.MiddleCenter, fontSize = 14 });
         }
 
         private Vector3 HoverPos(DuelClickable c)
@@ -293,6 +436,35 @@ namespace DuelistMod
             Matrix4x4 oldMatrix = GUI.matrix;
             GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(_scale, _scale, 1f));
 
+            if (PadOn)
+            {
+                // the gamepad cursor stands in for the mouse; A/X become left/right clicks
+                if (_pendingClick >= 0 && Event.current.type == EventType.Layout)
+                {
+                    int btn = _pendingClick;
+                    _pendingClick = -1;
+                    Event saved = Event.current;
+                    Event.current = new Event { type = EventType.MouseDown, mousePosition = _cursor, button = btn, clickCount = 1 };
+                    DrawAll();
+                    Event.current = new Event { type = EventType.MouseUp, mousePosition = _cursor, button = btn, clickCount = 1 };
+                    DrawAll();
+                    Event.current = saved;
+                }
+                Event.current.mousePosition = _cursor;
+            }
+            DrawAll();
+            if (PadOn) Safe("pad cursor", DrawPadCursor);
+            if (_errorSections.Count > 0)
+            {
+                Rect r = new Rect(_w * 0.5f - 360f, RefH * 0.5f - 20f, 720f, 40f);
+                Box(r, new Color(0.4f, 0f, 0f, 0.85f));
+                GUI.Label(r, "Duel UI error in: " + string.Join(", ", _errorSections) + "  ·  Backspace to leave  ·  send LogOutput.log", new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 18, richText = true });
+            }
+            GUI.matrix = oldMatrix;
+        }
+
+        private void DrawAll()
+        {
             Safe("keys", HandleKeys);
             Safe("click", HandleClick);
 
@@ -315,13 +487,7 @@ namespace DuelistMod
             if (Session.Result != DuelSession.Outcome.None) Safe("result", DrawResult);
             if (Event.current.type == EventType.Repaint) Safe("hover", UpdateOverUi);
 
-            if (_errorSections.Count > 0)
-            {
-                Rect r = new Rect(_w * 0.5f - 360f, RefH * 0.5f - 20f, 720f, 40f);
-                Box(r, new Color(0.4f, 0f, 0f, 0.85f));
-                GUI.Label(r, "Duel UI error in: " + string.Join(", ", _errorSections) + "  ·  Backspace to leave  ·  send LogOutput.log", new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 18, richText = true });
-            }
-            GUI.matrix = oldMatrix;
+            if (Event.current.type == EventType.Repaint) Safe("snaps", BuildSnaps);
         }
 
         private readonly HashSet<string> _errorSections = new HashSet<string>();
@@ -910,22 +1076,43 @@ namespace DuelistMod
         private void DrawResult()
         {
             bool win = Session.Result == DuelSession.Outcome.Victory;
-            Rect r = new Rect(_w * 0.5f - 330f, RefH * 0.5f - 150f, 660f, 300f);
+            float h = win ? 470f : 300f;
+            Rect r = new Rect(_w * 0.5f - 340f, RefH * 0.5f - h * 0.5f, 680f, h);
             Box(new Rect(0f, 0f, _w, RefH), new Color(0f, 0f, 0f, 0.45f));
             Box(r, new Color(0.04f, 0.02f, 0.08f, 0.95f));
             Outline(r, win ? Gold : new Color(1f, 0.35f, 0.35f), 4f);
+            if (win)
+            {
+                // a pulsing golden frame and rays: this is the big moment
+                float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 5f);
+                Outline(new Rect(r.x - 8f, r.y - 8f, r.width + 16f, r.height + 16f), new Color(1f, 0.85f, 0.35f, 0.25f + 0.35f * pulse), 3f);
+                Outline(new Rect(r.x - 16f, r.y - 16f, r.width + 32f, r.height + 32f), new Color(0.75f, 0.4f, 1f, 0.15f + 0.25f * (1f - pulse)), 2f);
+            }
 
             Shadowed(new Rect(r.x, r.y + 18f, r.width, 70f), win ? "VICTORY!" : "DEFEAT", new GUIStyle(_num) { fontSize = 64 }, win ? Gold : new Color(1f, 0.4f, 0.4f));
             GUI.Label(new Rect(r.x + 20f, r.y + 96f, r.width - 40f, 30f), Session.ResultReason, new GUIStyle(_small) { alignment = TextAnchor.MiddleCenter, fontSize = 19 });
 
-            uint total = Session.BaseGold + Session.BonusGold + Session.VictoryGold;
+            uint total = Session.BaseGold + Session.BonusGold + Session.VictoryGold + Session.JackpotGold;
             string lines =
                 $"Enemies destroyed: <b>{Session.KillCount}</b>\n" +
                 $"Gold from kills: <b>${Session.BaseGold}</b>\n" +
                 $"Duel kill bonus: <b><color=#f2c640>+${Session.BonusGold}</color></b>\n" +
-                (win ? $"Victory bonus: <b><color=#f2c640>+${Session.VictoryGold}</color></b>\n" : "<color=#ffffff77>No victory bonus</color>\n") +
+                (win ? $"Victory bonus: <b><color=#f2c640>+${Session.VictoryGold}</color></b>\n" +
+                       $"Victory JACKPOT: <b><color=#f2c640>+${Session.JackpotGold}</color></b>\n" : "<color=#ffffff77>No victory bonus</color>\n") +
                 $"<size=26><b>Total earned: <color=#f2c640>${total}</color></b></size>";
-            GUI.Label(new Rect(r.x + 60f, r.y + 136f, r.width - 120f, 150f), lines, new GUIStyle(_txt) { alignment = TextAnchor.UpperCenter, fontSize = 20 });
+            GUI.Label(new Rect(r.x + 60f, r.y + 136f, r.width - 120f, 170f), lines, new GUIStyle(_txt) { alignment = TextAnchor.UpperCenter, fontSize = 20 });
+
+            if (win)
+            {
+                string spoils =
+                    $"<b><color=#ff5b5b>{Session.LootLegendary} LEGENDARY</color> + <color=#7dff7d>{Session.LootUncommon} uncommon</color> item{(Session.LootLegendary + Session.LootUncommon == 1 ? "" : "s")} drop at your feet</b>" +
+                    (Session.BossBeaten ? "  <color=#c77dff>(boss bonus!)</color>" : "") + "\n" +
+                    (DuelConfig.VictoryLevelUp.Value ? "<b><color=#7de0ff>LEVEL UP</color></b> · " : "") + "Full heal" +
+                    (DuelConfig.VictoryBuffSeconds.Value > 0f ? $" · <b><color=#f2c640>Victor's Glory</color></b> ({DuelConfig.VictoryBuffSeconds.Value:0}s of speed)" : "");
+                Box(new Rect(r.x + 30f, r.y + 318f, r.width - 60f, 2f), new Color(1f, 0.85f, 0.35f, 0.5f));
+                GUI.Label(new Rect(r.x + 30f, r.y + 330f, r.width - 60f, 120f), "<size=24><b>VICTORY SPOILS</b></size>\n" + spoils,
+                          new GUIStyle(_txt) { alignment = TextAnchor.UpperCenter, fontSize = 19 });
+            }
         }
 
         private void DrawBanner()
@@ -973,7 +1160,8 @@ namespace DuelistMod
                 "<b>Battle Phase</b>: click a monster to attack your target. ATK beats ATK: the loser is destroyed and its owner takes the difference. Against DEF: higher ATK destroys it with no damage; lower ATK costs you the difference. No monsters? Attack their LP directly.\n" +
                 "<b>Life Points</b>: 8000 = full health. The enemy's LP is their commander's health.\n" +
                 "<b>Chains</b>: when something happens, the other side may respond. Spell Speed 1 normal spells, 2 quick-play spells, traps and enemy elite cards, 3 Counter Traps (only a 3 answers a 3). The last link resolves first. Traps can't be used the turn they're set.\n\n" +
-                "<color=#ffffffaa>Hover anything for exact numbers. Keys: 1-8 cards · F1-F5 attack · Tab target · X extra · L log · H help</color>";
+                "<color=#ffffffaa>Hover anything for exact numbers. Keys: 1-8 cards · F1-F5 attack · Tab target · X extra · L log · H help</color>\n" +
+                "<color=#ffffffaa>Controller: left stick moves the cursor, D-pad jumps between things · A select · X options · B back · Y next phase · LB/RB target · LT Extra Deck · RT end turn · View help</color>";
             const float width = 400f;
             float h = _tiny.CalcHeight(new GUIContent(text), width - 20f) + 16f;
             _helpRect = new Rect(12f, _helpBtnRect.yMax + 4f, width, h);
