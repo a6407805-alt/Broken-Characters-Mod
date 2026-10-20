@@ -17,6 +17,7 @@ namespace DuelistMod
 
         private bool _templateBroken;
         private int _frame = -1;
+        private float _ltPrev, _rtPrev;
 
         public void Poll()
         {
@@ -56,8 +57,12 @@ namespace DuelistMod
                 Y = g.actionTopRow2.justPressed;
                 LB = g.leftShoulder1.justPressed;
                 RB = g.rightShoulder1.justPressed;
-                LT = g.leftShoulder2.justPressed;
-                RT = g.rightShoulder2.justPressed;
+                // triggers are analog: count a press when one crosses halfway
+                float lt = g.leftShoulder2.value, rt = g.rightShoulder2.value;
+                LT = lt > 0.5f && _ltPrev <= 0.5f;
+                RT = rt > 0.5f && _rtPrev <= 0.5f;
+                _ltPrev = lt;
+                _rtPrev = rt;
                 Back = g.center1.justPressed;
                 Up = g.dPad.up.justPressed;
                 Down = g.dPad.down.justPressed;
