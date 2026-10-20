@@ -64,6 +64,10 @@ jobs:
           foreach ($n in 'R2API.Core.dll','R2API.ContentManagement.dll','R2API.Language.dll','R2API.Networking.dll','R2API.Prefab.dll','R2API.Items.dll','R2API.RecalculateStats.dll','RoR2BepInExPack.dll','MiscFixes.dll','FixPluginTypesSerialization.dll','BepInEx.MonoMod.HookGenPatcher.dll','SeekersPatcher.dll') {
             if (-not ($dlls | Where-Object Name -eq $n)) { throw "Library dll missing: $n" }
           }
+          foreach ($n in 'FixPluginTypesSerialization.dll','BepInEx.MonoMod.HookGenPatcher.dll','SeekersPatcher.dll') {
+            if (-not (Get-ChildItem (Join-Path $game 'BepInEx\patchers') -Recurse -Filter $n -ErrorAction SilentlyContinue)) { throw "Patcher not under BepInEx\patchers: $n" }
+          }
+          if (-not (Test-Path (Join-Path $game 'doorstop_config.ini'))) { throw 'doorstop_config.ini missing next to the exe' }
           Write-Host 'Installer OK'
           } catch {
             Write-Host "FAILED: $($_.Exception.Message) at $($_.InvocationInfo.PositionMessage)"
