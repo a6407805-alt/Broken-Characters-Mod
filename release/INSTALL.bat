@@ -1,10 +1,10 @@
 @echo off
-title Install the Duelist
+title Install the Broken Characters Collection
 cd /d "%~dp0"
 if not exist "%~dp0install.ps1" (
   echo.
   echo   This is running from INSIDE the zip, so the installer can't see its files.
-  echo   Close this, right-click Duelist-Install.zip ^> Extract All, open the new folder
+  echo   Close this, right-click Broken-Characters-Collection.zip ^> Extract All, open the new folder
   echo   and double-click INSTALL.bat in there.
   echo.
   pause

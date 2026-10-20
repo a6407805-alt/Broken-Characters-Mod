@@ -128,7 +128,7 @@ function Install-Library($game, $pkg) {
 
 Say ''
 Say '  ====================================' 'Yellow'
-Say ('  DUELIST PACK ' + $(if ($Uninstall) { 'UNINSTALLER' } else { 'INSTALLER' })) 'Yellow'
+Say ('  BROKEN CHARACTERS COLLECTION ' + $(if ($Uninstall) { 'UNINSTALLER' } else { 'INSTALLER' })) 'Yellow'
 Say '  ====================================' 'Yellow'
 Say ''
 

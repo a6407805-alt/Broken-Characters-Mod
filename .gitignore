@@ -4,6 +4,7 @@ obj/
 *.user
 build_log.txt
 Duelist-Install.zip
+Broken-Characters-Collection.zip
 release/stage/
 # python / blender scratch
 __pycache__/

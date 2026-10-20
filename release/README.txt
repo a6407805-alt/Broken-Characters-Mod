@@ -1,5 +1,5 @@
-THE DUELIST PACK - Risk of Rain 2 (Duelist + the group's other mods)
-====================================================================
+BROKEN CHARACTERS COLLECTION - Risk of Rain 2 mod pack (the Duelist + the group's other mods)
+=========================================================================================
 
 INSTALL (no mod manager needed)
   1. Right-click this zip > Extract All.
@@ -12,7 +12,7 @@ thunderstore.io, same versions for everyone), then installs the Duelist and ever
 Mods folder. It needs an internet connection the first time.
 Multiplayer: everyone in the lobby needs the same version, so update together.
 
-UPDATE   Double-click "Update Duelist.bat" (keep it somewhere handy): it downloads the newest
+UPDATE   Double-click "Update Broken Characters.bat" (keep it somewhere handy): it downloads the newest
          pack from GitHub and installs it. Close the game first.
 REMOVE   Double-click UNINSTALL.bat to remove the Duelist. To turn ALL mods off, delete
          winhttp.dll from the Risk of Rain 2 folder (put it back to turn them on again).

@@ -1,5 +1,5 @@
 # Builds the Duelist on GitHub's servers every time code is pushed, then publishes the result as the
-# "latest" release: Duelist-Install.zip. Friends (and you) just run "Update Duelist.bat" to get it.
+# "latest" release: Broken-Characters-Collection.zip. Friends just run "Update Broken Characters.bat" to get it.
 name: Build Duelist
 
 on:
@@ -44,13 +44,13 @@ jobs:
             fi
           done
 
-      - name: Package Duelist-Install.zip
+      - name: Package Broken-Characters-Collection.zip
         run: bash release/package.sh
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Duelist-Install
-          path: Duelist-Install.zip
+          name: Broken-Characters-Collection
+          path: Broken-Characters-Collection.zip
 
   test-installer:
     # Runs INSTALL on a real Windows machine against a dummy game folder, twice (fresh, then re-run),
@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: Duelist-Install
+          name: Broken-Characters-Collection
       - name: Install into a dummy game folder
         shell: powershell
         run: |
@@ -68,7 +68,7 @@ jobs:
           $log = Join-Path $env:RUNNER_TEMP 'install.log'
           Start-Transcript $log | Out-Null
           try {
-          Expand-Archive Duelist-Install.zip pack
+          Expand-Archive Broken-Characters-Collection.zip pack
           $game = Join-Path $env:RUNNER_TEMP 'Risk of Rain 2'
           New-Item -ItemType Directory $game | Out-Null
           Set-Content (Join-Path $game 'Risk of Rain 2.exe') 'dummy'
@@ -104,13 +104,15 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: Duelist-Install
+          name: Broken-Characters-Collection
       - name: Publish as the latest release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
-          gh release create latest Duelist-Install.zip \
-            --title "Duelist (latest build)" \
-            --notes "Built automatically from commit ${GITHUB_SHA::7}. Download Duelist-Install.zip, extract it and run INSTALL.bat — or just run Update Duelist.bat if you already have it." \
+          # the old name is published too, so older "Update Duelist.bat" copies keep working
+          cp Broken-Characters-Collection.zip Duelist-Install.zip
+          gh release create latest Broken-Characters-Collection.zip Duelist-Install.zip \
+            --title "Broken Characters Collection (latest build)" \
+            --notes "Built automatically from commit ${GITHUB_SHA::7}. Download Broken-Characters-Collection.zip, extract it and run INSTALL.bat, or run Update Broken Characters.bat if you already have it. (Duelist-Install.zip is the same file under its old name.)" \
             --target "$GITHUB_SHA" --latest -R "$GITHUB_REPOSITORY"

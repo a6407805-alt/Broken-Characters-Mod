@@ -1,14 +1,16 @@
-# The Duelist — a Yu-Gi-Oh!-style survivor for Risk of Rain 2
+# Broken Characters Collection — a Risk of Rain 2 mod pack
+
+The Duelist (a Yu-Gi-Oh!-style survivor) plus the group's other characters and mods, in one install.
 
 ## Play it (friends start here)
 No mod manager needed.
-1. Download **[Duelist-Install.zip](https://github.com/a6407805-alt/DuelistMod/releases/latest/download/Duelist-Install.zip)**.
+1. Download **[Broken-Characters-Collection.zip](https://github.com/a6407805-alt/DuelistMod/releases/latest/download/Broken-Characters-Collection.zip)**.
 2. Right-click it → **Extract All**. Close the game, then double-click **INSTALL.bat**.
 3. Launch Risk of Rain 2 from **Steam** like normal.
 
 INSTALL.bat sets up BepInEx and every library straight in the game folder (downloaded from thunderstore.io,
 pinned to the same versions for everyone), then the Duelist and the group mods.
-To update later, close the game and double-click **Update Duelist.bat** (it came in the zip).
+To update later, close the game and double-click **Update Broken Characters.bat** (it came in the zip).
 Everyone in a multiplayer lobby needs the same build, so update together.
 To switch all mods off, delete `winhttp.dll` from the game folder.
 
