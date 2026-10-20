@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <NoWarn>NU1701</NoWarn>
+    <AssemblyName>WilburMod</AssemblyName>
+    <RootNamespace>WilburMod</RootNamespace>
+  </PropertyGroup>
+
+  <!-- The game is referenced through NuGet (same packages as DuelistMod.csproj), so this builds without
+       Risk of Rain 2 installed. Icons and Sounds ship from mods/WilburMod/, next to the built dll. -->
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" />
+    <PackageReference Include="UnityEngine.Modules" Version="2021.3.33" IncludeAssets="compile" />
+    <PackageReference Include="RiskOfRain2.GameLibs" Version="1.4.1-r.0" />
+    <PackageReference Include="R2API.ContentManagement" Version="1.0.11" />
+    <PackageReference Include="R2API.Language" Version="1.*" />
+    <PackageReference Include="R2API.Prefab" Version="1.*" />
+  </ItemGroup>
+
+</Project>
