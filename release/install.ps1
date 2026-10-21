@@ -2,7 +2,7 @@
 # Finds Risk of Rain 2 (Steam), installs BepInEx and the shared libraries straight into the game folder
 # (downloaded from Thunderstore, pinned to the exact versions we play with), then the Duelist and the
 # group's other mods. Re-running it only fetches what is missing or out of date.
-param([switch]$Uninstall, [string]$GameDir)
+param([switch]$Uninstall, [string]$GameDir, [switch]$SkipExtras, [string]$ExtrasKey)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'      # makes Invoke-WebRequest much faster
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -126,6 +126,61 @@ function Install-Library($game, $pkg) {
     return $true
 }
 
+# ------------------------------------------------------------------ friends-only extras
+# Things we can't put in the public pack live in a private repo; an "extras key" (a read-only token for it)
+# unlocks them. Asked for once, then remembered in %APPDATA%\BrokenCharacters.
+$extrasRepo = 'a6407805-alt/BrokenCharacters-Extras'
+$appDir = Join-Path $env:APPDATA 'BrokenCharacters'
+$extrasKeyFile = Join-Path $appDir 'extras-key.txt'
+$extrasSkipFile = Join-Path $appDir 'extras-skip.txt'
+
+function Get-Extras {
+    if ($SkipExtras) { return $null }
+    $k = $ExtrasKey
+    if (-not $k -and (Test-Path $extrasKeyFile)) { $k = (Get-Content $extrasKeyFile -Raw).Trim() }
+    $asked = $false
+    if (-not $k) {
+        if (Test-Path $extrasSkipFile) { Say '  (Friends-only extras skipped. Run "Add Extras.bat" to add them.)' 'DarkGray'; return $null }
+        Say ''
+        Say '  FRIENDS-ONLY EXTRAS: paste your extras key (right-click to paste) and press Enter.' 'Cyan'
+        Say '  No key? Just press Enter to skip; the pack works without them.' 'Cyan'
+        $k = (Read-Host '  Extras key').Trim()
+        $asked = $true
+        if (-not $k) {
+            New-Item -ItemType Directory -Force -Path $appDir | Out-Null
+            Set-Content -Path $extrasSkipFile -Value 'skip'
+            Say '  Skipped. Run "Add Extras.bat" any time to add them.' 'DarkGray'
+            return $null
+        }
+    }
+    try {
+        $h = @{ Authorization = "Bearer $k"; 'User-Agent' = 'BrokenCharacters'; Accept = 'application/vnd.github+json' }
+        $rel = Invoke-RestMethod "https://api.github.com/repos/$extrasRepo/releases/tags/latest" -Headers $h
+        $a = $rel.assets | Where-Object { $_.name -eq 'Extras.zip' } | Select-Object -First 1
+        if (-not $a) { throw 'no Extras.zip in the latest extras release' }
+        $dir = Join-Path $env:TEMP 'BrokenCharactersExtras'
+        if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $zipPath = Join-Path $dir 'Extras.zip'
+        $req = [System.Net.HttpWebRequest]::Create($a.url)
+        $req.AllowAutoRedirect = $false; $req.UserAgent = 'BrokenCharacters'; $req.Accept = 'application/octet-stream'
+        $req.Headers.Add('Authorization', "Bearer $k")
+        $resp = $req.GetResponse(); $loc = $resp.Headers['Location']; $resp.Close()
+        Invoke-WebRequest -UseBasicParsing $loc -OutFile $zipPath
+        $out = Join-Path $dir 'files'
+        Expand-Archive $zipPath $out -Force
+        New-Item -ItemType Directory -Force -Path $appDir | Out-Null
+        Set-Content -Path $extrasKeyFile -Value $k -NoNewline
+        if (Test-Path $extrasSkipFile) { Remove-Item $extrasSkipFile -Force }
+        if ($asked) { Say '  Extras key saved: you won''t be asked again.' 'Green' }
+        return $out
+    } catch {
+        Say "  Couldn't get the friends-only extras: $($_.Exception.Message)" 'DarkYellow'
+        Say '  (Check the key, or run "Add Extras.bat" later to enter it again.) The rest of the pack still installs.' 'DarkYellow'
+        return $null
+    }
+}
+
 Say ''
 Say '  ====================================' 'Yellow'
 Say ('  BROKEN CHARACTERS COLLECTION ' + $(if ($Uninstall) { 'UNINSTALLER' } else { 'INSTALLER' })) 'Yellow'
@@ -152,6 +207,7 @@ if ($games.Count -eq 0) {
     else { Say "Cancelled (or that folder doesn't have Risk of Rain 2.exe)." 'Red'; exit 1 }
 }
 
+$extrasDir = if ($Uninstall) { $null } else { Get-Extras }
 $done = 0
 foreach ($game in $games) {
     Say "  Game folder: $game" 'Cyan'
@@ -194,6 +250,14 @@ foreach ($game in $games) {
             Copy-Item (Join-Path $m.FullName '*') $mDest -Recurse -Force    # copy over the top, never wipe
         }
         Say "  Installed $($mods.Count) group mods: $(($mods | ForEach-Object Name) -join ', ')" 'Green'
+    }
+    if ($extrasDir -and (Test-Path $extrasDir)) {
+        foreach ($m in Get-ChildItem $extrasDir -Directory) {
+            $mDest = Join-Path $plugins $m.Name
+            New-Item -ItemType Directory -Force -Path $mDest | Out-Null
+            Copy-Item (Join-Path $m.FullName '*') $mDest -Recurse -Force
+        }
+        Say '  Installed the friends-only extras.' 'Green'
     }
     $done++
 }

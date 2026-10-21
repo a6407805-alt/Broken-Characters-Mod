@@ -22,7 +22,9 @@ is compiled by GitHub Actions, the installer is tested on Windows, and the resul
   The repo's `NuGet.config` already has the BepInEx feed.
 - Library mods by other people (R2API, HookGenPatcher, etc.) are **not** stored here; the installer downloads them
   from Thunderstore at pinned versions (top of `release/install.ps1`). If your mod needs another library, add it there.
-- This is a **private, friends-only** pack. Keep the repo private, and don't share the download, the pack key or its contents outside the group.
+- This repo is **public**. Anything copyrighted (sounds, art or models from other games, etc.) goes in the **private**
+  repo `a6407805-alt/BrokenCharacters-Extras` under `files/<ModFolder>/` instead; the installer adds it for anyone
+  with the extras key. Never commit copyrighted files here, and never put the extras key in this repo.
 
 ## How to contribute (for you and your Claude)
 

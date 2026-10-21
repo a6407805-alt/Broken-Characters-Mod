@@ -46,8 +46,6 @@ jobs:
           done
 
       - name: Package Broken-Characters-Collection.zip
-        env:
-          PACK_KEY: ${{ secrets.PACK_KEY }}
         run: bash release/package.sh
 
       - uses: actions/upload-artifact@v4
@@ -71,13 +69,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           Expand-Archive Broken-Characters-Collection.zip upd
-          if (Test-Path .\upd\pack-key.txt) {
-            Write-Host 'Testing the pack key built into the zip'
-            & .\upd\update.ps1 -DownloadOnly -OutDir (Join-Path $env:RUNNER_TEMP 'u1')
-          } else {
-            Write-Host 'No pack key in the zip (PACK_KEY secret not set): testing with the workflow token'
-            & .\upd\update.ps1 -Key $env:GH_TOKEN -DownloadOnly -OutDir (Join-Path $env:RUNNER_TEMP 'u1')
-          }
+          & .\upd\update.ps1 -Key $env:GH_TOKEN -DownloadOnly -OutDir (Join-Path $env:RUNNER_TEMP 'u1')
           if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'u1\pack.zip'))) { throw 'keyed download failed' }
           Remove-Item upd -Recurse -Force
 
@@ -92,8 +84,8 @@ jobs:
           $game = Join-Path $env:RUNNER_TEMP 'Risk of Rain 2'
           New-Item -ItemType Directory $game | Out-Null
           Set-Content (Join-Path $game 'Risk of Rain 2.exe') 'dummy'
-          & .\pack\install.ps1 -GameDir $game
-          & .\pack\install.ps1 -GameDir $game
+          & .\pack\install.ps1 -GameDir $game -SkipExtras
+          & .\pack\install.ps1 -GameDir $game -SkipExtras
           $must = 'winhttp.dll', 'BepInEx\core\BepInEx.dll', 'BepInEx\plugins\Duelist\DuelistMod.dll',
                   'BepInEx\plugins\RiskofThunder-R2API_Core\manifest.json', 'BepInEx\plugins\WilburMod\WilburMod.dll'
           $bad = $must | Where-Object { -not (Test-Path (Join-Path $game $_)) }

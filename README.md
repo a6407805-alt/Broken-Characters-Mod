@@ -25,7 +25,8 @@ The libraries (BepInExPack, RoR2BepInExPack, HookGenPatcher, FixPluginTypesSeria
 MiscFixes, SeekersPatcher) are other people's work, so they're downloaded at install time instead of stored here.
 Their versions are pinned at the top of `release/install.ps1`; bump them there to update everyone.
 
-This is a private, friends-only pack (the repo is private): keep the download and pack key inside the group.
+Friends-only extras (files we can't share publicly) live in a private repo; the installer asks once for the **extras key**
+and adds them. No key? Press Enter to skip: everything else still works. `Add Extras.bat` lets you enter it later.
 
 ## Contributing
 Want to add your own mod or help out? See **[CONTRIBUTING.md](CONTRIBUTING.md)**.
