@@ -97,7 +97,7 @@ namespace CarMaxSpecialist
             CharacterBody me = null;
             try { me = LocalUserManager.GetFirstLocalUser()?.cachedBody; } catch { }
             CmxShift shift = me ? me.GetComponent<CmxShift>() : null;
-            if (shift && me.healthComponent && me.healthComponent.alive) DrawTimecard(shift, sc);
+            if (shift && me.healthComponent && me.healthComponent.alive) { DrawTimecard(shift, sc); DrawStressMeter(shift, sc); }
             if (shift && _banner != null && Time.unscaledTime < _bannerUntil) DrawBanner(sc);
         }
 
@@ -182,12 +182,76 @@ namespace CarMaxSpecialist
             GUI.color = old;
         }
 
+        // ---- stress meter right under (or over) the game's health bar
+
+        private static Component _healthBar;
+        private static Canvas _hudCanvas;
+        private static float _nextHudLook;
+
+        private static bool HealthBarRect(out Rect r)
+        {
+            r = default(Rect);
+            try
+            {
+                if ((!_healthBar || !_healthBar.gameObject.activeInHierarchy) && Time.unscaledTime >= _nextHudLook)
+                {
+                    _nextHudLook = Time.unscaledTime + 1f;
+                    _healthBar = null;
+                    foreach (RoR2.UI.HealthBar hb in Object.FindObjectsOfType<RoR2.UI.HealthBar>())
+                    {
+                        if (!hb || !hb.gameObject.activeInHierarchy) continue;
+                        if (hb.GetComponentInParent<RoR2.UI.HUD>() == null) continue;
+                        _healthBar = hb;
+                        _hudCanvas = hb.GetComponentInParent<Canvas>();
+                        break;
+                    }
+                }
+                if (!_healthBar) return false;
+                RectTransform rt = _healthBar.transform as RectTransform;
+                if (!rt) return false;
+                Vector3[] c = new Vector3[4];
+                rt.GetWorldCorners(c);
+                Camera cam = _hudCanvas && _hudCanvas.renderMode != RenderMode.ScreenSpaceOverlay ? _hudCanvas.worldCamera : null;
+                Vector2 a = RectTransformUtility.WorldToScreenPoint(cam, c[0]); // bottom left
+                Vector2 b = RectTransformUtility.WorldToScreenPoint(cam, c[2]); // top right
+                r = new Rect(a.x, Screen.height - b.y, b.x - a.x, b.y - a.y);
+                return r.width > 20f && r.height > 2f;
+            }
+            catch { return false; }
+        }
+
+        private void DrawStressMeter(CmxShift s, float sc)
+        {
+            float h = 18f * sc;
+            Rect bar;
+            if (HealthBarRect(out Rect hp))
+            {
+                float gap = 4f * sc;
+                bar = hp.yMax + gap + h < Screen.height ? new Rect(hp.x, hp.yMax + gap, hp.width, h) : new Rect(hp.x, hp.y - gap - h, hp.width, h);
+            }
+            else bar = new Rect(Screen.width * 0.02f, Screen.height * 0.93f, 380f * sc, h);
+
+            float k = Mathf.Clamp01(s.Stress / 100f);
+            Rect(new Rect(bar.x - 2f, bar.y - 2f, bar.width + 4f, bar.height + 4f), new Color(0f, 0f, 0f, 0.6f));
+            Rect(bar, new Color(0.12f, 0.14f, 0.2f, 0.85f));
+            Color c = k < 0.5f ? Color.Lerp(new Color(0.3f, 0.6f, 1f), new Color(1f, 0.8f, 0.2f), k * 2f) : Color.Lerp(new Color(1f, 0.8f, 0.2f), new Color(1f, 0.15f, 0.12f), (k - 0.5f) * 2f);
+            if (k > 0.85f) c = Color.Lerp(c, Color.white, Mathf.PingPong(Time.unscaledTime * 5f, 0.6f));
+            Rect(new Rect(bar.x, bar.y, bar.width * k, bar.height), c);
+            for (int i = 1; i < 4; i++) Rect(new Rect(bar.x + bar.width * i / 4f, bar.y, 1f, bar.height), new Color(0f, 0f, 0f, 0.35f));
+
+            _text.fontSize = Mathf.RoundToInt(14f * sc);
+            _text.normal.textColor = Color.white;
+            string label = k >= 0.999f ? "<b>BURNOUT!</b>" : "<b>STRESS</b>  " + Mathf.RoundToInt(s.Stress) + "%";
+            if (s.Overtime) label += "   <color=#FFC928>OVERTIME</color>";
+            Shadowed(new Rect(bar.x + 6f * sc, bar.y - 1f * sc, bar.width, bar.height + 4f), label, _text);
+        }
+
         private void DrawTimecard(CmxShift s, float sc)
         {
             float x = Screen.width * CmxPlugin.HudX.Value, y = Screen.height * CmxPlugin.HudY.Value;
             float w = 360f * sc, pad = 10f * sc, line = 24f * sc;
             bool deadline = s.Kind != Deadline.None;
-            float h = pad * 2f + line * (deadline ? 5.6f : 4.4f) + (s.Coworkers > 0 ? line : 0f);
+            float h = pad * 2f + line * (deadline ? 4.2f : 3.1f) + (s.Coworkers > 0 ? line : 0f);
             Rect(new Rect(x, y, w, h), new Color(0.02f, 0.07f, 0.16f, 0.82f));
             Rect(new Rect(x, y, w, 4f * sc), new Color(1f, 0.79f, 0.15f, 0.95f));
 
@@ -204,17 +268,7 @@ namespace CarMaxSpecialist
             Shadowed(new Rect(x + pad, cy, w, line), hours, _text);
             cy += line;
 
-            // stress bar
-            Shadowed(new Rect(x + pad, cy, w, line), "Stress", _text);
-            float bx = x + pad + 70f * sc, bw = w - pad * 2f - 70f * sc - 50f * sc, bh = 14f * sc;
-            float k = Mathf.Clamp01(s.Stress / 100f);
-            Rect(new Rect(bx, cy + 5f * sc, bw, bh), new Color(1f, 1f, 1f, 0.12f));
-            Color sc1 = k < 0.5f ? Color.Lerp(new Color(0.3f, 0.85f, 0.4f), new Color(1f, 0.8f, 0.2f), k * 2f) : Color.Lerp(new Color(1f, 0.8f, 0.2f), new Color(1f, 0.2f, 0.15f), (k - 0.5f) * 2f);
-            if (k > 0.85f) sc1 = Color.Lerp(sc1, Color.white, Mathf.PingPong(Time.unscaledTime * 4f, 0.5f));
-            Rect(new Rect(bx, cy + 5f * sc, bw * k, bh), sc1);
-            Shadowed(new Rect(bx + bw + 8f * sc, cy, 60f * sc, line), Mathf.RoundToInt(s.Stress) + "%", _text);
-            cy += line * 1.2f;
-
+            float bh = 14f * sc;
             if (deadline)
             {
                 _text.fontSize = Mathf.RoundToInt(15f * sc);
@@ -300,18 +354,88 @@ namespace CarMaxSpecialist
             {
                 CharacterModel.RendererInfo ri = _cm.baseRendererInfos[i];
                 if (!ri.renderer) continue;
-                if (ri.renderer.name.IndexOf("gun", StringComparison.OrdinalIgnoreCase) >= 0) { ri.renderer.forceRenderingOff = true; continue; }
+                if (!CmxPlugin.AudiModel && ri.renderer.name.IndexOf("gun", StringComparison.OrdinalIgnoreCase) >= 0) { ri.renderer.forceRenderingOff = true; continue; }
                 Material src = ri.defaultMaterial;
                 if (!src || Mine.Contains(src)) continue;
                 if (!Tinted.TryGetValue(src, out Material t) || !t)
                 {
                     t = new Material(src) { name = src.name + "_CarMax" };
-                    if (t.HasProperty("_Color")) t.SetColor("_Color", src.GetColor("_Color") * Shirt);
+                    if (CmxPlugin.AudiModel) Blue(src, t);
+                    else if (t.HasProperty("_Color")) t.SetColor("_Color", src.GetColor("_Color") * Shirt);
                     Tinted[src] = t;
                     Mine.Add(t);
                 }
                 ri.defaultMaterial = t;
                 _cm.baseRendererInfos[i] = ri;
+            }
+        }
+
+        // ---- red -> CarMax blue
+
+        private static readonly Dictionary<Texture, Texture2D> BlueTex = new Dictionary<Texture, Texture2D>();
+
+        private static bool IsRed(Color c, out float s, out float v)
+        {
+            Color.RGBToHSV(c, out float h, out s, out v);
+            return (h < 0.06f || h > 0.92f) && s > 0.35f && v > 0.12f;
+        }
+
+        private static Color ToBlue(Color c)
+        {
+            Color.RGBToHSV(c, out _, out float s, out float v);
+            Color o = Color.HSVToRGB(0.6f, Mathf.Min(1f, s * 1.05f), v);
+            o.a = c.a;
+            return o;
+        }
+
+        private static void Blue(Material src, Material dst)
+        {
+            try
+            {
+                if (dst.HasProperty("_Color"))
+                {
+                    Color c = src.GetColor("_Color");
+                    if (IsRed(c, out _, out _)) dst.SetColor("_Color", ToBlue(c));
+                }
+                if (dst.HasProperty("_MainTex"))
+                {
+                    Texture tex = src.GetTexture("_MainTex");
+                    if (tex)
+                    {
+                        if (!BlueTex.TryGetValue(tex, out Texture2D blue)) { blue = BlueCopy(tex); BlueTex[tex] = blue; }
+                        if (blue) dst.SetTexture("_MainTex", blue);
+                    }
+                }
+            }
+            catch (Exception e) { CmxPlugin.Log.LogWarning("Recolor of " + src.name + " skipped: " + e.Message); }
+        }
+
+        // Textures from asset bundles aren't readable, so the copy is made through the GPU.
+        private static Texture2D BlueCopy(Texture tex)
+        {
+            int w = Mathf.Min(tex.width, 2048), h = Mathf.Min(tex.height, 2048);
+            RenderTexture rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            RenderTexture prev = RenderTexture.active;
+            try
+            {
+                Graphics.Blit(tex, rt);
+                RenderTexture.active = rt;
+                Texture2D copy = new Texture2D(w, h, TextureFormat.RGBA32, true);
+                copy.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+                Color[] px = copy.GetPixels();
+                int changed = 0;
+                for (int i = 0; i < px.Length; i++)
+                    if (IsRed(px[i], out _, out _)) { px[i] = ToBlue(px[i]); changed++; }
+                if (changed == 0) { Object.Destroy(copy); return null; }
+                copy.SetPixels(px);
+                copy.Apply(true);
+                copy.name = tex.name + "_CarMaxBlue";
+                return copy;
+            }
+            finally
+            {
+                RenderTexture.active = prev;
+                RenderTexture.ReleaseTemporary(rt);
             }
         }
 

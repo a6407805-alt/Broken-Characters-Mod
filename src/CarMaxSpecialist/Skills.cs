@@ -8,7 +8,7 @@ using Object = UnityEngine.Object;
 
 namespace CarMaxSpecialist
 {
-    // ================================================================ M1: Per My Last Email
+    // ================================================================ M1: Completed Repair Orders
 
     public class CmxEmailState : BaseSkillState
     {
@@ -34,7 +34,7 @@ namespace CarMaxSpecialist
             }
 
             Util.PlaySound(replyAll ? "Play_mage_m1_shoot" : "Play_huntress_m1_shoot", gameObject);
-            if (isAuthority) CmxAudio.Play(replyAll ? "typing" : "email");
+            if (isAuthority) CmxAudio.Play(replyAll ? "stamp" : "email");
 
             Vector3 from = CmxFx.Hand(characterBody, aim);
             int count = replyAll ? 3 : 1;
@@ -67,7 +67,7 @@ namespace CarMaxSpecialist
                     }.Fire();
                 }
             }
-            if (replyAll && isAuthority) CmxHud.Bubble(transform, transform.position, "<color=#9FD0FF>REPLY ALL</color>", Style.Small);
+            if (replyAll && isAuthority) CmxHud.Bubble(transform, transform.position, "<color=#7CFF7C>RO STACK</color>", Style.Small);
             characterBody.AddSpreadBloom(0.4f);
         }
 
@@ -265,7 +265,7 @@ namespace CarMaxSpecialist
     public static class CmxFx
     {
         private static GameObject _hitSpark, _boom, _boomBig;
-        private static Material _paper, _paperBlue, _beam, _wood, _box, _tape, _label, _ring;
+        private static Material _paper, _paperBlue, _stamp, _beam, _wood, _box, _tape, _label;
 
         public static GameObject HitSpark
         {
@@ -279,35 +279,70 @@ namespace CarMaxSpecialist
             return big ? _boomBig : _boom;
         }
 
-        public static Material Lit(Color c)
+        private static Shader _std;
+        private static bool _stdLooked;
+
+        // RoR2 only allows its own shaders by name (Shader.Find("Sprites/Default") throws), so everything uses the
+        // game's standard shader, and lines use the Commando tracer's material.
+        private static Shader Std()
         {
-            Shader sh = Shader.Find("Hopoo Games/Deferred/Standard");
-            if (!sh) sh = Shader.Find("Standard");
-            Material m = new Material(sh);
+            if (_stdLooked) return _std;
+            _stdLooked = true;
+            try { _std = Shader.Find("Hopoo Games/Deferred/Standard"); } catch { _std = null; }
+            if (!_std) { try { _std = LegacyResourcesAPI.Load<Shader>("Shaders/Deferred/HGStandard"); } catch { _std = null; } }
+            if (!_std) CmxPlugin.Log.LogWarning("Game shader not found; CarMax props may look plain.");
+            return _std;
+        }
+
+        public static Material Lit(Color c, float glow = 0f)
+        {
+            Shader sh = Std();
+            Material m = sh ? new Material(sh) : new Material(Commando());
             m.color = c;
             if (m.HasProperty("_Color")) m.SetColor("_Color", c);
+            if (glow > 0f)
+            {
+                if (m.HasProperty("_EmColor")) m.SetColor("_EmColor", c);
+                if (m.HasProperty("_EmPower")) m.SetFloat("_EmPower", glow);
+            }
             return m;
         }
 
-        public static Material Unlit(Color c)
+        private static Material Commando()
         {
-            Shader sh = Shader.Find("Sprites/Default");
-            Material m = new Material(sh);
-            m.color = c;
-            return m;
+            try
+            {
+                GameObject body = LegacyResourcesAPI.Load<GameObject>("Prefabs/CharacterBodies/CommandoBody");
+                Renderer r = body ? body.GetComponentInChildren<Renderer>(true) : null;
+                if (r && r.sharedMaterial) return r.sharedMaterial;
+            }
+            catch { }
+            return null;
+        }
+
+        private static Material LineMat()
+        {
+            try
+            {
+                GameObject tracer = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/Tracers/TracerCommandoDefault");
+                LineRenderer lr = tracer ? tracer.GetComponentInChildren<LineRenderer>(true) : null;
+                if (lr && lr.sharedMaterial) return lr.sharedMaterial;
+            }
+            catch { }
+            return Lit(new Color(1f, 0.2f, 0.15f), 1f);
         }
 
         private static void Mats()
         {
             if (_paper) return;
-            _paper = Unlit(new Color(0.97f, 0.97f, 0.95f));
-            _paperBlue = Unlit(new Color(0.55f, 0.8f, 1f));
-            _beam = Unlit(new Color(1f, 0.15f, 0.12f, 0.7f));
+            _paper = Lit(new Color(0.97f, 0.97f, 0.95f), 0.35f);
+            _paperBlue = Lit(new Color(0.75f, 0.75f, 0.75f));
+            _stamp = Lit(new Color(0.1f, 0.65f, 0.2f), 0.6f);
+            _beam = LineMat();
             _wood = Lit(new Color(0.55f, 0.38f, 0.2f));
             _box = Lit(new Color(0.8f, 0.63f, 0.4f));
-            _tape = Lit(new Color(1f, 0.79f, 0.15f));
-            _label = Lit(new Color(0f, 0.23f, 0.46f));
-            _ring = Unlit(new Color(1f, 0.79f, 0.15f, 0.35f));
+            _tape = Lit(new Color(1f, 0.79f, 0.15f), 0.3f);
+            _label = Lit(new Color(0f, 0.23f, 0.46f), 0.2f);
         }
 
         public static GameObject Part(Transform parent, PrimitiveType type, Vector3 pos, Vector3 scale, Material mat, Vector3 euler = default(Vector3))
@@ -337,17 +372,22 @@ namespace CarMaxSpecialist
             return aim.origin + aim.direction * 0.8f;
         }
 
-        /// <summary>A flying sheet of paper (an email), purely visual.</summary>
-        public static void Paper(Vector3 from, Vector3 dir, float range, bool blue)
+        /// <summary>A completed repair order flying through the air: header bar, printed lines, green COMPLETED stamp.</summary>
+        public static void Paper(Vector3 from, Vector3 dir, float range, bool big)
         {
             Mats();
-            GameObject go = new GameObject("CmxEmail");
+            GameObject go = new GameObject("CmxRepairOrder");
             go.transform.position = from;
-            Part(go.transform, PrimitiveType.Cube, Vector3.zero, new Vector3(0.42f, 0.02f, 0.3f), blue ? _paperBlue : _paper);
-            Part(go.transform, PrimitiveType.Cube, new Vector3(0f, 0.012f, 0.08f), new Vector3(0.3f, 0.005f, 0.03f), _label);
+            Transform t = go.transform;
+            float k = big ? 1.5f : 1f;
+            Part(t, PrimitiveType.Cube, Vector3.zero, new Vector3(0.5f, 0.015f, 0.65f) * k, _paper);
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.01f, 0.27f) * k, new Vector3(0.5f, 0.006f, 0.1f) * k, _label);
+            for (int i = 0; i < 4; i++)
+                Part(t, PrimitiveType.Cube, new Vector3(-0.05f, 0.01f, 0.12f - i * 0.09f) * k, new Vector3(0.36f, 0.005f, 0.025f) * k, _paperBlue);
+            Part(t, PrimitiveType.Cube, new Vector3(0.12f, 0.014f, -0.2f) * k, new Vector3(0.2f, 0.006f, 0.12f) * k, _stamp, new Vector3(0f, -18f, 0f));
             float dist = range;
             if (Physics.Raycast(from, dir, out RaycastHit hit, range, LayerIndex.world.mask, QueryTriggerInteraction.Ignore)) dist = hit.distance;
-            go.AddComponent<CmxFlyer>().Init(from, from + dir.normalized * dist, 90f);
+            go.AddComponent<CmxFlyer>().Init(from, from + dir.normalized * dist, 75f);
         }
 
         /// <summary>A red scanner fan from the barcode gun.</summary>
@@ -402,11 +442,24 @@ namespace CarMaxSpecialist
             return root;
         }
 
+        /// <summary>A yellow circle on the ground where the pallet will land.</summary>
         public static GameObject Ring(Vector3 at, float radius)
         {
             Mats();
-            GameObject go = Part(null, PrimitiveType.Cylinder, at + Vector3.up * 0.05f, new Vector3(radius * 2f, 0.02f, radius * 2f), _ring);
-            go.name = "CmxDropZone";
+            GameObject go = new GameObject("CmxDropZone");
+            LineRenderer lr = go.AddComponent<LineRenderer>();
+            lr.sharedMaterial = _beam;
+            lr.useWorldSpace = true;
+            lr.loop = true;
+            const int n = 40;
+            lr.positionCount = n;
+            for (int i = 0; i < n; i++)
+            {
+                float a = i / (float)n * Mathf.PI * 2f;
+                lr.SetPosition(i, at + new Vector3(Mathf.Cos(a) * radius, 0.15f, Mathf.Sin(a) * radius));
+            }
+            lr.startWidth = lr.endWidth = 0.25f;
+            lr.startColor = lr.endColor = new Color(1f, 0.79f, 0.15f, 1f);
             return go;
         }
     }

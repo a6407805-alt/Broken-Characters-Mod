@@ -218,7 +218,7 @@ namespace CarMaxSpecialist
             if (list != null && list.Count > 0)
             {
                 PickupIndex p = Run.instance.treasureRng.NextElementUniform(list);
-                try { PickupDropletController.CreatePickupDroplet(p, _body.corePosition + Vector3.up * 1.5f, Vector3.up * 15f + _body.transform.forward * 4f); }
+                try { PickupDropletController.CreatePickupDroplet(p, _body.corePosition + Vector3.up * 1.5f, Vector3.up * 15f + _body.gameObject.transform.forward * 4f); }
                 catch (Exception e) { CmxPlugin.Log.LogWarning("Deadline reward drop failed: " + e.Message); }
             }
             CmxNet.Say(_body, gameObject, "<color=#7CFF7C>DEADLINE MET</color>\n<size=70%>" + Lines.Pick(Lines.Praise) + "  +$" + bonus + "</size>", Style.Banner, "pizza");
@@ -306,7 +306,7 @@ namespace CarMaxSpecialist
 
             GameObject prefab = Coworker.Prefab();
             if (!prefab) { CmxNet.Say(_body, gameObject, "Nobody's answering the phone.", Style.Bubble, null); return; }
-            Vector3 right = Vector3.Cross(Vector3.up, _body.transform.forward).normalized;
+            Vector3 right = Vector3.Cross(Vector3.up, _body.gameObject.transform.forward).normalized;
             List<string> names = new List<string>(Lines.Names);
             for (int i = 0; i < 2; i++)
             {
@@ -317,7 +317,7 @@ namespace CarMaxSpecialist
                     {
                         masterPrefab = prefab,
                         position = spot,
-                        rotation = _body.transform.rotation,
+                        rotation = _body.gameObject.transform.rotation,
                         summonerBodyObject = _body.gameObject,
                         ignoreTeamMemberLimit = true,
                         useAmbientLevel = true
