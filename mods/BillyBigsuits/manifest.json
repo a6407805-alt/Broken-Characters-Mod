@@ -1,0 +1,15 @@
+{
+  "name": "BillyBigsuits",
+  "version_number": "1.0.1",
+  "website_url": "",
+  "description": "Billy Bigsuits, Audi West Palm Beach service director: 4 Rings combo, Q5 Toss/Slam, an R8 to drive, and the flying dealership Audi WPB. Personal use.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2121",
+    "RiskofThunder-RoR2BepInExPack-1.41.0",
+    "RiskofThunder-R2API_Core-5.3.0",
+    "RiskofThunder-R2API_ContentManagement-1.0.11",
+    "RiskofThunder-R2API_Prefab-1.1.1",
+    "RiskofThunder-R2API_Language-1.1.0",
+    "RiskofThunder-R2API_RecalculateStats-1.6.6"
+  ]
+}
