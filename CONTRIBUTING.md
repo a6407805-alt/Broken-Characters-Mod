@@ -1,5 +1,7 @@
 # Contributing to Broken Characters Collection
 
+A just-for-fun mod pack between friends. Not for public release.
+
 This repo is a Risk of Rain 2 mod pack: the Duelist (repo root) plus the group's other mods. Every push to `main`
 is compiled by GitHub Actions, the installer is tested on Windows, and the result is published as the
 `latest` release (`Broken-Characters-Collection.zip`). Players update with `Update Broken Characters.bat`.
@@ -20,7 +22,7 @@ is compiled by GitHub Actions, the installer is tested on Windows, and the resul
   The repo's `NuGet.config` already has the BepInEx feed.
 - Library mods by other people (R2API, HookGenPatcher, etc.) are **not** stored here; the installer downloads them
   from Thunderstore at pinned versions (top of `release/install.ps1`). If your mod needs another library, add it there.
-- Don't commit audio, models or art ripped from commercial games. Original or properly licensed assets only.
+- This is a **private, friends-only** pack. Keep the repo private, and don't share the download, the pack key or its contents outside the group.
 
 ## How to contribute (for you and your Claude)
 

@@ -62,6 +62,17 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: Broken-Characters-Collection
+      - name: Updater can download the pack (with a key, like a private repo, and without)
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Expand-Archive Broken-Characters-Collection.zip upd
+          & .\upd\update.ps1 -Key $env:GH_TOKEN -DownloadOnly -OutDir (Join-Path $env:RUNNER_TEMP 'u1')
+          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'u1\pack.zip'))) { throw 'keyed download failed' }
+          Remove-Item upd -Recurse -Force
+
       - name: Install into a dummy game folder
         shell: powershell
         run: |
