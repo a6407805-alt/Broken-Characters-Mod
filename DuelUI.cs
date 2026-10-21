@@ -1083,7 +1083,7 @@ namespace DuelistMod
         private void DrawResult()
         {
             bool win = Session.Result == DuelSession.Outcome.Victory;
-            float h = win ? 470f : 300f;
+            float h = win ? 500f : 330f;
             Rect r = new Rect(_w * 0.5f - 340f, RefH * 0.5f - h * 0.5f, 680f, h);
             Box(new Rect(0f, 0f, _w, RefH), new Color(0f, 0f, 0f, 0.45f));
             Box(r, new Color(0.04f, 0.02f, 0.08f, 0.95f));
@@ -1099,15 +1099,17 @@ namespace DuelistMod
             Shadowed(new Rect(r.x, r.y + 18f, r.width, 70f), win ? "VICTORY!" : "DEFEAT", new GUIStyle(_num) { fontSize = 64 }, win ? Gold : new Color(1f, 0.4f, 0.4f));
             GUI.Label(new Rect(r.x + 20f, r.y + 96f, r.width - 40f, 30f), Session.ResultReason, new GUIStyle(_small) { alignment = TextAnchor.MiddleCenter, fontSize = 19 });
 
-            uint total = Session.BaseGold + Session.BonusGold + Session.VictoryGold + Session.JackpotGold;
+            uint total = Session.BaseGold + Session.BonusGold + Session.VictoryGold + Session.JackpotGold + Session.BountyGold;
+            int bountyItems = Session.BountyWhite + Session.BountyGreen + Session.BountyRed;
             string lines =
                 $"Enemies destroyed: <b>{Session.KillCount}</b>\n" +
                 $"Gold from kills: <b>${Session.BaseGold}</b>\n" +
                 $"Duel kill bonus: <b><color=#f2c640>+${Session.BonusGold}</color></b>\n" +
+                $"Monster bounties: <b><color=#f2c640>+${Session.BountyGold}</color></b>" + (bountyItems > 0 ? $" + <b>{(Session.BountyRed > 0 ? $"<color=#ff5b5b>{Session.BountyRed} red</color> " : "")}{(Session.BountyGreen > 0 ? $"<color=#7dff7d>{Session.BountyGreen} green</color> " : "")}{(Session.BountyWhite > 0 ? $"{Session.BountyWhite} white " : "")}</b>item{(bountyItems > 1 ? "s" : "")}" : "") + "\n" +
                 (win ? $"Victory bonus: <b><color=#f2c640>+${Session.VictoryGold}</color></b>\n" +
                        $"Victory JACKPOT: <b><color=#f2c640>+${Session.JackpotGold}</color></b>\n" : "<color=#ffffff77>No victory bonus</color>\n") +
                 $"<size=26><b>Total earned: <color=#f2c640>${total}</color></b></size>";
-            GUI.Label(new Rect(r.x + 60f, r.y + 136f, r.width - 120f, 170f), lines, new GUIStyle(_txt) { alignment = TextAnchor.UpperCenter, fontSize = 20 });
+            GUI.Label(new Rect(r.x + 60f, r.y + 136f, r.width - 120f, 200f), lines, new GUIStyle(_txt) { alignment = TextAnchor.UpperCenter, fontSize = 20 });
 
             if (win)
             {
@@ -1116,8 +1118,8 @@ namespace DuelistMod
                     (Session.BossBeaten ? "  <color=#c77dff>(boss bonus!)</color>" : "") + "\n" +
                     (DuelConfig.VictoryLevelUp.Value ? "<b><color=#7de0ff>LEVEL UP</color></b> · " : "") + "Full heal" +
                     (DuelConfig.VictoryBuffSeconds.Value > 0f ? $" · <b><color=#f2c640>Victor's Glory</color></b> ({DuelConfig.VictoryBuffSeconds.Value:0}s of speed)" : "");
-                Box(new Rect(r.x + 30f, r.y + 318f, r.width - 60f, 2f), new Color(1f, 0.85f, 0.35f, 0.5f));
-                GUI.Label(new Rect(r.x + 30f, r.y + 330f, r.width - 60f, 120f), "<size=24><b>VICTORY SPOILS</b></size>\n" + spoils,
+                Box(new Rect(r.x + 30f, r.y + 346f, r.width - 60f, 2f), new Color(1f, 0.85f, 0.35f, 0.5f));
+                GUI.Label(new Rect(r.x + 30f, r.y + 358f, r.width - 60f, 120f), "<size=24><b>VICTORY SPOILS</b></size>\n" + spoils,
                           new GUIStyle(_txt) { alignment = TextAnchor.UpperCenter, fontSize = 19 });
             }
         }

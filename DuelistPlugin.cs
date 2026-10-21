@@ -311,9 +311,8 @@ namespace DuelistMod
         public static ConfigEntry<float> ArenaHeight;
         public static ConfigEntry<int> MaxRounds;
         public static ConfigEntry<bool> DeckOut;
-        public static ConfigEntry<float> SoulDamage;
-        public static ConfigEntry<int> ResolveLP;
-        public static ConfigEntry<int> ResolveAtk;
+        public static ConfigEntry<bool> Bounties;
+        public static ConfigEntry<float> BountyGold;
         public static ConfigEntry<int> StartingHand;
         public static ConfigEntry<int> DrawPerTurn;
         public static ConfigEntry<int> MaxHandSize;
@@ -409,14 +408,13 @@ namespace DuelistMod
             DuelCooldown = cfg.Bind("Duel", "Cooldown", 30f, "Special cooldown in seconds, starting when the duel ends. Needs a restart.");
             ArenaHeight = cfg.Bind("Duel", "ArenaHeight", 250f, "How far above you the duel arena is built.");
             MaxRounds = cfg.Bind("Duel", "MaxRounds_v3", 0, "Turn limit before the duel dimension collapses (0 = no limit: duel until someone's LP hits zero or a deck runs out).");
-            SoulDamage = cfg.Bind("Rules", "SoulDamage", 0.5f, "Destroying an enemy monster also burns this fraction of its ATK off the enemy's LP (0 = card-game rules).");
-            ResolveLP = cfg.Bind("Rules", "PharaohsResolveLP", 3000, "Pharaoh's Resolve: while your LP is at or below this, your monsters fight harder (0 = off).");
-            ResolveAtk = cfg.Bind("Rules", "PharaohsResolveAtk", 500, "ATK each of your monsters gains from Pharaoh's Resolve.");
+            Bounties = cfg.Bind("Victory", "MonsterBounties", true, "Every enemy monster you defeat in a duel pays a bounty: gold and a chance at items, by its Level and rarity (Common, Rare, Super Rare, Ultra Rare, Secret Rare). Items drop at your feet when the duel ends.");
+            BountyGold = cfg.Bind("Victory", "BountyGoldMult", 1f, "Multiplier for bounty gold.");
             DeckOut = cfg.Bind("Duel", "DeckOut", true, "Yu-Gi-Oh! deck-out: if you have to draw and your deck is empty, you lose. The enemy too: at its Draw Phase with no monsters left to draw, it loses.");
             StartingHand = cfg.Bind("Duel", "StartingHand", 5, "Cards drawn when the duel begins.");
             DrawPerTurn = cfg.Bind("Duel", "DrawPerTurn", 2, "Cards drawn at the start of each later turn.");
             MaxHandSize = cfg.Bind("Duel", "MaxHandSize", 8, "Hand size limit.");
-            NormalSummonsPerTurn = cfg.Bind("Duel", "NormalSummonsPerTurn_v2", 2, "Monsters you can summon from your hand each turn (fusions from the Extra Deck don't count).");
+            NormalSummonsPerTurn = cfg.Bind("Duel", "NormalSummonsPerTurn_v3", 1, "Monsters you can summon from your hand each turn (fusions from the Extra Deck don't count).");
             MaxDuelSeconds = cfg.Bind("Duel", "MaxDuelSeconds_v3", 0f, "Safety time limit in seconds (0 = no limit).");
             EnemyTurnSpeed = cfg.Bind("Duel", "EnemyActionDelay", 0.9f, "Seconds between enemy attacks, so each hit can be read.");
 

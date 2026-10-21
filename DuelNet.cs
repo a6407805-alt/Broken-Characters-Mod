@@ -76,6 +76,14 @@ namespace DuelistMod
             else Send(DuelOp.Heal, h, null, amount);
         }
 
+        public static void BountyLoot(CharacterBody body, int white, int green, int red)
+        {
+            if (!body) return;
+            white = Mathf.Clamp(white, 0, 255); green = Mathf.Clamp(green, 0, 255); red = Mathf.Clamp(red, 0, 255);
+            if (NetworkServer.active) DuelRewards.DropBounty(body, white, green, red);
+            else Send(DuelOp.BountyLoot, body, null, 0f, false, 0f, white | (green << 8) | (red << 16));
+        }
+
         public static void AddBuff(CharacterBody body, BuffDef buff, float seconds)
         {
             if (!body || !buff || buff.buffIndex == BuffIndex.None) return;
@@ -261,6 +269,9 @@ namespace DuelistMod
                     if (pm) pm.SetFocus(tb ? tb.mainHurtBox : null);
                     break;
                 }
+                case DuelOp.BountyLoot:
+                    DuelRewards.DropBounty(target ? target.GetComponent<CharacterBody>() : null, m.Arg & 0xFF, (m.Arg >> 8) & 0xFF, (m.Arg >> 16) & 0xFF);
+                    break;
                 case DuelOp.AddBuff:
                 {
                     CharacterBody tb = target ? target.GetComponent<CharacterBody>() : null;
@@ -288,7 +299,7 @@ namespace DuelistMod
 
     public enum DuelOp : byte
     {
-        DamageEnemy, HurtBody, HealFraction, Heal, GiveMoney, TakeMoney, Invincible, UseAbility, PartnerFocus, DeckRequest, VictoryLoot, SetBoard, AddBuff, Barrier
+        DamageEnemy, HurtBody, HealFraction, Heal, GiveMoney, TakeMoney, Invincible, UseAbility, PartnerFocus, DeckRequest, VictoryLoot, SetBoard, AddBuff, Barrier, BountyLoot
     }
 
     /// <summary>Client → host: one request.</summary>

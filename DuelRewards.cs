@@ -58,6 +58,84 @@ namespace DuelistMod
             if (glory > 0f) winner.AddTimedBuff(RoR2Content.Buffs.WarCryBuff, glory);
         }
 
+        // ------------------------------------------------------------ bounties for each monster defeated
+
+        public static string RarityName(Rarity r)
+        {
+            switch (r)
+            {
+                case Rarity.Rare: return "Rare";
+                case Rarity.SuperRare: return "Super Rare";
+                case Rarity.UltraRare: return "Ultra Rare";
+                case Rarity.SecretRare: return "Secret Rare";
+                default: return "Common";
+            }
+        }
+
+        public static Color RarityColor(Rarity r)
+        {
+            switch (r)
+            {
+                case Rarity.Rare: return new Color(0.45f, 0.75f, 1f);
+                case Rarity.SuperRare: return new Color(0.8f, 0.5f, 1f);
+                case Rarity.UltraRare: return new Color(1f, 0.82f, 0.3f);
+                case Rarity.SecretRare: return new Color(1f, 0.45f, 0.75f);
+                default: return new Color(0.95f, 0.9f, 0.75f);
+            }
+        }
+
+        /// <summary>
+        /// A monster's bounty. Gold scales with its Level and rarity (and the run's difficulty, like chests);
+        /// items: Common Lv 1-12 has a small chance at a white, Rare likely a white or green, Super Rare a green,
+        /// Ultra Rare a green and maybe a red, Secret Rare a red.
+        /// </summary>
+        public static void RollBounty(int level, Rarity rarity, out uint gold, out int white, out int green, out int red)
+        {
+            float rarMult = new[] { 1f, 1.6f, 2.5f, 4f, 6f }[(int)rarity];
+            int baseCost = Run.instance ? Run.instance.GetDifficultyScaledCost(Mathf.Max(1, level) * 3) : level * 3;
+            gold = (uint)Mathf.RoundToInt(baseCost * rarMult);
+            white = green = red = 0;
+            float roll = UnityEngine.Random.value;
+            switch (rarity)
+            {
+                case Rarity.Common:
+                    if (roll < 0.06f + level * 0.025f) white = 1;
+                    break;
+                case Rarity.Rare:
+                    if (roll < 0.3f + level * 0.02f) green = 1; else white = 1;
+                    break;
+                case Rarity.SuperRare:
+                    green = 1;
+                    if (UnityEngine.Random.value < 0.1f + level * 0.02f) red = 1;
+                    break;
+                case Rarity.UltraRare:
+                    green = 1;
+                    if (UnityEngine.Random.value < 0.35f + level * 0.03f) red = 1;
+                    break;
+                case Rarity.SecretRare:
+                    red = 1; green = 1;
+                    break;
+            }
+        }
+
+        /// <summary>Host only: the bounty items burst out at the duelist's feet.</summary>
+        public static void DropBounty(CharacterBody winner, int white, int green, int red)
+        {
+            if (!NetworkServer.active || !winner || !Run.instance) return;
+            List<PickupIndex> drops = new List<PickupIndex>();
+            for (int i = 0; i < red; i++) Add(drops, Run.instance.availableTier3DropList);
+            for (int i = 0; i < green; i++) Add(drops, Run.instance.availableTier2DropList);
+            for (int i = 0; i < white; i++) Add(drops, Run.instance.availableTier1DropList);
+            Vector3 at = winner.corePosition + Vector3.up * 1.5f;
+            for (int i = 0; i < drops.Count; i++)
+            {
+                float ang = (360f / drops.Count) * i * Mathf.Deg2Rad + 0.4f;
+                Vector3 vel = new Vector3(Mathf.Cos(ang) * 6f, 18f, Mathf.Sin(ang) * 6f);
+                try { PickupDropletController.CreatePickupDroplet(drops[i], at, vel); }
+                catch (System.Exception e) { DuelistPlugin.Log.LogWarning("Bounty drop failed: " + e.Message); }
+            }
+        }
+
         private static void Add(List<PickupIndex> into, List<PickupIndex> from)
         {
             if (from == null || from.Count == 0) return;

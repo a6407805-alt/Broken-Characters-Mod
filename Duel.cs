@@ -10,6 +10,8 @@ using Object = UnityEngine.Object;
 namespace DuelistMod
 {
     /// <summary>Risk of Rain 2's elite types.</summary>
+    public enum Rarity { Common, Rare, SuperRare, UltraRare, SecretRare }
+
     public enum DuelElite { None, Blazing, Glacial, Overloading, Malachite, Celestine, Mending, Voidtouched, Perfected, Gilded, Twisted, Other }
 
     public class DuelMember
@@ -69,6 +71,23 @@ namespace DuelistMod
 
         public int Atk => Mathf.Max(0, (IsCommander ? DuelStats.Round50(BaseAtk * DuelConfig.BossAttackMult.Value) : BaseAtk) + AtkMod);
         public int Def => Mathf.Max(0, BaseDef + DefMod);
+
+        /// <summary>Card-game Level from its strength (a Beetle is Level 4), bosses higher.</summary>
+        public int Level => Mathf.Clamp(2 + Mathf.Max(BaseAtk, BaseDef) / 500 + (IsBoss ? 2 : 0), 1, 12);
+
+        /// <summary>How rare the monster is: elites are Rare, tougher elites Super Rare, bosses Ultra Rare, elite bosses Secret Rare.</summary>
+        public Rarity Rarity
+        {
+            get
+            {
+                bool strongElite = Elite == DuelElite.Malachite || Elite == DuelElite.Celestine || Elite == DuelElite.Voidtouched
+                                || Elite == DuelElite.Perfected || Elite == DuelElite.Twisted;
+                if (IsBoss) return Elite != DuelElite.None ? Rarity.SecretRare : Rarity.UltraRare;
+                if (strongElite) return Rarity.SuperRare;
+                if (Elite != DuelElite.None) return Rarity.Rare;
+                return Rarity.Common;
+            }
+        }
 
         public void Refresh()
         {
@@ -289,6 +308,8 @@ namespace DuelistMod
         public uint BonusGold;     // duel bonus paid on top, as kills happen
         public uint VictoryGold;   // paid at the end if you win
         public uint JackpotGold;   // the victory jackpot (chests' worth of gold)
+        public uint BountyGold;    // paid per enemy monster defeated
+        public int BountyWhite, BountyGreen, BountyRed;   // items owed, dropped when the duel ends
         public int LootLegendary, LootUncommon;
         public bool BossBeaten;
         public int DeckTotal;      // main deck size this duel
@@ -1021,15 +1042,6 @@ namespace DuelistMod
                 return;
             }
 
-            if (Resolute && !_resolveShown)
-            {
-                _resolveShown = true;
-                ShowBanner("PHARAOH'S RESOLVE!");
-                AddLog($"<color=#f2c640>Pharaoh's Resolve: your LP is low, so every monster you control gains {DuelConfig.ResolveAtk.Value} ATK.</color>");
-                DuelSfx.Play(DuelSound.Activate, Player.gameObject);
-            }
-            else if (!Resolute) _resolveShown = false;
-
             if (ChainBusy) { TickChain(dt); return; }
             TickPhases(dt);
         }
@@ -1699,10 +1711,6 @@ namespace DuelistMod
         public int MonsterCountAll { get { int n = 0; foreach (FieldMonster m in Monsters) if (m != null) n++; return n; } }
 
         /// <summary>A monster's ATK right now: its own, boosted by face-up Link monsters and its effects.</summary>
-        /// <summary>Pharaoh's Resolve: backed into a corner, your monsters fight harder.</summary>
-        public bool Resolute => DuelConfig.ResolveLP.Value > 0 && Result == Outcome.None && PlayerLP > 0 && PlayerLP <= DuelConfig.ResolveLP.Value;
-        private bool _resolveShown;
-
         public int MonsterAtk(FieldMonster fm)
         {
             if (fm == null) return 0;
@@ -1711,8 +1719,7 @@ namespace DuelistMod
             foreach (FieldMonster m in Monsters)
                 if (m != null && m != fm && !m.FaceDown && !m.IsAlly && m.Card.Extra == ExtraKind.Link)
                     boost += DuelConfig.LinkBoost.Value * m.Card.LinkRating;
-            int resolve = Resolute ? DuelConfig.ResolveAtk.Value : 0;
-            return Mathf.Max(0, DuelStats.Round50(baseAtk * (1f + boost) * (1f + fm.AtkBonus)) + fm.TempAtk + resolve);
+            return Mathf.Max(0, DuelStats.Round50(baseAtk * (1f + boost) * (1f + fm.AtkBonus)) + fm.TempAtk);
         }
 
         public int MonsterDef(FieldMonster fm)
@@ -2465,6 +2472,22 @@ namespace DuelistMod
             return list;
         }
 
+        /// <summary>An enemy monster is defeated: pay its bounty (gold now, items when the duel ends).</summary>
+        private void PayBounty(Representative rep)
+        {
+            if (!DuelConfig.Bounties.Value || rep == null) return;
+            DuelRewards.RollBounty(rep.Level, rep.Rarity, out uint gold, out int w, out int g, out int r);
+            gold = (uint)Mathf.RoundToInt(gold * Mathf.Max(0f, DuelConfig.BountyGold.Value));
+            if (gold > 0 && Player.master) DuelNet.GiveMoney(Player.master, gold);
+            BountyGold += gold;
+            BountyWhite += w; BountyGreen += g; BountyRed += r;
+            string rar = DuelRewards.RarityName(rep.Rarity);
+            string loot = (w + g + r) > 0 ? $" + {(r > 0 ? $"{r} red " : "")}{(g > 0 ? $"{g} green " : "")}{(w > 0 ? $"{w} white " : "")}item{(w + g + r > 1 ? "s" : "")}" : "";
+            Pop(rep.BoardPosition + Vector3.up * 6.2f, $"+${gold}{loot}", $"Lv {rep.Level} · {rar} bounty", DuelRewards.RarityColor(rep.Rarity), rep.Rarity >= Rarity.SuperRare);
+            AddLog($"Bounty for {rep.Label} (Lv {rep.Level}, {rar}): ${gold}{loot}.");
+            if (r + g > 0) DuelSfx.Play(DuelSound.Activate, Player.gameObject);
+        }
+
         private void PlayerBattle(FieldMonster fm, Representative r, int atk)
         {
             SetEcho(fm.Card, fm.IsAlly);
@@ -2641,7 +2664,6 @@ namespace DuelistMod
         private void DestroyRep(Representative rep, string source, ItemIndex item)
         {
             if (rep == null || rep.Destroyed || rep.IsCommander) return;
-            int soul = Mathf.RoundToInt(rep.Atk * Mathf.Max(0f, DuelConfig.SoulDamage.Value) / 50f) * 50;
             DuelMember first = rep.Members.Find(x => x.Alive && x.Body);
             Vector3 soulFrom = first != null ? first.Body.corePosition : Vector3.zero;
             if (first != null) Step("soul harvest", () => DuelEcho.SoulHarvest(Player, soulFrom));
@@ -2653,11 +2675,7 @@ namespace DuelistMod
             Pop(rep.BoardPosition + Vector3.up * 4.4f, "DESTROYED", rep.Label, new Color(1f, 0.45f, 0.3f), true);
             DuelSfx.Play(DuelSound.Destroy, Player.gameObject);
             if (_hitVfx) EffectManager.SpawnEffect(_hitVfx, new EffectData { origin = rep.BoardPosition + Vector3.up * 2f, scale = 3f }, true);
-            if (soul > 0 && (Commander == null ? DirectorLifeMax > 0f : !Commander.Defeated))
-            {
-                AddLog($"Soul damage: {rep.Label}'s destruction burns {soul} off the enemy's LP.");
-                DamageEnemyLP(soul, "soul damage");
-            }
+            Step("bounty", () => PayBounty(rep));
         }
 
         /// <summary>Damage to the enemy's LP: the commander's real health (8000 LP = full), or the Director's.</summary>
@@ -3178,9 +3196,9 @@ namespace DuelistMod
             if (Result == Outcome.None) { Result = Outcome.Defeat; ResultReason = "The duel ended early."; }
             try
             {
-                uint total = BaseGold + BonusGold + VictoryGold + JackpotGold;
+                uint total = BaseGold + BonusGold + VictoryGold + JackpotGold + BountyGold;
                 string head = Result == Outcome.Victory ? "<color=#f2c640>DUEL WON!</color>" : "<color=#ff6666>DUEL LOST.</color>";
-                Chat.AddMessage($"{head} {ResultReason} {KillCount} enemies destroyed, <color=#f2c640>${total}</color> gold earned (${BonusGold + VictoryGold + JackpotGold} duel bonus)."
+                Chat.AddMessage($"{head} {ResultReason} {KillCount} enemies destroyed, <color=#f2c640>${total}</color> gold earned (${BonusGold + VictoryGold + JackpotGold + BountyGold} duel bonus)."
                     + (Result == Outcome.Victory ? $" <color=#c77dff>Victory spoils: {LootLegendary} legendary + {LootUncommon} uncommon item{(LootUncommon == 1 ? "" : "s")}" + (DuelConfig.VictoryLevelUp.Value ? ", LEVEL UP" : "") + "!</color>" : ""));
             }
             catch { }
@@ -3208,6 +3226,8 @@ namespace DuelistMod
                 Teleport(Player, _returnPosition);
                 DuelNet.Invincible(Player, 1.5f);
                 if (_bigVfx) EffectManager.SpawnEffect(_bigVfx, new EffectData { origin = _returnPosition + Vector3.up, scale = 6f }, true);
+                if (BountyWhite + BountyGreen + BountyRed > 0)
+                    Step("bounty items", () => DuelNet.BountyLoot(Player, BountyWhite, BountyGreen, BountyRed));
                 if (Result == Outcome.Victory)
                 {
                     Step("victory spoils", () => DuelNet.VictoryLoot(Player, BossBeaten));
