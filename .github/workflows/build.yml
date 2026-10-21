@@ -46,6 +46,8 @@ jobs:
           done
 
       - name: Package Broken-Characters-Collection.zip
+        env:
+          PACK_KEY: ${{ secrets.PACK_KEY }}
         run: bash release/package.sh
 
       - uses: actions/upload-artifact@v4

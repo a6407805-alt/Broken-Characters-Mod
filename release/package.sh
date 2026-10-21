@@ -15,5 +15,7 @@ for f in duel_mat.jpg duel_mat_glow.png; do [ -f "$mod/$f" ] && cp "$mod/$f" "$s
 for f in INSTALL.bat UNINSTALL.bat install.ps1 README.txt manifest.json icon.png "Update Broken Characters.bat" update.ps1; do
   [ -f "$mod/release/$f" ] && cp "$mod/release/$f" "$stage/"
 done
+# the pack key (a read-only token stored as the PACK_KEY secret) rides along so friends never type it
+if [ -n "${PACK_KEY:-}" ]; then printf '%s' "$PACK_KEY" > "$stage/pack-key.txt"; echo "Pack key included."; fi
 (cd "$stage" && zip -qr9 "$mod/Broken-Characters-Collection.zip" .)
 echo "Packaged $(du -h "$mod/Broken-Characters-Collection.zip" | cut -f1) -> Broken-Characters-Collection.zip"

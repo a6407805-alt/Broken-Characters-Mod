@@ -48,6 +48,9 @@ function Download-WithKey($k) {
 
 Say ''
 Say '  Downloading the latest Broken Characters Collection...' 'Yellow'
+# a key that came in the pack (newest first), then one saved from earlier
+$bundled = Join-Path $PSScriptRoot 'pack-key.txt'
+if (-not $Key -and (Test-Path $bundled)) { $Key = (Get-Content $bundled -Raw).Trim() }
 if (-not $Key -and (Test-Path $keyFile)) { $Key = (Get-Content $keyFile -Raw).Trim() }
 
 $ok = $false
@@ -74,4 +77,11 @@ if ($DownloadOnly) { exit 0 }
 
 $pack = Join-Path $work 'pack'
 Expand-Archive $zip $pack -Force
+# keep the newest pack key (and refresh the copy next to this updater) for next time
+$newKey = Join-Path $pack 'pack-key.txt'
+if (Test-Path $newKey) {
+    New-Item -ItemType Directory -Force -Path $keyDir | Out-Null
+    Copy-Item $newKey $keyFile -Force
+    try { Copy-Item $newKey $bundled -Force } catch { }
+}
 & (Join-Path $pack 'install.ps1')
