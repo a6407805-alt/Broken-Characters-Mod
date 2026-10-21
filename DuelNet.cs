@@ -76,6 +76,22 @@ namespace DuelistMod
             else Send(DuelOp.Heal, h, null, amount);
         }
 
+        /// <summary>Marks a rider as on/off the hoverboard so every player sees the board.</summary>
+        public static void SetBoard(CharacterBody body, bool on)
+        {
+            if (!body) return;
+            if (NetworkServer.active) DoSetBoard(body, on);
+            else Send(DuelOp.SetBoard, body, null, 0f, false, 0f, on ? 1 : 0);
+        }
+
+        private static void DoSetBoard(CharacterBody body, bool on)
+        {
+            if (!body || !DuelistHover.BoardBuff) return;
+            bool has = body.HasBuff(DuelistHover.BoardBuff);
+            if (on && !has) body.AddBuff(DuelistHover.BoardBuff);
+            else if (!on && has) body.RemoveBuff(DuelistHover.BoardBuff);
+        }
+
         public static void VictoryLoot(CharacterBody winner, bool boss)
         {
             if (!winner) return;
@@ -231,6 +247,9 @@ namespace DuelistMod
                     if (pm) pm.SetFocus(tb ? tb.mainHurtBox : null);
                     break;
                 }
+                case DuelOp.SetBoard:
+                    DoSetBoard(target ? target.GetComponent<CharacterBody>() : null, m.Arg != 0);
+                    break;
                 case DuelOp.VictoryLoot:
                     DuelRewards.GrantOnServer(target ? target.GetComponent<CharacterBody>() : null, m.Arg != 0);
                     break;
@@ -243,7 +262,7 @@ namespace DuelistMod
 
     public enum DuelOp : byte
     {
-        DamageEnemy, HurtBody, HealFraction, Heal, GiveMoney, TakeMoney, Invincible, UseAbility, PartnerFocus, DeckRequest, VictoryLoot
+        DamageEnemy, HurtBody, HealFraction, Heal, GiveMoney, TakeMoney, Invincible, UseAbility, PartnerFocus, DeckRequest, VictoryLoot, SetBoard
     }
 
     /// <summary>Client → host: one request.</summary>

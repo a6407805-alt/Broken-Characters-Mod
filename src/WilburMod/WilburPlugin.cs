@@ -167,6 +167,9 @@ namespace WilburMod
         // Model
         public static ConfigEntry<float> PigYOffset;
         public static ConfigEntry<float> GlowStrength;
+        public static ConfigEntry<bool> SculptedModel;
+        public static ConfigEntry<bool> Jiggle;
+        public static ConfigEntry<float> JiggleAmount;
         // Sound
         public static ConfigEntry<int> SoundVolume;
         public static ConfigEntry<bool> IdleOinks;
@@ -446,6 +449,9 @@ namespace WilburMod
 
             PigYOffset = Config.Bind("Model", "PigYOffset", 0f, "Raise or lower the pig model if he floats or sinks into the ground.");
             GlowStrength = Config.Bind("Model", "GlowStrength", 1f, "Multiplier for all of Wilbur's glow effects. Lower it if the screen gets washed out.");
+            SculptedModel = Config.Bind("Model", "SculptedModel", true, "Use Wilbur's sculpted makeover model. Turn off for the classic primitive pig.");
+            Jiggle = Config.Bind("Model", "Jiggle", true, "Jiggle physics: belly wobble, bouncing jowls, floppy ears, boingy tail.");
+            JiggleAmount = Config.Bind("Model", "JiggleAmount", 1f, "How much he jiggles (0 = none, 1 = normal, 2 = very wobbly).");
 
             SoundVolume = Config.Bind("Sound", "Volume", 70, "Volume of Wilbur's sounds, 0-100. These play outside the game's volume sliders.");
             IdleOinks = Config.Bind("Sound", "IdleOinks", true, "Wilbur oinks every now and then on his own.");
@@ -669,6 +675,7 @@ namespace WilburMod
             MakePart(piv["LegBR"], "HoofB3", PrimitiveType.Sphere, new Vector3(0.048f, -0.355f, 0.02f), new Vector3(0.1f, 0.07f, 0.15f), Vector3.zero, hoof);
             for (int i = 0; i < 6; i++)
                 MakePart(root, "Spark_" + i, PrimitiveType.Sphere, Vector3.zero, new Vector3(0.1f, 0.1f, 0.1f), Vector3.zero, spark);
+            WilburMakeover.Apply(root);
             return root;
         }
 
@@ -777,6 +784,7 @@ namespace WilburMod
             GameObject pig = BuildPig();
             pig.transform.SetParent(model, false);
             pig.AddComponent<WilburPigController>();
+            pig.AddComponent<WilburJiggle>();
         }
 
         private void CreateBodyAndDisplay()
@@ -3975,7 +3983,7 @@ namespace WilburMod
                 WilburCandy.Alive++;
             }
 
-            // Cracks radiating out from Wilbur.
+            // Jagged cracks unzipping out from Wilbur across the ground.
             int cracks = 7;
             float baseAng = UnityEngine.Random.value * 360f;
             for (int i = 0; i < cracks; i++)
@@ -3983,17 +3991,7 @@ namespace WilburMod
                 float ang = baseAng + i * 360f / cracks + UnityEngine.Random.Range(-15f, 15f);
                 float len = radius * UnityEngine.Random.Range(0.45f, 0.95f);
                 Vector3 dir = Quaternion.Euler(0f, ang, 0f) * Vector3.forward;
-                Vector3 mid = center + dir * len * 0.5f;
-                RaycastHit hit;
-                if (Physics.Raycast(mid + Vector3.up * 4f, Vector3.down, out hit, 25f, LayerIndex.world.mask, QueryTriggerInteraction.Ignore))
-                    mid = hit.point;
-                GameObject crack = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                WilburPlugin.StripCollider(crack);
-                crack.GetComponent<Renderer>().sharedMaterial = _crackMat;
-                crack.transform.position = mid + Vector3.up * 0.04f;
-                crack.transform.rotation = Quaternion.LookRotation(dir) * Quaternion.Euler(0f, UnityEngine.Random.Range(-6f, 6f), 0f);
-                crack.transform.localScale = new Vector3(0.18f * s, 0.06f, len);
-                Object.Destroy(crack, 2.5f);
+                WilburGroundCrack.Spawn(center, dir, len, 0.32f * s, 2.5f);
             }
         }
     }

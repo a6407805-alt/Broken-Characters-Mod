@@ -21,4 +21,9 @@
     <PackageReference Include="R2API.Prefab" Version="1.*" />
   </ItemGroup>
 
+  <!-- Wilbur's sculpted makeover (made by model/build_wilbur.py), built into the dll. -->
+  <ItemGroup>
+    <EmbeddedResource Include="wilbur_model.bin" LogicalName="WilburMod.wilbur_model.bin" />
+  </ItemGroup>
+
 </Project>
