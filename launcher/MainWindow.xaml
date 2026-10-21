@@ -364,10 +364,13 @@
                     <Grid Grid.Row="1">
                         <!-- The roster itself: scroll with the wheel, by dragging, or with the arrows -->
                         <ScrollViewer x:Name="RosterScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
-                                      CanContentScroll="False" Padding="40,10,40,10"
+                                      CanContentScroll="False" Padding="0"
                                       PreviewMouseWheel="Roster_PreviewMouseWheel" ScrollChanged="Roster_ScrollChanged"
                                       PreviewMouseLeftButtonDown="Roster_DragStart" PreviewMouseMove="Roster_DragMove" PreviewMouseLeftButtonUp="Roster_DragEnd">
-                            <ItemsControl x:Name="RosterList" ItemTemplate="{StaticResource CharacterCard}" ItemsPanel="{StaticResource HorizontalPanel}" VerticalAlignment="Center" />
+                            <!-- The margin lives on the list (not the ScrollViewer's Padding) so the slanted corners of the first and
+                                 last cards stay inside the scroll area instead of being clipped -->
+                            <ItemsControl x:Name="RosterList" ItemTemplate="{StaticResource CharacterCard}" ItemsPanel="{StaticResource HorizontalPanel}"
+                                          VerticalAlignment="Center" Margin="64,14,64,14" />
                         </ScrollViewer>
 
                         <!-- < and > overlaying the edges -->
