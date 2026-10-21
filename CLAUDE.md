@@ -1,0 +1,40 @@
+# Broken Characters Mod — notes for Claude
+
+Friends-only Risk of Rain 2 mod pack (BepInEx 5, R2API, netstandard2.1). Repo: `a6407805-alt/Broken-Characters-Mod`
+(public). Copyrighted files live in the private `a6407805-alt/BrokenCharacters-Extras` (`files/<Mod>/`). Two owners push
+straight to `main`; read CONTRIBUTING.md for the new-character checklist and the gotchas we already hit.
+
+## Layout
+- `src/Duelist/` the Duelist (DuelistMod.csproj, models as `.bin`). `src/<Mod>/` every other mod built from source.
+- `mods/<Mod>/` what ships for each group mod (dll, Icons/, Sounds/, bundles). CI copies built dlls here.
+- `unity/<Mod>/` Unity sources for asset bundles (not shipped). `launcher/` WPF launcher (`roster.json` = its cards).
+- `release/` installer (`install.ps1`), updater (`update.ps1`), `package.sh`. `.github/workflows/build.yml` does it all.
+
+## Build & release (nothing builds locally: no dotnet in the sandbox)
+- Every push to main: build Duelist + every `src/*/*.csproj` → package `Broken-Characters-Mod.zip` → Windows installer
+  test → launcher exe + `launcher-preview.png` → GitHub release `latest` (also `Broken-Characters-Collection.zip` alias).
+- Wait: `gh run watch <id> -R a6407805-alt/Broken-Characters-Mod --exit-status`.
+- Compile errors: job logs are blocked; read annotations:
+  `gh api repos/a6407805-alt/Broken-Characters-Mod/check-runs/<job_id>/annotations`. A src mod that fails shows
+  `::error::<Mod> failed to build` and the pack keeps its old dll, so always check for the "built from source" notice.
+- Use REST `gh api` (GraphQL blocked). Artifact downloads are blocked; fetch release assets from
+  `https://github.com/a6407805-alt/Broken-Characters-Mod/releases/latest/download/<file>` instead.
+- Repo settings/renames can't be done through the API; the user does those in a browser.
+
+## Deploying to the owner's PC (when the Claude desktop app links it)
+- Game: `D:\SteamLibrary\steamapps\common\Risk of Rain 2`. Mods load from `BepInEx\plugins\<Mod>\`; the Duelist from
+  `BepInEx\plugins\Duelist\` (the old dev folder `plugins\DuelistMod` is retired; never re-enable its dll).
+- Procedure: wait for the release, `curl` the zip, unzip only the changed mod
+  (`unzip pack.zip 'Mods/<Mod>/*'`), copy files to `/mnt/user-data/outputs/<Mod>/`, then `device_commit_files` with
+  `force: true` to `...\plugins\<Mod>\`. Verify with `device_list_dir` (size matches the release).
+- Never run the installer on the owner's PC yourself. Game log for bugs: `BepInEx\LogOutput.log` (stage it, grep for
+  the mod's namespace and "Exception").
+
+## Working cheaply (the owner asked for fewer tokens)
+- Big files: Duelist `Duel.cs` (3.3k lines), `DuelUI.cs`, `Partners.cs`; `src/WilburMod/WilburPlugin.cs` (7k lines).
+  Grep for what you need and read ranges; never read them whole.
+- Start new characters from `src/CarMaxSpecialist/` (small, current patterns: body clone, skills, net messages, HUD,
+  winmm sounds, safe materials) rather than from Wilbur or the Duelist.
+- Push once per finished change, then one `gh run watch`; don't poll in loops.
+- Keep replies short; the owner is a visual learner and likes concrete steps.
+- Never print or commit the extras key (a `github_pat_...`).

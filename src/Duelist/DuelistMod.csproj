@@ -22,8 +22,7 @@
 
   <ItemGroup>
     <!-- the bundled group mods (and release staging) are shipped as-is, never compiled into the Duelist -->
-    <Compile Remove="mods/**;release/**;src/**;launcher/**" />
-    <None Remove="mods/**;release/**;src/**;launcher/**" />
+    <Compile Remove="Blender/**" />
   </ItemGroup>
 
   <ItemGroup>

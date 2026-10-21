@@ -21,8 +21,8 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Build
-        run: dotnet build DuelistMod.csproj -c Release -nologo
+      - name: Build the Duelist (src/Duelist)
+        run: dotnet build src/Duelist/DuelistMod.csproj -c Release -nologo
 
       - name: Build the other mods from source (src/<Mod>/*.csproj)
         # Each mod whose source lives in src/<Mod>/ is compiled here and its fresh dll replaces mods/<Mod>/.
@@ -31,6 +31,7 @@ jobs:
           shopt -s nullglob
           for proj in src/*/*.csproj; do
             mod=$(basename "$(dirname "$proj")")
+            [ "$mod" = "Duelist" ] && continue   # built above; it ships in its own Duelist folder
             name=$(grep -oP '(?<=<AssemblyName>)[^<]+' "$proj" | head -1 || true)
             [ -z "$name" ] && name=$(basename "$proj" .csproj)
             echo "== building $mod ($name)"

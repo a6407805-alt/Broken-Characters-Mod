@@ -2,7 +2,7 @@
 
 A just-for-fun mod pack between friends. Not for public release.
 
-This repo is a Risk of Rain 2 mod pack: the Duelist (repo root) plus the group's other mods. Every push to `main`
+This repo is a Risk of Rain 2 mod pack: the Duelist (`src/Duelist`) plus the group's other mods. Every push to `main`
 is compiled by GitHub Actions, the installer is tested on Windows, and the result is published as the
 `latest` release (`Broken-Characters-Mod.zip`). Players update with `Update Broken Characters.bat`.
 
@@ -10,14 +10,16 @@ is compiled by GitHub Actions, the installer is tested on Windows, and the resul
 
 | What | Where |
 |---|---|
-| The Duelist's source | repo root (`*.cs`, `DuelistMod.csproj`) |
+| The Duelist's source | `src/Duelist/` (`*.cs`, `DuelistMod.csproj`, models as `.bin`) |
 | Another mod's **source** | `src/<ModFolder>/` with its `.csproj` (e.g. `src/WilburMod/WilburMod.csproj`) |
 | Another mod's **files that ship** (icons, sounds, asset bundles, or a prebuilt dll) | `mods/<ModFolder>/` |
 | Installer / packaging | `release/`, `.github/workflows/build.yml` |
+| Unity source files for asset bundles (not shipped) | `unity/<ModFolder>/` |
+| The launcher (Windows app) | `launcher/` |
 
 - A mod in `src/<ModFolder>/` is compiled on every push and its dll lands in `mods/<ModFolder>/` in the download.
   If it fails to build, the run shows the errors and the download keeps that mod's last good dll.
-- Projects must build **without the game installed**: reference the game through NuGet like `DuelistMod.csproj`
+- Projects must build **without the game installed**: reference the game through NuGet like `src/Duelist/DuelistMod.csproj`
   (BepInEx.Core, UnityEngine.Modules, RiskOfRain2.GameLibs, R2API.* packages). No HintPaths to a local game folder.
   The repo's `NuGet.config` already has the BepInEx feed.
 - Library mods by other people (R2API, HookGenPatcher, etc.) are **not** stored here; the installer downloads them
