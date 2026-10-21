@@ -54,6 +54,7 @@ namespace DuelistMod
             DuelNet.Register();
             DuelVenom.Register();
             DuelistHover.Register();
+            DuelEcho.Register();
 
             CreateBody();
             CreateDisplay();
@@ -309,6 +310,7 @@ namespace DuelistMod
         public static ConfigEntry<float> DuelCooldown;
         public static ConfigEntry<float> ArenaHeight;
         public static ConfigEntry<int> MaxRounds;
+        public static ConfigEntry<bool> DeckOut;
         public static ConfigEntry<int> StartingHand;
         public static ConfigEntry<int> DrawPerTurn;
         public static ConfigEntry<int> MaxHandSize;
@@ -326,6 +328,8 @@ namespace DuelistMod
         public static ConfigEntry<float> MonsterAtkCoeff;
         public static ConfigEntry<float> MonsterHpFraction;
         public static ConfigEntry<float> ExtraDeckDroneWeight;
+        public static ConfigEntry<bool> RareDronesExtra;
+        public static ConfigEntry<bool> WorldEcho;
         public static ConfigEntry<float> SpellDamage;
         public static ConfigEntry<int> MaxDeckSize;
         public static ConfigEntry<int> MetaDeckSize;
@@ -401,12 +405,13 @@ namespace DuelistMod
 
             DuelCooldown = cfg.Bind("Duel", "Cooldown", 30f, "Special cooldown in seconds, starting when the duel ends. Needs a restart.");
             ArenaHeight = cfg.Bind("Duel", "ArenaHeight", 250f, "How far above you the duel arena is built.");
-            MaxRounds = cfg.Bind("Duel", "MaxRounds_v2", 5, "Rounds before the duel dimension collapses and sends you back.");
+            MaxRounds = cfg.Bind("Duel", "MaxRounds_v3", 0, "Turn limit before the duel dimension collapses (0 = no limit: duel until someone's LP hits zero or a deck runs out).");
+            DeckOut = cfg.Bind("Duel", "DeckOut", true, "Yu-Gi-Oh! deck-out: if you have to draw and your deck is empty, you lose. The enemy too: at its Draw Phase with no monsters left to draw, it loses.");
             StartingHand = cfg.Bind("Duel", "StartingHand", 5, "Cards drawn when the duel begins.");
             DrawPerTurn = cfg.Bind("Duel", "DrawPerTurn", 2, "Cards drawn at the start of each later turn.");
             MaxHandSize = cfg.Bind("Duel", "MaxHandSize", 8, "Hand size limit.");
             NormalSummonsPerTurn = cfg.Bind("Duel", "NormalSummonsPerTurn", 1, "Monsters you can summon from your hand each turn (fusions from the Extra Deck don't count).");
-            MaxDuelSeconds = cfg.Bind("Duel", "MaxDuelSeconds_v2", 900f, "Safety limit: the duel ends after this many seconds no matter what (phases and chains make duels longer).");
+            MaxDuelSeconds = cfg.Bind("Duel", "MaxDuelSeconds_v3", 0f, "Safety time limit in seconds (0 = no limit).");
             EnemyTurnSpeed = cfg.Bind("Duel", "EnemyActionDelay", 0.9f, "Seconds between enemy attacks, so each hit can be read.");
 
 
@@ -417,6 +422,8 @@ namespace DuelistMod
             DirectorLifeFraction = cfg.Bind("Enemies", "DirectorLifeFraction", 0.3f, "With no boss, the Director's life points = this x the total max HP of the enemies at the start of the duel. Direct attacks lower it; zero wins the duel.");
             MonsterAtkCoeff = cfg.Bind("Cards", "MonsterAtk", 2.5f, "Monster ATK as a multiple of your damage, before tier and stack bonuses. ATK is damage per enemy unit at full range.");
             MonsterHpFraction = cfg.Bind("Cards", "MonsterHp", 0.3f, "Monster HP as a fraction of your max HP, before tier and stack bonuses.");
+            RareDronesExtra = cfg.Bind("Cards", "RareDronesExtraDeck", true, "Rare drones are Extra Deck monsters: Incinerator = Synchro, Missile = Xyz, Emergency/Equipment = Link, TC-280 = Fusion. Gunner/Healing Drones and Gunner Turrets stay main-deck monsters.");
+            WorldEcho = cfg.Bind("Visuals", "WorldEcho", true, "Duel effects echo into the real world: attacks rain down on the real monsters, summons and kills buff and heal your teammates, traps slow real enemies.");
             ExtraDeckDroneWeight = cfg.Bind("Cards", "ExtraDeckDroneWeight", 2.5f, "Robots at least this strong (base HP / 150; Gunner Drone = 1, TC-280 ≈ 3+) are Extra Deck fusions instead of monsters.");
             SpellDamage = cfg.Bind("Cards", "SpellDamage", 2.5f, "Damage of a white damage-item spell (2.5 = 250%); green x1.6, red/boss hit every species.");
             MaxDeckSize = cfg.Bind("Deck", "MaxDeckSize", 60, "Main deck limit. Items, equipment and drones picked up past this stay normal.");

@@ -408,9 +408,23 @@ namespace DuelistMod
                 AtkCoeff = DuelConfig.MonsterAtkCoeff.Value * w,
                 HpFraction = DuelConfig.MonsterHpFraction.Value * w
             };
-            if (w >= DuelConfig.ExtraDeckDroneWeight.Value)
+            ExtraKind rare = RareDroneKind(prefab.name, w);
+            if (rare != ExtraKind.None)
             {
-                c.Type = CardType.Extra; c.Extra = ExtraKind.Fusion; c.Level = 8; c.HitsAll = true;
+                // Rare robots are Extra Deck monsters, each its own kind of summon.
+                c.Type = CardType.Extra;
+                c.Extra = rare;
+                c.Source = "Rare drone";
+                float boost = Mathf.Max(1.4f, w);
+                c.AtkCoeff = DuelConfig.MonsterAtkCoeff.Value * boost;
+                c.HpFraction = DuelConfig.MonsterHpFraction.Value * boost;
+                switch (rare)
+                {
+                    case ExtraKind.Fusion: c.Level = 8; c.HitsAll = true; break;
+                    case ExtraKind.Synchro: c.Level = 7; break;
+                    case ExtraKind.Xyz: c.Level = 0; break;
+                    case ExtraKind.Link: c.Level = 0; c.HpFraction = 0f; break;
+                }
             }
             else
             {
@@ -430,7 +444,26 @@ namespace DuelistMod
         {
             GameObject prefab = BodyCatalog.GetBodyPrefab(body);
             CharacterBody cb = prefab ? prefab.GetComponent<CharacterBody>() : null;
-            return cb && DroneWeight(cb) >= DuelConfig.ExtraDeckDroneWeight.Value;
+            return cb && RareDroneKind(prefab.name, DroneWeight(cb)) != ExtraKind.None;
+        }
+
+        /// <summary>
+        /// Drone rarity. Common robots (Gunner Drone, Healing Drone, Gunner Turret) are main-deck monsters;
+        /// rare ones are Extra Deck monsters: Incinerator = Synchro, Missile = Xyz, Emergency/Equipment = Link,
+        /// TC-280 (and anything big) = Fusion. Unknown modded robots go by toughness.
+        /// </summary>
+        public static ExtraKind RareDroneKind(string prefabName, float weight)
+        {
+            if (!DuelConfig.RareDronesExtra.Value) return weight >= DuelConfig.ExtraDeckDroneWeight.Value ? ExtraKind.Fusion : ExtraKind.None;
+            string n = prefabName ?? "";
+            if (n.StartsWith("Drone1") || n.StartsWith("Drone2") || n.StartsWith("Turret1")) return ExtraKind.None;
+            if (n.Contains("MegaDrone")) return ExtraKind.Fusion;
+            if (n.Contains("FlameDrone")) return ExtraKind.Synchro;
+            if (n.Contains("MissileDrone")) return ExtraKind.Xyz;
+            if (n.Contains("EmergencyDrone") || n.Contains("EquipmentDrone")) return ExtraKind.Link;
+            if (weight >= DuelConfig.ExtraDeckDroneWeight.Value) return ExtraKind.Fusion;
+            if (weight >= 1.3f) return ExtraKind.Synchro;
+            return ExtraKind.None;
         }
 
         public static float TierWeight(ItemTier tier)
@@ -648,7 +681,8 @@ namespace DuelistMod
                 _syncDirty = true;
                 Card preview = Card.FromDrone(b.bodyIndex);
                 string name = preview != null ? preview.Name : b.GetDisplayName();
-                Say($"<color=#f2c640>{name}</color> → {(extra ? "Extra Deck fusion" : "monster card")} {DeckTag}");
+                string kind = extra && preview != null ? $"<color=#c77dff>RARE · Extra Deck {preview.Extra.ToString().ToUpper()}</color>" : "monster card";
+                Say($"<color=#f2c640>{name}</color> → {kind} {DeckTag}");
 
                 try
                 {

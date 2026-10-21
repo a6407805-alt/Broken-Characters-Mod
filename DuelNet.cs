@@ -76,6 +76,20 @@ namespace DuelistMod
             else Send(DuelOp.Heal, h, null, amount);
         }
 
+        public static void AddBuff(CharacterBody body, BuffDef buff, float seconds)
+        {
+            if (!body || !buff || buff.buffIndex == BuffIndex.None) return;
+            if (NetworkServer.active) body.AddTimedBuff(buff, seconds);
+            else Send(DuelOp.AddBuff, body, null, seconds, false, 0f, (int)buff.buffIndex);
+        }
+
+        public static void Barrier(CharacterBody body, float fraction)
+        {
+            if (!body || !body.healthComponent) return;
+            if (NetworkServer.active) body.healthComponent.AddBarrier(body.healthComponent.fullCombinedHealth * fraction);
+            else Send(DuelOp.Barrier, body, null, fraction);
+        }
+
         /// <summary>Marks a rider as on/off the hoverboard so every player sees the board.</summary>
         public static void SetBoard(CharacterBody body, bool on)
         {
@@ -247,6 +261,18 @@ namespace DuelistMod
                     if (pm) pm.SetFocus(tb ? tb.mainHurtBox : null);
                     break;
                 }
+                case DuelOp.AddBuff:
+                {
+                    CharacterBody tb = target ? target.GetComponent<CharacterBody>() : null;
+                    if (tb && m.Arg >= 0) tb.AddTimedBuff((BuffIndex)m.Arg, m.Amount);
+                    break;
+                }
+                case DuelOp.Barrier:
+                {
+                    HealthComponent th = target ? target.GetComponent<HealthComponent>() : null;
+                    if (th && th.alive) th.AddBarrier(th.fullCombinedHealth * m.Amount);
+                    break;
+                }
                 case DuelOp.SetBoard:
                     DoSetBoard(target ? target.GetComponent<CharacterBody>() : null, m.Arg != 0);
                     break;
@@ -262,7 +288,7 @@ namespace DuelistMod
 
     public enum DuelOp : byte
     {
-        DamageEnemy, HurtBody, HealFraction, Heal, GiveMoney, TakeMoney, Invincible, UseAbility, PartnerFocus, DeckRequest, VictoryLoot, SetBoard
+        DamageEnemy, HurtBody, HealFraction, Heal, GiveMoney, TakeMoney, Invincible, UseAbility, PartnerFocus, DeckRequest, VictoryLoot, SetBoard, AddBuff, Barrier
     }
 
     /// <summary>Client → host: one request.</summary>

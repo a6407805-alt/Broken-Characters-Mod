@@ -434,7 +434,7 @@ namespace DuelistMod
             Shuffle(main);
             DrawPile.AddRange(main);
             ExtraDeck.AddRange(extra);
-            Draw(DuelConfig.StartingHand.Value);
+            Draw(DuelConfig.StartingHand.Value, false);
 
             int units = 0;
             foreach (Representative r in Reps) units += r.AliveCount;
@@ -707,6 +707,14 @@ namespace DuelistMod
                 foreach (Representative r in Reps)
                     if (r.IsBoss && !r.Defeated && (boss == null || r.TotalHealth > boss.TotalHealth)) boss = r;
                 if (boss != null) SetCommander(boss, true);
+            }
+            // Deck-out for the enemy: nothing left to draw (no monsters waiting, none newly spawned) = they lose.
+            if (DuelConfig.DeckOut.Value && fresh == 0 && EnemyDeckCount == 0 && Round >= 2 && Result == Outcome.None)
+            {
+                AddLog("<color=#80ff90>The enemy has to draw, but its deck is empty. The enemy is DECKED OUT!</color>");
+                ShowBanner("ENEMY DECKED OUT!");
+                SetResult(Outcome.Victory, "The enemy had no monsters left to draw: decked out!");
+                return;
             }
             if (fresh > 0)
             {
@@ -1074,6 +1082,8 @@ namespace DuelistMod
 
                 case Phase.Standby:
                     PlayerStandby();
+                    foreach (FieldMonster lm in Monsters)
+                        if (lm != null && !lm.FaceDown && lm.Card.Extra == ExtraKind.Link) { Step("link banner", () => DuelEcho.LinkBanner(Player)); break; }
                     break;
 
                 case Phase.Main1:
@@ -1264,7 +1274,7 @@ namespace DuelistMod
 
         private void StartNextRound()
         {
-            if (Round >= DuelConfig.MaxRounds.Value)
+            if (DuelConfig.MaxRounds.Value > 0 && Round >= DuelConfig.MaxRounds.Value)
             {
                 SetResult(Outcome.Defeat, $"Time ran out after {Round} turns: the duel dimension collapses.");
                 return;
@@ -2139,6 +2149,7 @@ namespace DuelistMod
         {
             int slot = FreeSlot(Monsters);
             if (slot < 0) { Graveyard.Add(c); return; }
+            if (!faceDown) Step("summon echo", () => DuelEcho.Summoned(Player, c, RealEnemies()));
 
             FieldMonster fm = new FieldMonster
             {
@@ -2265,6 +2276,8 @@ namespace DuelistMod
 
         private void ResolveSpell(Card c, Representative chosen)
         {
+            SetEcho(c);
+            if (c.Type == CardType.Trap) Step("trap echo", () => DuelEcho.Bind(RealEnemies(), new Color(0.8f, 0.35f, 1f)));
             switch (c.Effect)
             {
                 case CardEffect.DamageOne:
@@ -2287,6 +2300,7 @@ namespace DuelistMod
                 }
                 case CardEffect.Heal:
                 {
+                    Step("heal echo", () => DuelEcho.HealTeam(Player, Mathf.Clamp(c.Power * 0.5f, 0.05f, 0.4f)));
                     if (_healBlockedRound == Round)
                     {
                         AddLog($"{c.Name}: Malachite poison stops you gaining LP this turn.");
@@ -2418,8 +2432,28 @@ namespace DuelistMod
         }
 
         /// <summary>The damage step when your monster attacks one of theirs.</summary>
+        // How hits from the current attack/spell look out in the real world (see DuelEcho).
+        private EchoKind _echoKind = EchoKind.Spirit;
+        private Color _echoColor = DuelEcho.Gold;
+
+        private void SetEcho(Card c, bool ally = false)
+        {
+            _echoKind = ally ? EchoKind.Spirit : DuelEcho.KindOf(c, out _echoColor);
+            if (ally) _echoColor = DuelEcho.Gold;
+        }
+
+        /// <summary>Every real monster still standing in this duel (for world echoes).</summary>
+        private List<CharacterBody> RealEnemies()
+        {
+            List<CharacterBody> list = new List<CharacterBody>();
+            foreach (Representative r in Reps)
+                if (!r.Defeated) foreach (DuelMember m in r.Members) if (m.Alive && m.Body) list.Add(m.Body);
+            return list;
+        }
+
         private void PlayerBattle(FieldMonster fm, Representative r, int atk)
         {
+            SetEcho(fm.Card, fm.IsAlly);
             r.LastHitTime = Time.time;
             DuelSfx.Play(DuelSound.Impact, Player.gameObject);
             if (Board) DuelFx.Shockwave(Board.transform, r.BoardPosition, new Color(1f, 0.85f, 0.4f), 3.5f);
@@ -2593,6 +2627,9 @@ namespace DuelistMod
         private void DestroyRep(Representative rep, string source, ItemIndex item)
         {
             if (rep == null || rep.Destroyed || rep.IsCommander) return;
+            DuelMember first = rep.Members.Find(x => x.Alive && x.Body);
+            Vector3 soulFrom = first != null ? first.Body.corePosition : Vector3.zero;
+            if (first != null) Step("soul harvest", () => DuelEcho.SoulHarvest(Player, soulFrom));
             float most = 0f;
             foreach (DuelMember m in rep.Members) if (m.Alive) most = Mathf.Max(most, m.Health.combinedHealth);
             HitSpecies(rep, most * 10f + 100f, source, false, item, true);
@@ -2612,7 +2649,10 @@ namespace DuelistMod
             {
                 int before = EnemyLP;
                 float real = DuelStats.RealFromLP(pts, Commander.FullHealth);
+                EchoKind was = _echoKind;
+                _echoKind = EchoKind.Judgment;
                 HitSpecies(Commander, real, source, false, ItemIndex.None, true);
+                _echoKind = was;
                 Commander.LastHitTime = Time.time;
                 Pop(at + Vector3.up * 2f, $"-{pts} LP", Commander.Name, new Color(1f, 0.9f, 0.4f), true);
                 AddLog($"The enemy takes {pts} ({before} → {Mathf.Max(0, before - pts)} LP).");
@@ -2701,6 +2741,9 @@ namespace DuelistMod
                     uint bonus = (uint)Mathf.RoundToInt(worth * Mathf.Max(0f, DuelConfig.KillGoldBonus.Value));
                     if (bonus > 0 && Player.master) { if (NetworkServer.active) Player.master.GiveMoney(bonus); BonusGold += bonus; hitGold += bonus; }
                 }
+
+                // The hit lands on the real monster out in the world.
+                if (r.Hits <= 6) Step("world echo", () => DuelEcho.Strike(info.position, _echoKind, _echoColor, 1f + (killed ? 0.4f : 0f) + (crit ? 0.3f : 0f), killed));
 
                 // What your friends see on the map: a card falls on each unit you hit (up to the cap).
                 if (rain < rainMax) { rain++; CardRain.Drop(m.Body ? m.Body.footPosition : info.position, item); }
@@ -3036,12 +3079,23 @@ namespace DuelistMod
 
         // ------------------------------------------------------------ cards
 
-        private void Draw(int count)
+        private void Draw(int count, bool canDeckOut = true)
         {
             for (int i = 0; i < count && Hand.Count < DuelConfig.MaxHandSize.Value; i++)
             {
                 if (DrawPile.Count == 0)
                 {
+                    if (DuelConfig.DeckOut.Value)
+                    {
+                        // Yu-Gi-Oh! rules: you must draw and you can't: you lose.
+                        if (canDeckOut)
+                        {
+                            AddLog("<color=#ff6666>You have to draw, but your deck is empty. DECKED OUT!</color>");
+                            ShowBanner("DECKED OUT!");
+                            SetResult(Outcome.Defeat, "You had no cards left to draw: decked out!");
+                        }
+                        return;
+                    }
                     if (Graveyard.Count == 0) return;
                     DrawPile.AddRange(Graveyard);
                     Graveyard.Clear();

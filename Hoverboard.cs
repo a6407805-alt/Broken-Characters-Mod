@@ -25,6 +25,9 @@ namespace DuelistMod
         public float Speed;
         public Vector3 Heading = Vector3.forward;
         public float Bank, AirTime, FlipAngle, SpinYaw;
+        public float LandedTime = -10f;
+        public float RiderRoll, RiderPitch;         // the rider's lean, written by DuelistLevitate, shared by the board
+        public const float StanceYaw = -28f;        // rider stands a little sideways on the board
         public bool Riding;                         // touching the ground (not in the air)
         public string LastTrick;
         public float LastTrickTime = -10f;
@@ -124,8 +127,7 @@ namespace DuelistMod
 
             // trick visuals: the board flips and the rider spins while in the air
             float dt = Time.deltaTime;
-            if (IsHovering && !Riding && AirTime > 0.3f) FlipAngle += dt * 540f;
-            else FlipAngle = Mathf.MoveTowards(FlipAngle, Mathf.Round(FlipAngle / 360f) * 360f, dt * 900f);
+            FlipAngle = 0f;      // the board stays locked under his feet; big tricks spin rider and board together
             SpinYaw = Mathf.MoveTowards(SpinYaw, _spinTarget, dt * 720f);
         }
 
@@ -247,6 +249,7 @@ namespace DuelistMod
         {
             float air = AirTime;
             AirTime = 0f;
+            LandedTime = Time.time;
             if (air < 0.35f || _trickDone) return;
             _trickDone = true;
             int tier = Mathf.Clamp(Mathf.FloorToInt((air - 0.35f) / 0.3f) + 1, 1, Tricks.Length - 1);
@@ -270,8 +273,10 @@ namespace DuelistMod
     }
 
     /// <summary>
-    /// The model side of riding: banks into carves, leans with speed, spins on big tricks and bobs with the board.
-    /// (Walking: no lift, the feet stay on the ground.)
+    /// The rider on the board: he stands a little sideways, banks into every carve, leans forward as he speeds up
+    /// and back when he brakes, crouches lower the faster he goes, soaks up landings and pumps over bumps. Every
+    /// one of those is a spring with a little overshoot, so his body carries momentum instead of snapping.
+    /// (Walking: untouched, feet on the ground.)
     /// </summary>
     [DefaultExecutionOrder(10000)]
     public class DuelistLevitate : MonoBehaviour
@@ -279,15 +284,25 @@ namespace DuelistMod
         private Vector3 _base, _lastSet;
         private Quaternion _baseRot, _lastRot;
         private bool _has;
-        private Vector3 _lean;
         private CharacterBody _body;
         private DuelistHover _hover;
+        private float _ride;                       // 0 walking .. 1 riding
+        private Vector3 _lastVel, _acc;
+        private float _roll, _rollV, _pitch, _pitchV, _crouch, _crouchV;
+        private float _seenLanding = -10f;
+        private Vector3 _up = Vector3.up;
 
         private void Start()
         {
             CharacterModel cm = GetComponent<CharacterModel>();
             _body = cm ? cm.body : null;
             _hover = _body ? _body.GetComponent<DuelistHover>() : null;
+        }
+
+        private static void Spring(ref float x, ref float v, float target, float k, float c, float dt)
+        {
+            v += (k * (target - x) - c * v) * dt;
+            x += v * dt;
         }
 
         private void LateUpdate()
@@ -297,23 +312,55 @@ namespace DuelistMod
             if (!_has || Quaternion.Angle(t.localRotation, _lastRot) > 0.01f) _baseRot = t.localRotation;
             _has = true;
 
-            bool riding = _hover && _hover.IsHovering;
-            _lastSet = _base;
-            t.localPosition = _lastSet;
-
-            Vector3 want = Vector3.zero;
-            float spin = 0f;
-            if (riding && _body && _body.characterMotor && t.parent)
+            float dt = Mathf.Clamp(Time.deltaTime, 0.001f, 0.05f);
+            bool riding = _hover && _hover.IsHovering && _body && t.parent;
+            _ride = Mathf.MoveTowards(_ride, riding ? 1f : 0f, dt * 4f);
+            if (_ride <= 0f || !_body || !t.parent || !_hover)
             {
-                Vector3 v = _body.characterMotor.velocity; v.y = 0f;
-                Vector3 local = t.parent.InverseTransformDirection(v) / Mathf.Max(1f, _body.moveSpeed);
-                // crouch-lean forward with speed, bank into the carve
-                want = new Vector3(Mathf.Clamp(local.z, -1f, 3f) * 6f, 0f, -_hover.Bank * 0.8f - Mathf.Clamp(local.x, -1f, 1f) * 6f);
-                spin = _hover.SpinYaw % 360f;
+                _lastSet = _base; t.localPosition = _base;
+                _lastRot = _baseRot; t.localRotation = _baseRot;
+                return;
             }
-            _lean = Vector3.Lerp(_lean, want, Time.deltaTime * 6f);
-            _lastRot = _baseRot * Quaternion.Euler(_lean.x, spin, _lean.z);
+
+            // how he's being thrown around
+            Vector3 vel = _body.characterMotor ? _body.characterMotor.velocity : Vector3.zero;
+            _acc = Vector3.Lerp(_acc, (vel - _lastVel) / dt, 1f - Mathf.Exp(-12f * dt));
+            _lastVel = vel;
+            Vector3 heading = _hover.Heading.sqrMagnitude > 0.01f ? _hover.Heading.normalized : t.parent.forward;
+            Vector3 right = Vector3.Cross(Vector3.up, heading).normalized;
+            float lateral = Vector3.Dot(_acc, right);
+            float forward = Vector3.Dot(_acc, heading);
+            float speedFrac = Mathf.Clamp01(_hover.Speed / Mathf.Max(1f, _body.moveSpeed * 3f));
+
+            // springs: lean into the turn, lean with acceleration, crouch with speed (a little overshoot = momentum)
+            float rollTarget = Mathf.Clamp(-lateral * 1.1f - _hover.Bank * 0.3f, -34f, 34f);
+            float pitchTarget = Mathf.Clamp(forward * 0.7f + speedFrac * 9f, -16f, 22f);
+            float crouchTarget = 0.05f + speedFrac * 0.12f;
+            if (_hover.LandedTime > _seenLanding) { _seenLanding = _hover.LandedTime; _crouchV += 1.6f; _pitchV -= 30f; }   // soak up the landing
+            if (!_hover.Riding) { pitchTarget = -6f; crouchTarget = 0.18f; }                                               // tuck in the air
+            Spring(ref _roll, ref _rollV, rollTarget, 55f, 8f, dt);
+            Spring(ref _pitch, ref _pitchV, pitchTarget, 60f, 9f, dt);
+            Spring(ref _crouch, ref _crouchV, crouchTarget, 90f, 11f, dt);
+            _crouch = Mathf.Clamp(_crouch, -0.05f, 0.35f);
+            _hover.RiderRoll = _roll;
+            _hover.RiderPitch = _pitch;
+
+            // stand on the board: follow the slope under it, face along it (a little sideways), spin on big tricks
+            if (_hover.Riding && Physics.Raycast(_body.footPosition + Vector3.up * 0.5f, Vector3.down, out RaycastHit hit, 2.5f, LayerIndex.world.mask, QueryTriggerInteraction.Ignore))
+                _up = Vector3.Slerp(_up, Vector3.Slerp(Vector3.up, hit.normal, 0.8f), 1f - Mathf.Exp(-10f * dt));
+            else _up = Vector3.Slerp(_up, Vector3.up, 1f - Mathf.Exp(-4f * dt));
+            Vector3 fwd = Vector3.ProjectOnPlane(heading, _up).normalized;
+            Quaternion world = Quaternion.LookRotation(fwd, _up)
+                             * Quaternion.AngleAxis(_hover.SpinYaw, Vector3.up)
+                             * Quaternion.AngleAxis(-_roll, Vector3.forward)
+                             * Quaternion.AngleAxis(_pitch, Vector3.right)
+                             * Quaternion.AngleAxis(DuelistHover.StanceYaw, Vector3.up);
+            Quaternion rideLocal = Quaternion.Inverse(t.parent.rotation) * world;
+            _lastRot = Quaternion.Slerp(_baseRot, rideLocal, Mathf.SmoothStep(0f, 1f, _ride));
             t.localRotation = _lastRot;
+
+            _lastSet = _base + t.parent.InverseTransformVector(Vector3.down * _crouch) * _ride;
+            t.localPosition = _lastSet;
         }
     }
 
@@ -321,6 +368,7 @@ namespace DuelistMod
     /// The board itself: a sleek golden Extreme-Gear style deck with lapis inlays, glowing cyan underside and twin
     /// thrusters that stream light. Follows the rider on every client.
     /// </summary>
+    [DefaultExecutionOrder(10001)]
     public class DuelistBoardVisual : MonoBehaviour
     {
         private CharacterBody _body;
@@ -331,7 +379,8 @@ namespace DuelistMod
         private Light _glow;
         private float _show;
         private Vector3 _pos;
-        private static Mesh _deckMesh, _stripeMesh, _underMesh, _nozzleMesh, _finMesh;
+        private static Mesh _deckMesh, _stripeMesh, _underMesh, _nozzleMesh, _finMesh, _podMesh;
+        private Transform _model;
         private static Material _gold, _lapis, _cyan, _dark, _jetMat;
 
         private void Start()
@@ -358,19 +407,20 @@ namespace DuelistMod
             }
 
             float scale = Mathf.Max(0.6f, _body.radius / 0.5f) * 1.0f;
-            Vector3 target = _body.footPosition - Vector3.up * 0.08f * scale;
-            _pos = Vector3.Lerp(_pos, target, 1f - Mathf.Exp(-30f * Time.deltaTime));
+            // locked under his feet: the model's origin is at his feet (it crouches and soaks landings with him)
+            if (!_model && _body.modelLocator) _model = _body.modelLocator.modelTransform;
+            Vector3 feet = _model ? _model.position : _body.footPosition;
+            _pos = Vector3.Lerp(_pos, feet - Vector3.up * 0.05f * scale, 1f - Mathf.Exp(-60f * Time.deltaTime));
             _board.transform.position = _pos;
-            Quaternion rot = Quaternion.LookRotation(_hover.Heading, Vector3.up) * Quaternion.Euler(0f, 0f, _hover.Bank);
-            // ground pitch: follow the slope under the board
-            if (Physics.Raycast(_pos + Vector3.up * 0.5f, Vector3.down, out RaycastHit hit, 2.5f, LayerIndex.world.mask, QueryTriggerInteraction.Ignore))
-            {
-                Vector3 fwd = Vector3.ProjectOnPlane(_hover.Heading, hit.normal).normalized;
-                if (fwd.sqrMagnitude > 0.01f) rot = Quaternion.LookRotation(fwd, hit.normal) * Quaternion.Euler(0f, 0f, _hover.Bank);
-            }
-            _board.transform.rotation = rot;
+            Vector3 up = Vector3.up;
+            if (Physics.Raycast(_pos + Vector3.up * 0.5f, Vector3.down, out RaycastHit hit, 2.5f, LayerIndex.world.mask, QueryTriggerInteraction.Ignore) && _hover.Riding)
+                up = Vector3.Slerp(Vector3.up, hit.normal, 0.8f);
+            Vector3 fwd = Vector3.ProjectOnPlane(_hover.Heading.sqrMagnitude > 0.01f ? _hover.Heading : transform.forward, up).normalized;
+            // the board rolls with the rider into the carve and spins with him on tricks; it doesn't pitch with his lean
+            _board.transform.rotation = Quaternion.LookRotation(fwd, up)
+                                      * Quaternion.AngleAxis(_hover.SpinYaw, Vector3.up)
+                                      * Quaternion.AngleAxis(-_hover.RiderRoll, Vector3.forward);
             _board.transform.localScale = Vector3.one * scale * Mathf.SmoothStep(0f, 1f, _show);
-            if (_deck) _deck.localRotation = Quaternion.Euler(0f, 0f, _hover.FlipAngle);     // kickflips
 
             float thrust = Mathf.Clamp01(_hover.Speed / Mathf.Max(1f, _body.moveSpeed * 2f));
             if (_jets != null)
@@ -395,13 +445,18 @@ namespace DuelistMod
             Part("Body", _deckMesh, _gold);
             Part("Stripe", _stripeMesh, _lapis);
             Part("Underglow", _underMesh, _cyan);
-            Part("Fins", _finMesh, _gold);
+            // four glowing hover pods where a longboard's wheels would be
+            for (int i = 0; i < 4; i++)
+            {
+                GameObject pod = Part("Pod" + i, _podMesh, _cyan);
+                pod.transform.localPosition = new Vector3(i % 2 == 0 ? -0.1f : 0.1f, -0.07f, i < 2 ? 0.42f : -0.42f);
+            }
             _jets = new ParticleSystem[2];
             for (int i = 0; i < 2; i++)
             {
-                float x = i == 0 ? -0.11f : 0.11f;
+                float x = i == 0 ? -0.06f : 0.06f;
                 GameObject n = Part("Nozzle" + i, _nozzleMesh, _dark);
-                n.transform.localPosition = new Vector3(x, 0.0f, -0.78f);
+                n.transform.localPosition = new Vector3(x, 0.06f, -0.7f);
                 _jets[i] = Jet(n.transform);
             }
             GameObject l = new GameObject("Glow");
@@ -469,41 +524,50 @@ namespace DuelistMod
             _dark = DuelistVisuals.MakeMaterial(new Color(0.18f, 0.14f, 0.1f), new Color(0.3f, 0.8f, 1f));
         }
 
-        /// <summary>Half-width of the deck along its length (z from -0.8 tail to 0.9 nose): a pointed nose, squared tail.</summary>
+        private const float Z0 = -0.68f, Z1 = 0.68f;
+
+        /// <summary>Longboard outline: long and narrow with rounded pintail ends.</summary>
         private static float HalfWidth(float z)
         {
-            float u = Mathf.InverseLerp(-0.8f, 0.9f, z);
-            float nose = Mathf.Pow(Mathf.Clamp01((1f - u) / 0.45f), 0.6f);       // narrows to a point at the front
-            float tail = 0.82f + 0.18f * Mathf.Sin(Mathf.Clamp01(u / 0.25f) * Mathf.PI * 0.5f);
-            return 0.26f * Mathf.Min(nose, tail);
+            float u = Mathf.InverseLerp(Z0, Z1, z) * 2f - 1f;                       // -1 tail .. 1 nose
+            return 0.125f * Mathf.Sqrt(Mathf.Clamp01(1f - Mathf.Pow(Mathf.Abs(u), 3.2f)));
+        }
+
+        /// <summary>Kicktail at the back, a gentle nose kick at the front, flat in the middle.</summary>
+        private static float Kick(float z)
+        {
+            float tail = Mathf.Clamp01((Z0 + 0.2f - z) / 0.2f);
+            float nose = Mathf.Clamp01((z - (Z1 - 0.15f)) / 0.15f);
+            return 0.09f * tail * tail + 0.04f * nose * nose;
         }
 
         private static void MakeMeshes()
         {
             MakeMaterials();
-            _deckMesh = Loft(z => HalfWidth(z), z => 0.045f + 0.02f * Mathf.Sin(Mathf.InverseLerp(-0.8f, 0.9f, z) * Mathf.PI), 0f, 24, 14);
-            // a lapis inlay running down the deck, an eye-of-the-sun stripe
-            _stripeMesh = Loft(z => HalfWidth(z) * 0.3f, z => 0.012f, 0.055f, 24, 8, -0.6f, 0.7f);
-            _underMesh = Loft(z => HalfWidth(z) * 0.75f, z => 0.01f, -0.055f, 24, 8, -0.7f, 0.75f);
-            _nozzleMesh = Cylinder(0.06f, 0.16f, 12);
-            _finMesh = Fins();
+            _deckMesh = Loft(z => HalfWidth(z), z => 0.025f, z => Kick(z), 32, 14, Z0, Z1);
+            // a lapis inlay down the deck and a glowing cyan rail underneath
+            _stripeMesh = Loft(z => HalfWidth(z) * 0.28f, z => 0.008f, z => Kick(z) + 0.024f, 28, 8, Z0 + 0.12f, Z1 - 0.12f);
+            _underMesh = Loft(z => HalfWidth(z) * 0.7f, z => 0.008f, z => Kick(z) - 0.026f, 28, 8, Z0 + 0.1f, Z1 - 0.1f);
+            _nozzleMesh = Cylinder(0.035f, 0.12f, 12);
+            _podMesh = Loft(z => 0.045f * Mathf.Sqrt(Mathf.Clamp01(1f - z * z / (0.045f * 0.045f))), z => 0.022f, z => 0f, 8, 12, -0.045f, 0.045f);
+            _finMesh = null;
         }
 
         private delegate float Prof(float z);
 
-        /// <summary>A lofted lens-shaped slab: elliptical cross-sections along z.</summary>
-        private static Mesh Loft(Prof halfW, Prof halfH, float yOff, int rings, int seg, float z0 = -0.8f, float z1 = 0.9f)
+        /// <summary>A lofted lens-shaped slab: elliptical cross-sections along z, bent up by yAt(z).</summary>
+        private static Mesh Loft(Prof halfW, Prof halfH, Prof yAt, int rings, int seg, float z0, float z1)
         {
             List<Vector3> v = new List<Vector3>();
             List<int> tri = new List<int>();
             for (int i = 0; i <= rings; i++)
             {
                 float z = Mathf.Lerp(z0, z1, i / (float)rings);
-                float w = Mathf.Max(0.004f, halfW(z)), h = halfH(z);
+                float w = Mathf.Max(0.003f, halfW(z)), h = halfH(z), y = yAt(z);
                 for (int k = 0; k < seg; k++)
                 {
                     float a = k / (float)seg * Mathf.PI * 2f;
-                    v.Add(new Vector3(Mathf.Cos(a) * w, yOff + Mathf.Sin(a) * h, z));
+                    v.Add(new Vector3(Mathf.Cos(a) * w, y + Mathf.Sin(a) * h, z));
                 }
             }
             for (int i = 0; i < rings; i++)
@@ -512,9 +576,8 @@ namespace DuelistMod
                     int a = i * seg + k, b = i * seg + (k + 1) % seg, c = a + seg, d = b + seg;
                     tri.AddRange(new[] { a, c, b, b, c, d });
                 }
-            // caps
-            int tailC = v.Count; v.Add(new Vector3(0f, yOff, z0));
-            int noseC = v.Count; v.Add(new Vector3(0f, yOff, z1));
+            int tailC = v.Count; v.Add(new Vector3(0f, yAt(z0), z0));
+            int noseC = v.Count; v.Add(new Vector3(0f, yAt(z1), z1));
             for (int k = 0; k < seg; k++)
             {
                 tri.AddRange(new[] { tailC, (k + 1) % seg, k });

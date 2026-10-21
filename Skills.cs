@@ -484,7 +484,7 @@ namespace DuelistMod
                 }
             }
 
-            if (_session.Finished || fixedAge > DuelConfig.MaxDuelSeconds.Value) outer.SetNextStateToMain();
+            if (_session.Finished || (DuelConfig.MaxDuelSeconds.Value > 0f && fixedAge > DuelConfig.MaxDuelSeconds.Value)) outer.SetNextStateToMain();
         }
 
         private int _tickErrors;
