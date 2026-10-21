@@ -103,7 +103,25 @@ namespace BrokenCharactersLauncher
             // Fill the roster, maps and modes from the built-in roster.json right away, then refresh them
             // from GitHub in the background (new characters show up without a new launcher exe).
             LoadBuiltInRoster();
-            _ = RefreshRosterFromGitHubAsync();
+            Task roster = RefreshRosterFromGitHubAsync();
+
+            // Preview mode ("--preview"): show the launcher without checking, downloading or installing anything.
+            // Safe to run on a dev PC. "--screenshot <file.png>" (used by the build server) also saves a picture
+            // of the window once the art has loaded, then closes.
+            if (PreviewMode)
+            {
+                _ = LoadChangelogAsync();
+                ShowInstalledVersion("preview");
+                Ready("Installation Up to Date!");
+                if (ScreenshotPath != null)
+                {
+                    await roster;
+                    await Task.Delay(TimeSpan.FromSeconds(4)); // let the online images finish downloading
+                    SaveScreenshot(ScreenshotPath);
+                    Application.Current.Shutdown();
+                }
+                return;
+            }
 
             // The changelog loads on its own; if it fails the launcher still works.
             _ = LoadChangelogAsync();
@@ -613,6 +631,34 @@ namespace BrokenCharactersLauncher
                 sv.ScrollToHorizontalOffset(sv.HorizontalOffset - e.Delta);
                 e.Handled = true;
             }
+        }
+
+        // ================================================================== preview / screenshot
+
+        private static readonly string[] Args = Environment.GetCommandLineArgs();
+        private static bool PreviewMode => Array.Exists(Args, a => a == "--preview" || a == "--screenshot");
+
+        private static string? ScreenshotPath
+        {
+            get
+            {
+                int i = Array.IndexOf(Args, "--screenshot");
+                return i >= 0 && i + 1 < Args.Length ? Args[i + 1] : null;
+            }
+        }
+
+        /// <summary>Renders the window's content to a PNG (the same pixels you'd see on screen).</summary>
+        private void SaveScreenshot(string path)
+        {
+            if (Content is not FrameworkElement root) return;
+            root.UpdateLayout();
+            var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(
+                (int)Math.Ceiling(root.ActualWidth), (int)Math.Ceiling(root.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+            bmp.Render(root);
+            var png = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+            using FileStream fs = File.Create(path);
+            png.Save(fs);
         }
 
         // ================================================================== UI helpers

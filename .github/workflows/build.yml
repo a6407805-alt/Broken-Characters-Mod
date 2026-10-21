@@ -124,6 +124,19 @@ jobs:
         with:
           name: Launcher
           path: launcher-out/Broken-Characters-Launcher.exe
+      - name: Screenshot the launcher (preview mode, installs nothing)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $out = Join-Path $pwd 'launcher-preview.png'
+          $p = Start-Process launcher-out\Broken-Characters-Launcher.exe -ArgumentList '--screenshot', "`"$out`"" -PassThru
+          if (-not $p.WaitForExit(90000)) { $p.Kill(); throw 'launcher did not exit' }
+          if (-not (Test-Path $out)) { throw 'no screenshot' }
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: Launcher-Preview
+          path: launcher-preview.png
 
   publish:
     needs: [test-installer, launcher]
