@@ -18,7 +18,7 @@ To switch all mods off, delete `winhttp.dll` from the game folder.
 The `mods/` folder holds the group's other mods, installed into `BepInEx\plugins\<Mod>`:
 AshwingDrake, ClayRebel, DropPodRevive, EffectBudgetFix, Emberwarden, Gravitos, InfestedGeneral,
 LocustHorde, MoreEnemiesMod, Nidus, OatsBrother, PhantomAssassin, Reaper, ScrollableLobby, WilburMod,
-AudiTechnician, BillyBigsuits and AudiWPB (a stage; turn on its artifact in the lobby).
+AudiTechnician, CarMaxSpecialist, BillyBigsuits and AudiWPB (a stage; turn on its artifact in the lobby).
 To add or update one, drop its plugin folder into `mods/` and push.
 
 The libraries (BepInExPack, RoR2BepInExPack, HookGenPatcher, FixPluginTypesSerialization, R2API modules,
