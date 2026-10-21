@@ -2,7 +2,7 @@
 # Finds Risk of Rain 2 (Steam), installs BepInEx and the shared libraries straight into the game folder
 # (downloaded from Thunderstore, pinned to the exact versions we play with), then the Duelist and the
 # group's other mods. Re-running it only fetches what is missing or out of date.
-param([switch]$Uninstall, [string]$GameDir, [switch]$SkipExtras, [string]$ExtrasKey)
+param([switch]$Uninstall, [string]$GameDir, [switch]$SkipExtras, [string]$ExtrasKey, [string]$LauncherPath, [switch]$SetSteamPlay, [switch]$SteamPlayOnly, [switch]$ClearLaunchOptions, [string]$SteamRoot)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'      # makes Invoke-WebRequest much faster
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -183,7 +183,81 @@ function Get-Extras {
 
 Say ''
 Say '  ====================================' 'Yellow'
+function Get-SteamRoot {
+    if ($SteamRoot) { return $SteamRoot }   # (for testing)
+    foreach ($key in 'HKCU:\Software\Valve\Steam', 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam', 'HKLM:\SOFTWARE\Valve\Steam') {
+        try {
+            $p = Get-ItemProperty $key -ErrorAction Stop
+            foreach ($v in $p.SteamPath, $p.InstallPath) { if ($v -and (Test-Path (Join-Path $v 'userdata'))) { return ($v -replace '/', '\') } }
+        } catch { }
+    }
+    return $null
+}
+
+function Set-RoR2LaunchOptions([string]$value) {   # $value = '' clears ours
+    $root = Get-SteamRoot
+    if (-not $root) { Say '  (Steam not found; skipped the Play button setup.)' 'DarkGray'; return }
+    $vdfValue = if ($value) { ($value -replace '\\', '\\' -replace '"', '\"') } else { '' }
+    $files = Get-ChildItem (Join-Path $root 'userdata') -Directory -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.FullName 'config\localconfig.vdf' } | Where-Object { Test-Path $_ }
+    $steamOpen = [bool](Get-Process steam -ErrorAction SilentlyContinue)
+    $changed = 0; $pending = 0
+    foreach ($f in $files) {
+        $text = [IO.File]::ReadAllText($f)
+        $m = [regex]::Match($text, '(?s)"632360"\s*\{')
+        if (-not $m.Success) { continue }                                   # this account never ran RoR2
+        $start = $m.Index + $m.Length
+        $depth = 1; $i = $start
+        while ($i -lt $text.Length -and $depth -gt 0) { if ($text[$i] -eq '{') { $depth++ } elseif ($text[$i] -eq '}') { $depth-- }; $i++ }
+        $body = $text.Substring($start, $i - 1 - $start)
+        $lo = [regex]::Match($body, '(?m)^(\s*)"LaunchOptions"\s*"((?:[^"\\]|\\.)*)"')
+        if ($value) {
+            if ($lo.Success -and $lo.Groups[2].Value -eq $vdfValue) { continue }   # already set
+            if ($lo.Success -and $lo.Groups[2].Value -and $lo.Groups[2].Value -notmatch 'Broken-Characters') {
+                Say "  Kept your own Steam launch options ($($lo.Groups[2].Value)); the launcher shortcut still works." 'DarkGray'; continue
+            }
+        } else {
+            if (-not $lo.Success -or $lo.Groups[2].Value -notmatch 'Broken-Characters') { continue }   # nothing of ours
+        }
+        if ($steamOpen) { $pending++; continue }
+        $newBody = if ($lo.Success) {
+            $body.Remove($lo.Index, $lo.Length).Insert($lo.Index, "$($lo.Groups[1].Value)`"LaunchOptions`"`t`t`"$vdfValue`"")
+        } else {
+            $indent = [regex]::Match($body, '(?m)^(\s*)"').Groups[1].Value; if (-not $indent) { $indent = "`t`t`t`t`t`t" }
+            "`n$indent`"LaunchOptions`"`t`t`"$vdfValue`"" + $body
+        }
+        Copy-Item $f "$f.bc-backup" -Force
+        [IO.File]::WriteAllText($f, $text.Substring(0, $start) + $newBody + $text.Substring($i - 1))
+        $changed++
+    }
+    if ($changed) { Say $(if ($value) { "  Steam's Play button now opens the Broken Characters Mod launcher." } else { '  Removed the launcher from Steam''s launch options.' }) 'Green' }
+    if ($pending) { Say "  STEAM_OPEN: close Steam and run this again to $(if ($value) { 'make Steam''s Play button open the launcher' } else { 'remove the launch options' })." 'Yellow' }
+}
+
+function Set-DesktopShortcut([string]$target, [bool]$remove) {
+    $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Broken Characters Mod.lnk'
+    if ($remove) { if (Test-Path $lnk) { Remove-Item $lnk -Force; Say '  Removed the desktop shortcut.' 'Green' }; return }
+    if (Test-Path $lnk) { return }
+    try {
+        $sc = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+        $sc.TargetPath = $target; $sc.WorkingDirectory = Split-Path $target; $sc.Description = 'Broken Characters Mod'
+        $sc.Save(); Say '  Added a "Broken Characters Mod" shortcut to your desktop.' 'Green'
+    } catch { }
+}
+
 Say ('  BROKEN CHARACTERS MOD ' + $(if ($Uninstall) { 'UNINSTALLER' } else { 'INSTALLER' })) 'Yellow'
+if (($ClearLaunchOptions -or $SteamPlayOnly) -and -not $Uninstall) {
+    # Just the Steam Play button / desktop shortcut, mods untouched:
+    #   -ClearLaunchOptions        undo (Play back to normal, shortcut removed)
+    #   -SteamPlayOnly -LauncherPath x [-SetSteamPlay]   shortcut, plus Play -> launcher if the player opted in
+    if ($ClearLaunchOptions) { Set-RoR2LaunchOptions ''; Set-DesktopShortcut '' $true }
+    elseif ($LauncherPath -and (Test-Path $LauncherPath)) {
+        Set-DesktopShortcut $LauncherPath $false
+        if ($SetSteamPlay) { Set-RoR2LaunchOptions "`"$LauncherPath`" %command%" }
+    }
+    try { Stop-Transcript | Out-Null } catch { }
+    exit 0
+}
 Say '  ====================================' 'Yellow'
 Say ''
 
@@ -260,6 +334,20 @@ foreach ($game in $games) {
         Say '  Installed the friends-only extras.' 'Green'
     }
     $done++
+}
+
+# ------------------------------------------------------------------ Steam's Play button -> the launcher
+# Launch Options live in each Steam account's localconfig.vdf (app 632360). Opt-in: only with -SetSteamPlay (the
+# launcher passes it after the player clicks Yes) and -LauncherPath does the installer set them to  "<launcher>" %command%  so Steam's Play opens the launcher, which then
+# starts the game exe Steam passed in. -Uninstall or -ClearLaunchOptions removes them again. Steam must be closed
+# while the file changes, or Steam overwrites it; if it's open, nothing is touched and the launcher retries next time.
+if ($Uninstall) {
+    Set-RoR2LaunchOptions ''
+    Set-DesktopShortcut '' $true
+} elseif ($LauncherPath -and (Test-Path $LauncherPath)) {
+    Set-DesktopShortcut $LauncherPath $false
+    # Only when the player said yes in the launcher (opt-in): it's their Steam account.
+    if ($SetSteamPlay) { Set-RoR2LaunchOptions "`"$LauncherPath`" %command%" }
 }
 
 Say ''

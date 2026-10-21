@@ -111,6 +111,26 @@ jobs:
             exit 1
           }
 
+      - name: Steam Play button (opt-in) is set and undone in a fake Steam account
+        shell: pwsh
+        run: |
+          $steam = Join-Path $env:RUNNER_TEMP 'FakeSteam'
+          $cfg = Join-Path $steam 'userdata\123\config'
+          New-Item -ItemType Directory -Force -Path $cfg | Out-Null
+          $vdf = Join-Path $cfg 'localconfig.vdf'
+          Set-Content $vdf "`"UserLocalConfigStore`"`n{`n`t`"Software`"`n`t{`n`t`t`"apps`"`n`t`t{`n`t`t`t`"632360`"`n`t`t`t{`n`t`t`t`t`"LastPlayed`"`t`t`"1`"`n`t`t`t}`n`t`t}`n`t}`n}"
+          $exe = Join-Path $env:RUNNER_TEMP 'Broken-Characters-Mod.exe'; Set-Content $exe 'x'
+          Expand-Archive Broken-Characters-Mod.zip steamtest -Force
+          pwsh -NoProfile -File steamtest\install.ps1 -SteamPlayOnly -LauncherPath $exe -SetSteamPlay -SteamRoot $steam
+          $t = Get-Content $vdf -Raw
+          if ($t -notmatch '"LaunchOptions"\s+"\\"[^"]*Broken-Characters-Mod\.exe\\" %command%"') { $t; throw 'LaunchOptions not set' }
+          if (-not (Test-Path "$vdf.bc-backup")) { throw 'no backup' }
+          pwsh -NoProfile -File steamtest\install.ps1 -SteamPlayOnly -LauncherPath $exe -SetSteamPlay -SteamRoot $steam
+          if (([regex]::Matches((Get-Content $vdf -Raw), 'LaunchOptions')).Count -ne 1) { throw 'set twice' }
+          pwsh -NoProfile -File steamtest\install.ps1 -ClearLaunchOptions -SteamRoot $steam
+          if ((Get-Content $vdf -Raw) -match 'Broken-Characters') { throw 'not cleared' }
+          Write-Host 'Steam Play opt-in: set, idempotent, undone - OK'
+
   launcher:
     # The Warframe-style launcher (launcher/): a self-contained Windows exe. A failure here never blocks the pack.
     runs-on: windows-latest

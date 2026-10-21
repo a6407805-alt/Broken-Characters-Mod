@@ -130,6 +130,9 @@ namespace BrokenCharactersLauncher
             _ = LoadChangelogAsync();
 
             await CheckAndUpdateAsync();
+            try { await SetUpSteamPlayAsync(); }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.ComponentModel.Win32Exception)
+            { Debug.WriteLine("Steam Play setup skipped: " + ex.Message); }
         }
 
         /// <summary>The main flow: compare versions, update if needed, then enable PLAY.</summary>
@@ -444,15 +447,96 @@ namespace BrokenCharactersLauncher
         {
             try
             {
-                Process.Start(new ProcessStartInfo(SteamLaunchUri) { UseShellExecute = true });
-                Application.Current.Shutdown(); // job done; Steam takes it from here
+                // Opened by Steam's Play button (Launch Options: "<launcher>" %command%): Steam passed the game's exe,
+                // so start that directly. Using steam:// here would make Steam open the launcher again, forever.
+                if (SteamGameCommand(out string exe, out List<string> gameArgs))
+                {
+                    var psi = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) ?? "" };
+                    foreach (string a in gameArgs) psi.ArgumentList.Add(a);
+                    Process.Start(psi);
+                }
+                else Process.Start(new ProcessStartInfo(SteamLaunchUri) { UseShellExecute = true }); // opened by hand
+                Application.Current.Shutdown();
             }
             catch (System.ComponentModel.Win32Exception ex)
             {
-                // Happens when Steam isn't installed (nothing handles steam:// links).
-                MessageBox.Show(this, "Couldn't start Steam: " + ex.Message + "\n\nIs Steam installed?",
+                MessageBox.Show(this, "Couldn't start the game: " + ex.Message + "\n\nIs Steam installed?",
                     "Broken Characters Mod", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+
+        /// <summary>The "Risk of Rain 2.exe ..." command Steam appends when it opens the launcher through Launch Options.</summary>
+        private static bool SteamGameCommand(out string exe, out List<string> rest)
+        {
+            exe = ""; rest = new List<string>();
+            string[] a = Environment.GetCommandLineArgs();
+            for (int i = 1; i < a.Length; i++)
+            {
+                if (!a[i].EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || !File.Exists(a[i])) continue;
+                exe = a[i];
+                for (int j = i + 1; j < a.Length; j++) rest.Add(a[j]);
+                return true;
+            }
+            return false;
+        }
+
+        // ================================================================== Steam Play button (opt-in) + desktop shortcut
+
+        /// <summary>A fixed home for the launcher, so Steam's Launch Options and the shortcut never point at Downloads.</summary>
+        private static readonly string StableExe = Path.Combine(LauncherDir, "Broken-Characters-Mod.exe");
+        private static readonly string SteamPlayFile = Path.Combine(ExtrasDir, "steam-play.txt"); // yes / no / done
+
+        private static string EnsureStableCopy()
+        {
+            try
+            {
+                string? me = Environment.ProcessPath;
+                if (me == null || string.Equals(Path.GetFullPath(me), Path.GetFullPath(StableExe), StringComparison.OrdinalIgnoreCase)) return StableExe;
+                Directory.CreateDirectory(LauncherDir);
+                var src = new FileInfo(me);
+                var dst = new FileInfo(StableExe);
+                if (!dst.Exists || dst.Length != src.Length || dst.LastWriteTimeUtc < src.LastWriteTimeUtc) File.Copy(me, StableExe, overwrite: true);
+                return StableExe;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                return Environment.ProcessPath ?? StableExe;
+            }
+        }
+
+        /// <summary>
+        /// Asks once whether Steam's Play button should open this launcher (it's their Steam account, so it's opt-in),
+        /// then runs install.ps1 -SteamPlayOnly: always a desktop shortcut, plus the Launch Options if they said yes.
+        /// If Steam is open the change can't be saved, so it's retried on the next start.
+        /// </summary>
+        private async Task SetUpSteamPlayAsync()
+        {
+            string script = Path.Combine(PackDir, "install.ps1");
+            if (!File.Exists(script)) return;
+            string answer = File.Exists(SteamPlayFile) ? File.ReadAllText(SteamPlayFile).Trim() : "";
+            if (answer == "done" || answer == "no") return;
+            if (answer == "")
+            {
+                MessageBoxResult r = MessageBox.Show(this,
+                    "Make Steam's Play button for Risk of Rain 2 open the Broken Characters Mod launcher?\n\n" +
+                    "Then pressing Play in Steam always updates the mods first. You can undo it anytime with " +
+                    "\"Restore Steam Play.bat\".\n\n(Either way you also get a desktop shortcut.)",
+                    "Broken Characters Mod", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                answer = r == MessageBoxResult.Yes ? "yes" : "no";
+                Directory.CreateDirectory(ExtrasDir);
+                File.WriteAllText(SteamPlayFile, answer);
+            }
+
+            string args = $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -SteamPlayOnly -LauncherPath \"{EnsureStableCopy()}\"" +
+                          (answer == "yes" ? " -SetSteamPlay" : "");
+            var psi = new ProcessStartInfo("powershell.exe", args) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true };
+            using Process? p = Process.Start(psi);
+            if (p == null) return;
+            string output = await p.StandardOutput.ReadToEndAsync();
+            await p.WaitForExitAsync();
+            if (answer != "yes") return;
+            if (output.Contains("STEAM_OPEN")) SetStatus("Close Steam and reopen the launcher once to finish setting up Steam's Play button.");
+            else File.WriteAllText(SteamPlayFile, "done");
         }
 
         // ================================================================== extras key
