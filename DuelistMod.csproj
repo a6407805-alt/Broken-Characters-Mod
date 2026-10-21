@@ -22,8 +22,8 @@
 
   <ItemGroup>
     <!-- the bundled group mods (and release staging) are shipped as-is, never compiled into the Duelist -->
-    <Compile Remove="mods/**;release/**;src/**" />
-    <None Remove="mods/**;release/**;src/**" />
+    <Compile Remove="mods/**;release/**;src/**;launcher/**" />
+    <None Remove="mods/**;release/**;src/**;launcher/**" />
   </ItemGroup>
 
   <ItemGroup>
