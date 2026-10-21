@@ -31,7 +31,7 @@ is compiled by GitHub Actions, the installer is tested on Windows, and the resul
 1. Work on a **branch**, not `main`: `git checkout -b <yourname>/<what-you-changed>`.
 2. Only change your own mod's folders (`src/<YourMod>/`, `mods/<YourMod>/`) unless you've agreed otherwise.
 3. Push the branch and open a **pull request** to `main` describing what changed and how to test it.
-4. GitHub Actions builds it; fix any errors it reports (`gh run list -R a6407805-alt/DuelistMod`).
+4. GitHub Actions builds it; fix any errors it reports (`gh run list -R a6407805-alt/Broken-Characters-Mod`).
 5. Once it's reviewed and merged, the new download is published automatically.
 
 Multiplayer needs everyone on the same build, so tell the group when a merge goes in.

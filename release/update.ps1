@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$repo = 'a6407805-alt/DuelistMod'
+$repo = 'a6407805-alt/Broken-Characters-Mod'
 $asset = 'Broken-Characters-Collection.zip'
 function Say($t, $c = 'Gray') { Write-Host $t -ForegroundColor $c }
 

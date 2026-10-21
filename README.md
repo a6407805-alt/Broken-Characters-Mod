@@ -4,7 +4,7 @@ The Duelist (a Yu-Gi-Oh!-style survivor) plus the group's other characters and m
 
 ## Play it (friends start here)
 No mod manager needed.
-1. Download **[Broken-Characters-Collection.zip](https://github.com/a6407805-alt/DuelistMod/releases/latest/download/Broken-Characters-Collection.zip)**.
+1. Download **[Broken-Characters-Collection.zip](https://github.com/a6407805-alt/Broken-Characters-Mod/releases/latest/download/Broken-Characters-Collection.zip)**.
 2. Right-click it → **Extract All**. Close the game, then double-click **INSTALL.bat**.
 3. Launch Risk of Rain 2 from **Steam** like normal.
 
