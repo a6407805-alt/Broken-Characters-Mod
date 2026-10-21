@@ -27,6 +27,9 @@ Their versions are pinned at the top of `release/install.ps1`; bump them there t
 Left out on purpose: the `Sounds` folders of InfestedGeneral, LocustHorde and OatsBrother (audio from
 commercial games that can't be redistributed). Those mods still load, just quieter.
 
+## Contributing
+Want to add your own mod or help out? See **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+
 ## How builds work
 Every push to `main` is built by GitHub Actions (`.github/workflows/build.yml`), packaged by
 `release/package.sh`, and published as the **latest** release. Nobody needs .NET installed to play.
