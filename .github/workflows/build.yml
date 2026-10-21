@@ -150,6 +150,10 @@ jobs:
         continue-on-error: true
         with:
           name: Launcher
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: Launcher-Preview
       - name: Publish as the latest release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -159,6 +163,7 @@ jobs:
           cp Broken-Characters-Collection.zip Duelist-Install.zip
           files="Broken-Characters-Collection.zip Duelist-Install.zip"
           [ -f Broken-Characters-Launcher.exe ] && files="$files Broken-Characters-Launcher.exe"
+          [ -f launcher-preview.png ] && files="$files launcher-preview.png"
           gh release create latest $files \
             --title "Broken Characters Collection (latest build)" \
             --notes "Built automatically from commit ${GITHUB_SHA::7}. Download Broken-Characters-Collection.zip, extract it and run INSTALL.bat, or run Update Broken Characters.bat if you already have it. (Duelist-Install.zip is the same file under its old name.)" \
