@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- Broken Characters Launcher: a Warframe-style updater + PLAY button for the mod pack.
-       Built on the Windows runner by .github/workflows/build.yml and published as Broken-Characters-Launcher.exe.
+       Built on the Windows runner by .github/workflows/build.yml and published as Broken-Characters-Mod.exe.
        Self-contained single file, so friends don't need to install .NET first. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -9,11 +9,11 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
-    <AssemblyName>Broken-Characters-Launcher</AssemblyName>
+    <AssemblyName>Broken-Characters-Mod</AssemblyName>
     <RootNamespace>BrokenCharactersLauncher</RootNamespace>
     <ApplicationIcon>Assets\launcher.ico</ApplicationIcon>
     <Version>1.0.0</Version>
-    <Product>Broken Characters Launcher</Product>
+    <Product>Broken Characters Mod</Product>
 
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>

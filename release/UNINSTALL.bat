@@ -1,10 +1,10 @@
 @echo off
-title Uninstall the Duelist (Broken Characters Collection)
+title Uninstall the Broken Characters Mod
 cd /d "%~dp0"
 if not exist "%~dp0install.ps1" (
   echo.
   echo   This is running from INSIDE the zip, so the installer can't see its files.
-  echo   Close this, right-click Broken-Characters-Collection.zip ^> Extract All, open the new folder
+  echo   Close this, right-click Broken-Characters-Mod.zip ^> Extract All, open the new folder
   echo   and double-click INSTALL.bat in there.
   echo.
   pause

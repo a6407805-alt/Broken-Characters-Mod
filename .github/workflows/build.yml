@@ -1,6 +1,6 @@
-# Builds the Duelist on GitHub's servers every time code is pushed, then publishes the result as the
-# "latest" release: Broken-Characters-Collection.zip. Friends just run "Update Broken Characters.bat" to get it.
-name: Build Duelist
+# Builds the Broken Characters Mod on GitHub's servers every time code is pushed, then publishes the result as the
+# "latest" release: Broken-Characters-Mod.zip. Friends just run "Update Broken Characters.bat" to get it.
+name: Build Broken Characters Mod
 
 on:
   push:
@@ -45,13 +45,13 @@ jobs:
             fi
           done
 
-      - name: Package Broken-Characters-Collection.zip
+      - name: Package Broken-Characters-Mod.zip
         run: bash release/package.sh
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Broken-Characters-Collection
-          path: Broken-Characters-Collection.zip
+          name: Broken-Characters-Mod
+          path: Broken-Characters-Mod.zip
 
   test-installer:
     # Runs INSTALL on a real Windows machine against a dummy game folder, twice (fresh, then re-run),
@@ -61,14 +61,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: Broken-Characters-Collection
+          name: Broken-Characters-Mod
       - name: Updater can download the pack (with a key, like a private repo, and without)
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
-          Expand-Archive Broken-Characters-Collection.zip upd
+          Expand-Archive Broken-Characters-Mod.zip upd
           & .\upd\update.ps1 -Key $env:GH_TOKEN -DownloadOnly -OutDir (Join-Path $env:RUNNER_TEMP 'u1')
           if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'u1\pack.zip'))) { throw 'keyed download failed' }
           Remove-Item upd -Recurse -Force
@@ -80,7 +80,7 @@ jobs:
           $log = Join-Path $env:RUNNER_TEMP 'install.log'
           Start-Transcript $log | Out-Null
           try {
-          Expand-Archive Broken-Characters-Collection.zip pack
+          Expand-Archive Broken-Characters-Mod.zip pack
           $game = Join-Path $env:RUNNER_TEMP 'Risk of Rain 2'
           New-Item -ItemType Directory $game | Out-Null
           Set-Content (Join-Path $game 'Risk of Rain 2.exe') 'dummy'
@@ -118,18 +118,18 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Build Broken-Characters-Launcher.exe
-        run: dotnet publish launcher/BrokenCharactersLauncher.csproj -c Release -o launcher-out -nologo
+      - name: Build Broken-Characters-Mod.exe
+        run: dotnet publish launcher/BrokenCharactersMod.csproj -c Release -o launcher-out -nologo
       - uses: actions/upload-artifact@v4
         with:
           name: Launcher
-          path: launcher-out/Broken-Characters-Launcher.exe
+          path: launcher-out/Broken-Characters-Mod.exe
       - name: Screenshot the launcher (preview mode, installs nothing)
         continue-on-error: true
         shell: pwsh
         run: |
           $out = Join-Path $pwd 'launcher-preview.png'
-          $p = Start-Process launcher-out\Broken-Characters-Launcher.exe -ArgumentList '--screenshot', "`"$out`"" -PassThru
+          $p = Start-Process launcher-out\Broken-Characters-Mod.exe -ArgumentList '--screenshot', "`"$out`"" -PassThru
           if (-not $p.WaitForExit(90000)) { $p.Kill(); throw 'launcher did not exit' }
           if (-not (Test-Path $out)) { throw 'no screenshot' }
       - uses: actions/upload-artifact@v4
@@ -145,7 +145,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: Broken-Characters-Collection
+          name: Broken-Characters-Mod
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -159,12 +159,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
-          # the old name is published too, so older "Update Duelist.bat" copies keep working
-          cp Broken-Characters-Collection.zip Duelist-Install.zip
-          files="Broken-Characters-Collection.zip Duelist-Install.zip"
-          [ -f Broken-Characters-Launcher.exe ] && files="$files Broken-Characters-Launcher.exe"
+          # Older updaters (and the first install guide) download the pack's previous name, so it's published too.
+          cp Broken-Characters-Mod.zip Broken-Characters-Collection.zip
+          files="Broken-Characters-Mod.zip Broken-Characters-Collection.zip"
+          [ -f Broken-Characters-Mod.exe ] && files="$files Broken-Characters-Mod.exe"
           [ -f launcher-preview.png ] && files="$files launcher-preview.png"
           gh release create latest $files \
-            --title "Broken Characters Collection (latest build)" \
-            --notes "Built automatically from commit ${GITHUB_SHA::7}. Download Broken-Characters-Collection.zip, extract it and run INSTALL.bat, or run Update Broken Characters.bat if you already have it. (Duelist-Install.zip is the same file under its old name.)" \
+            --title "Broken Characters Mod (latest build)" \
+            --notes "Built automatically from commit ${GITHUB_SHA::7}. Easiest: run Broken-Characters-Mod.exe (the launcher). Or download Broken-Characters-Mod.zip, extract it and run INSTALL.bat. (Broken-Characters-Collection.zip is the same file under its old name, for older updaters.)" \
             --target "$GITHUB_SHA" --latest -R "$GITHUB_REPOSITORY"

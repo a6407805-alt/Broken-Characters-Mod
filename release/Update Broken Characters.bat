@@ -1,5 +1,5 @@
 @echo off
-title Update the Broken Characters Collection
+title Update the Broken Characters Mod
 rem Downloads the newest pack from GitHub and installs it. Close Risk of Rain 2 first.
 tasklist /FI "IMAGENAME eq Risk of Rain 2.exe" 2>NUL | find /I "Risk of Rain 2.exe" >NUL
 if not errorlevel 1 (

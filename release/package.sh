@@ -4,7 +4,7 @@ set -euo pipefail
 mod="$(cd "$(dirname "$0")/.." && pwd)"
 dll="$(find "$mod/bin/Release" -name DuelistMod.dll | head -1)"
 stage="$mod/release/stage"
-rm -rf "$stage" "$mod/Broken-Characters-Collection.zip"
+rm -rf "$stage" "$mod/Broken-Characters-Mod.zip"
 mkdir -p "$stage/Duelist"
 cp "$dll" "$stage/Duelist/"
 for f in "$mod"/*.bin; do gzip -9 -c "$f" > "$stage/Duelist/$(basename "$f").gz"; done
@@ -15,5 +15,5 @@ for f in duel_mat.jpg duel_mat_glow.png; do [ -f "$mod/$f" ] && cp "$mod/$f" "$s
 for f in INSTALL.bat UNINSTALL.bat install.ps1 README.txt manifest.json icon.png "Update Broken Characters.bat" update.ps1 "Add Extras.bat"; do
   [ -f "$mod/release/$f" ] && cp "$mod/release/$f" "$stage/"
 done
-(cd "$stage" && zip -qr9 "$mod/Broken-Characters-Collection.zip" .)
-echo "Packaged $(du -h "$mod/Broken-Characters-Collection.zip" | cut -f1) -> Broken-Characters-Collection.zip"
+(cd "$stage" && zip -qr9 "$mod/Broken-Characters-Mod.zip" .)
+echo "Packaged $(du -h "$mod/Broken-Characters-Mod.zip" | cut -f1) -> Broken-Characters-Mod.zip"

@@ -4,7 +4,7 @@
 //  What it does, in order:
 //    1. Reads the installed version from %LOCALAPPDATA%\BrokenCharacters\Launcher\version.txt
 //    2. Asks the GitHub API for the latest release of the mod pack (and the recent commits for the changelog)
-//    3. If GitHub has a newer build: downloads Broken-Characters-Collection.zip with a live progress bar,
+//    3. If GitHub has a newer build: downloads Broken-Characters-Mod.zip with a live progress bar,
 //       extracts it (overwriting the old copy) and runs the pack's own install.ps1, which puts the mods into
 //       the Risk of Rain 2 folder and fetches the libraries (BepInEx, R2API, ...) and the friends-only extras
 //    4. Writes the new version to version.txt and lights up PLAY
@@ -42,7 +42,7 @@ namespace BrokenCharactersLauncher
         private const string Repo = "a6407805-alt/Broken-Characters-Mod";
 
         /// <summary>The release asset that holds the whole pack.</summary>
-        private const string AssetName = "Broken-Characters-Collection.zip";
+        private const string AssetName = "Broken-Characters-Mod.zip";
 
         /// <summary>Steam's URL for Risk of Rain 2 (app id 632360).</summary>
         private const string SteamLaunchUri = "steam://rungameid/632360";
@@ -447,7 +447,7 @@ namespace BrokenCharactersLauncher
             {
                 // Happens when Steam isn't installed (nothing handles steam:// links).
                 MessageBox.Show(this, "Couldn't start Steam: " + ex.Message + "\n\nIs Steam installed?",
-                    "Broken Characters Launcher", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    "Broken Characters Mod", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
@@ -715,7 +715,7 @@ namespace BrokenCharactersLauncher
 
         private void Close_Click(object sender, RoutedEventArgs e)
         {
-            if (_busy && MessageBox.Show(this, "An update is running. Close anyway?", "Broken Characters Launcher",
+            if (_busy && MessageBox.Show(this, "An update is running. Close anyway?", "Broken Characters Mod",
                     MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             Application.Current.Shutdown();
         }

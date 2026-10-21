@@ -1,4 +1,4 @@
-# Duelist pack installer - no mod manager needed.
+# Broken Characters Mod installer - no mod manager needed.
 # Finds Risk of Rain 2 (Steam), installs BepInEx and the shared libraries straight into the game folder
 # (downloaded from Thunderstore, pinned to the exact versions we play with), then the Duelist and the
 # group's other mods. Re-running it only fetches what is missing or out of date.
@@ -68,7 +68,7 @@ function Find-GameFolders {
     return @($found | Select-Object -Unique)
 }
 
-$tmp = Join-Path $env:TEMP 'DuelistDeps'
+$tmp = Join-Path $env:TEMP 'BrokenCharactersDeps'
 function Get-Package($pkg) {
     # downloads one Thunderstore package and returns the folder it was extracted to
     $id = "$($pkg.Ns)-$($pkg.Name)-$($pkg.Ver)"
@@ -183,7 +183,7 @@ function Get-Extras {
 
 Say ''
 Say '  ====================================' 'Yellow'
-Say ('  BROKEN CHARACTERS COLLECTION ' + $(if ($Uninstall) { 'UNINSTALLER' } else { 'INSTALLER' })) 'Yellow'
+Say ('  BROKEN CHARACTERS MOD ' + $(if ($Uninstall) { 'UNINSTALLER' } else { 'INSTALLER' })) 'Yellow'
 Say '  ====================================' 'Yellow'
 Say ''
 

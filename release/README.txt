@@ -1,4 +1,4 @@
-BROKEN CHARACTERS COLLECTION - Risk of Rain 2 mod pack (the Duelist + the group's other mods)
+BROKEN CHARACTERS MOD - Risk of Rain 2 mod pack (the Duelist + the group's other mods)
 =========================================================================================
 
 INSTALL (no mod manager needed)

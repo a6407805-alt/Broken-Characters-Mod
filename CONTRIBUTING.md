@@ -1,10 +1,10 @@
-# Contributing to Broken Characters Collection
+# Contributing to Broken Characters Mod
 
 A just-for-fun mod pack between friends. Not for public release.
 
 This repo is a Risk of Rain 2 mod pack: the Duelist (repo root) plus the group's other mods. Every push to `main`
 is compiled by GitHub Actions, the installer is tested on Windows, and the result is published as the
-`latest` release (`Broken-Characters-Collection.zip`). Players update with `Update Broken Characters.bat`.
+`latest` release (`Broken-Characters-Mod.zip`). Players update with `Update Broken Characters.bat`.
 
 ## Where things go
 

@@ -1,10 +1,10 @@
-# Broken Characters Collection — a Risk of Rain 2 mod pack
+# Broken Characters Mod — a Risk of Rain 2 mod pack
 
 The Duelist (a Yu-Gi-Oh!-style survivor) plus the group's other characters and mods, in one install.
 
 ## Play it (friends start here)
 No mod manager needed.
-1. Download **[Broken-Characters-Collection.zip](https://github.com/a6407805-alt/Broken-Characters-Mod/releases/latest/download/Broken-Characters-Collection.zip)**.
+1. Download **[Broken-Characters-Mod.zip](https://github.com/a6407805-alt/Broken-Characters-Mod/releases/latest/download/Broken-Characters-Mod.zip)**.
 2. Right-click it → **Extract All**. Close the game, then double-click **INSTALL.bat**.
 3. Launch Risk of Rain 2 from **Steam** like normal.
 

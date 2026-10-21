@@ -1,4 +1,4 @@
-# Updates the Broken Characters Collection: downloads the newest pack from GitHub, then runs its installer
+# Updates the Broken Characters Mod: downloads the newest pack from GitHub, then runs its installer
 # (which also fetches the friends-only extras if you have an extras key).
 param([string]$Key, [switch]$DownloadOnly, [string]$OutDir)
 $ErrorActionPreference = 'Stop'
@@ -6,7 +6,7 @@ $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $repo = 'a6407805-alt/Broken-Characters-Mod'
-$asset = 'Broken-Characters-Collection.zip'
+$asset = 'Broken-Characters-Mod.zip'
 function Say($t, $c = 'Gray') { Write-Host $t -ForegroundColor $c }
 
 $work = if ($OutDir) { $OutDir } else { Join-Path $env:TEMP 'BrokenCharactersUpdate' }
@@ -15,7 +15,7 @@ New-Item -ItemType Directory -Force -Path $work | Out-Null
 $zip = Join-Path $work 'pack.zip'
 
 Say ''
-Say '  Downloading the latest Broken Characters Collection...' 'Yellow'
+Say '  Downloading the latest Broken Characters Mod...' 'Yellow'
 if ($Key) {
     # (used by the build server, which tests the download with its own token)
     $h = @{ Authorization = "Bearer $Key"; 'User-Agent' = 'BrokenCharacters'; Accept = 'application/vnd.github+json' }
