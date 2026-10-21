@@ -25,8 +25,7 @@ The libraries (BepInExPack, RoR2BepInExPack, HookGenPatcher, FixPluginTypesSeria
 MiscFixes, SeekersPatcher) are other people's work, so they're downloaded at install time instead of stored here.
 Their versions are pinned at the top of `release/install.ps1`; bump them there to update everyone.
 
-Left out on purpose: the `Sounds` folders of InfestedGeneral, LocustHorde and OatsBrother (audio from
-commercial games that can't be redistributed). Those mods still load, just quieter.
+This is a private, friends-only pack (the repo is private): keep the download and pack key inside the group.
 
 ## Contributing
 Want to add your own mod or help out? See **[CONTRIBUTING.md](CONTRIBUTING.md)**.
