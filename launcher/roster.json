@@ -1,0 +1,140 @@
+{
+  "characters": [
+    {
+      "name": "CARMAX SPECIALIST",
+      "tagline": "Paid hourly. Overworked. Stressed.",
+      "added": "2026-10-21T01:08:59-04:00",
+      "accent": "#2F6FD8",
+      "image": "Assets/Roster/CarMaxSpecialist.png"
+    },
+    {
+      "name": "AUDI TECHNICIAN",
+      "tagline": "Lives and dies by Flat Rate.",
+      "added": "2026-10-20T22:03:50-04:00",
+      "accent": "#D0202A",
+      "image": "Assets/Roster/AudiTechnician.png"
+    },
+    {
+      "name": "BILLY BIGSUITS",
+      "tagline": "Service director. Throws Q5s.",
+      "added": "2026-10-20T22:03:49-04:00",
+      "accent": "#8C8C96",
+      "image": "Assets/Roster/BillyBigsuits.png"
+    },
+    {
+      "name": "WILBUR",
+      "tagline": "Hungry hero. Bigger burp.",
+      "added": "2026-10-19T22:05:43-04:00",
+      "accent": "#F08AA8",
+      "image": "Assets/Roster/WilburMod.png"
+    },
+    {
+      "name": "BROTHER",
+      "tagline": "May I have some oats?",
+      "added": "2026-10-19T22:05:42-04:00",
+      "accent": "#C9A15A",
+      "image": "Assets/Roster/OatsBrother.png"
+    },
+    {
+      "name": "ASHWING DRAKE",
+      "tagline": "Frost dragon, ground and air.",
+      "added": "2026-10-19T22:05:41-04:00",
+      "accent": "#6FC8F0",
+      "image": "Assets/Roster/AshwingDrake.png"
+    },
+    {
+      "name": "NIDUS",
+      "tagline": "The Infested warframe.",
+      "added": "2026-10-19T22:05:40-04:00",
+      "accent": "#C8B040",
+      "image": "Assets/Roster/Nidus.png"
+    },
+    {
+      "name": "PHANTOM ASSASSIN",
+      "tagline": "Coup de Grace crits.",
+      "added": "2026-10-19T22:05:39-04:00",
+      "accent": "#7A5AC8",
+      "image": "Assets/Roster/PhantomAssassin.png"
+    },
+    {
+      "name": "INFESTED GENERAL",
+      "tagline": "Gauss rifle, banelings.",
+      "added": "2026-10-19T22:05:38-04:00",
+      "accent": "#6A9A3A",
+      "image": "Assets/Roster/InfestedGeneral.png"
+    },
+    {
+      "name": "GRAVITOS",
+      "tagline": "Lift, slam, black hole.",
+      "added": "2026-10-19T22:05:37-04:00",
+      "accent": "#5A50D8",
+      "image": "Assets/Roster/Gravitos.png"
+    },
+    {
+      "name": "CLAY REBEL",
+      "tagline": "Traitor Templar, tar minigun.",
+      "added": "2026-10-19T22:05:36-04:00",
+      "accent": "#3A7AC8",
+      "image": "Assets/Roster/ClayRebel.png"
+    },
+    {
+      "name": "EMBERWARDEN",
+      "tagline": "Keeper of the flame.",
+      "added": "2026-10-19T22:05:35-04:00",
+      "accent": "#E8702A",
+      "image": "Assets/Roster/Emberwarden.png"
+    },
+    {
+      "name": "REAPER",
+      "tagline": "Harvests the living.",
+      "added": "2026-10-19T22:05:34-04:00",
+      "accent": "#5A5A6A",
+      "image": "Assets/Roster/Reaper.png"
+    },
+    {
+      "name": "THE DUELIST",
+      "tagline": "It's time to duel!",
+      "added": "2026-10-19T21:16:26-04:00",
+      "accent": "#E0B030",
+      "image": "Assets/Roster/Duelist.png"
+    }
+  ],
+  "maps": [
+    {
+      "title": "AUDI WEST PALM BEACH",
+      "subtitle": "Log in to CDK to get there",
+      "image": "Assets/Tiles/AudiWPB.png"
+    },
+    {
+      "title": "DISTANT ROOST",
+      "subtitle": "Placeholder",
+      "image": "Assets/Tiles/DistantRoost.png",
+      "badge": "COMING SOON"
+    },
+    {
+      "title": "ANCIENT VALLEY",
+      "subtitle": "Placeholder",
+      "image": "Assets/Tiles/AncientValley.png",
+      "badge": "COMING SOON"
+    }
+  ],
+  "modes": [
+    {
+      "title": "LOCUST HORDE",
+      "subtitle": "Artifact: Emergence Holes open",
+      "image": "Assets/Tiles/LocustHorde.png"
+    },
+    {
+      "title": "HARDCORE SURVIVAL",
+      "subtitle": "Placeholder",
+      "image": "Assets/Tiles/HardcoreSurvival.png",
+      "badge": "COMING SOON"
+    },
+    {
+      "title": "BOSS RUSH",
+      "subtitle": "Placeholder",
+      "image": "Assets/Tiles/BossRush.png",
+      "badge": "COMING SOON"
+    }
+  ]
+}

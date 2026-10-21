@@ -28,7 +28,9 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace BrokenCharactersLauncher
 {
@@ -95,8 +97,13 @@ namespace BrokenCharactersLauncher
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            // Offer the extras key box only if the player has never entered (or declined) one.
-            ExtrasPanel.Visibility = File.Exists(ExtrasKeyFile) ? Visibility.Collapsed : Visibility.Visible;
+            // Offer the extras key box only if the player has never entered one.
+            ShowExtrasState(File.Exists(ExtrasKeyFile));
+
+            // Fill the roster, maps and modes from the built-in roster.json right away, then refresh them
+            // from GitHub in the background (new characters show up without a new launcher exe).
+            LoadBuiltInRoster();
+            _ = RefreshRosterFromGitHubAsync();
 
             // The changelog loads on its own; if it fails the launcher still works.
             _ = LoadChangelogAsync();
@@ -140,7 +147,7 @@ namespace BrokenCharactersLauncher
                 bool installed = local != null && File.Exists(Path.Combine(PackDir, "install.ps1"));
                 if (!forceInstall && installed && string.Equals(local, _remote.Version, StringComparison.OrdinalIgnoreCase))
                 {
-                    Ready("Up to date. Have fun!");
+                    Ready("Installation Up to Date!");
                     return;
                 }
 
@@ -152,7 +159,7 @@ namespace BrokenCharactersLauncher
                 // ---- 4. Remember what we installed
                 WriteLocalVersion(_remote.Version);
                 ShowInstalledVersion(_remote.Version);
-                Ready("Update complete. Have fun!");
+                Ready("Installation Up to Date!");
             }
             catch (Exception ex)
             {
@@ -445,8 +452,167 @@ namespace BrokenCharactersLauncher
                 return;
             }
             ExtrasKeyBox.Clear();
-            ExtrasPanel.Visibility = Visibility.Collapsed;
+            ShowExtrasState(true);
             await CheckAndUpdateAsync(forceInstall: true); // reruns install.ps1, which now downloads the extras
+        }
+
+        // ================================================================== roster, maps & game modes
+
+        /// <summary>Shows either the extras key box or the "extras are active" line in the bottom-left panel.</summary>
+        private void ShowExtrasState(bool keySaved)
+        {
+            ExtrasPanel.Visibility = keySaved ? Visibility.Collapsed : Visibility.Visible;
+            ExtrasActivePanel.Visibility = keySaved ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>Reads the roster.json compiled into the exe (works offline).</summary>
+        private void LoadBuiltInRoster()
+        {
+            try
+            {
+                var resource = Application.GetResourceStream(new Uri("pack://application:,,,/roster.json"));
+                if (resource == null) return;
+                using var reader = new StreamReader(resource.Stream);
+                ApplyRoster(RosterData.Parse(reader.ReadToEnd(), path => new Uri("pack://application:,,,/" + path.TrimStart('/'))));
+            }
+            catch (Exception ex) when (ex is IOException || ex is JsonException)
+            {
+                Debug.WriteLine("Built-in roster failed: " + ex);
+            }
+        }
+
+        /// <summary>
+        /// Downloads the newest roster.json straight from the repo (raw file, not the API, so it doesn't count against
+        /// GitHub's 60-requests-an-hour limit). Its images are loaded from the repo too. Any failure keeps the built-in list.
+        /// </summary>
+        private async Task RefreshRosterFromGitHubAsync()
+        {
+            const string rawBase = "https://raw.githubusercontent.com/" + Repo + "/main/launcher/";
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                string json = await Http.GetStringAsync(rawBase + "roster.json", cts.Token);
+                RosterData remote = RosterData.Parse(json, path => new Uri(rawBase + path.TrimStart('/')));
+                if (remote.Characters.Count > 0) ApplyRoster(remote);
+            }
+            catch (Exception ex) when (IsNetworkError(ex) || ex is JsonException)
+            {
+                Debug.WriteLine("Online roster unavailable, keeping the built-in one: " + ex.Message);
+            }
+        }
+
+        private void ApplyRoster(RosterData data)
+        {
+            RosterList.ItemsSource = data.Characters;
+            MapsList.ItemsSource = data.Maps;
+            ModesList.ItemsSource = data.Modes;
+            RosterCountText.Text = data.Characters.Count + " playable";
+            RosterScroll.ScrollToHorizontalOffset(0); // start at the left, where the newest characters are
+            UpdateRosterArrows();
+        }
+
+        // ------------------------------------------------------------------ roster scrolling
+
+        /// <summary>Width one card takes in the row (176 wide, -4 margin each side).</summary>
+        private const double CardStep = 168;
+
+        private double _scrollFrom, _scrollTo;
+        private DateTime _scrollStart;
+        private bool _scrollAnimating;
+
+        /// <summary>
+        /// Smoothly scrolls the roster to a horizontal offset. ScrollViewer's HorizontalOffset can't be animated with a
+        /// Storyboard (it's read-only), so each rendered frame moves it along an ease-out curve instead.
+        /// </summary>
+        private void SmoothScrollTo(double target)
+        {
+            _scrollFrom = RosterScroll.HorizontalOffset;
+            _scrollTo = Math.Max(0, Math.Min(target, RosterScroll.ScrollableWidth));
+            _scrollStart = DateTime.UtcNow;
+            if (_scrollAnimating) return;
+            _scrollAnimating = true;
+            CompositionTarget.Rendering += OnScrollFrame;
+        }
+
+        private void OnScrollFrame(object? sender, EventArgs e)
+        {
+            double t = Math.Min(1.0, (DateTime.UtcNow - _scrollStart).TotalSeconds / 0.35);
+            double eased = 1 - Math.Pow(1 - t, 3); // ease-out cubic: fast start, gentle stop
+            RosterScroll.ScrollToHorizontalOffset(_scrollFrom + (_scrollTo - _scrollFrom) * eased);
+            if (t < 1.0) return;
+            CompositionTarget.Rendering -= OnScrollFrame;
+            _scrollAnimating = false;
+        }
+
+        /// <summary>Where the roster is headed (the animation target while scrolling, otherwise where it is).</summary>
+        private double RosterTarget => _scrollAnimating ? _scrollTo : RosterScroll.HorizontalOffset;
+
+        /// <summary>How far one arrow click moves: as many whole cards as fit on screen, at least one.</summary>
+        private double RosterPage => Math.Max(1, Math.Floor((RosterScroll.ViewportWidth - 80) / CardStep)) * CardStep;
+
+        private void RosterLeft_Click(object sender, RoutedEventArgs e) => SmoothScrollTo(RosterTarget - RosterPage);
+
+        private void RosterRight_Click(object sender, RoutedEventArgs e) => SmoothScrollTo(RosterTarget + RosterPage);
+
+        /// <summary>The mouse wheel scrolls the roster sideways (one notch = about one card).</summary>
+        private void Roster_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            SmoothScrollTo(RosterTarget - e.Delta / 120.0 * CardStep);
+            e.Handled = true;
+        }
+
+        /// <summary>Hides each arrow when there's nothing more to scroll in its direction.</summary>
+        private void Roster_ScrollChanged(object sender, ScrollChangedEventArgs e) => UpdateRosterArrows();
+
+        private void UpdateRosterArrows()
+        {
+            RosterLeft.IsEnabled = RosterScroll.HorizontalOffset > 1;
+            RosterRight.IsEnabled = RosterScroll.HorizontalOffset < RosterScroll.ScrollableWidth - 1;
+        }
+
+        // Click-and-drag scrolling, like a touch list. A drag only starts after the mouse moves a few pixels.
+        private Point _dragStart;
+        private double _dragOffset;
+        private bool _dragPending, _dragging;
+
+        private void Roster_DragStart(object sender, MouseButtonEventArgs e)
+        {
+            _dragStart = e.GetPosition(RosterScroll);
+            _dragOffset = RosterScroll.HorizontalOffset;
+            _dragPending = true;
+        }
+
+        private void Roster_DragMove(object sender, MouseEventArgs e)
+        {
+            if (!_dragPending || e.LeftButton != MouseButtonState.Pressed) { _dragPending = false; return; }
+            double dx = e.GetPosition(RosterScroll).X - _dragStart.X;
+            if (!_dragging && Math.Abs(dx) > 6)
+            {
+                _dragging = true;
+                RosterScroll.CaptureMouse();
+                RosterScroll.Cursor = Cursors.SizeWE;
+            }
+            if (_dragging) RosterScroll.ScrollToHorizontalOffset(_dragOffset - dx);
+        }
+
+        private void Roster_DragEnd(object sender, MouseButtonEventArgs e)
+        {
+            _dragPending = false;
+            if (!_dragging) return;
+            _dragging = false;
+            RosterScroll.ReleaseMouseCapture();
+            RosterScroll.Cursor = null;
+            e.Handled = true; // a drag isn't a click
+        }
+
+        /// <summary>The wheel scrolls the map and mode rows sideways too.</summary>
+        private void TileRow_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (sender is ScrollViewer sv)
+            {
+                sv.ScrollToHorizontalOffset(sv.HorizontalOffset - e.Delta);
+                e.Handled = true;
+            }
         }
 
         // ================================================================== UI helpers

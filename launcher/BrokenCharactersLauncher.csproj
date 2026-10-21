@@ -25,6 +25,9 @@
 
   <ItemGroup>
     <Resource Include="Assets\background.jpg" />
+    <Resource Include="Assets\Roster\*.png" />
+    <Resource Include="Assets\Tiles\*.png" />
+    <Resource Include="roster.json" />
   </ItemGroup>
 
 </Project>
