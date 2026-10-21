@@ -484,7 +484,7 @@ namespace BrokenCharactersLauncher
 
         /// <summary>A fixed home for the launcher, so Steam's Launch Options and the shortcut never point at Downloads.</summary>
         private static readonly string StableExe = Path.Combine(LauncherDir, "Broken-Characters-Mod.exe");
-        private static readonly string SteamPlayFile = Path.Combine(ExtrasDir, "steam-play.txt"); // yes / no / done
+        private static readonly string SteamPlayFile = Path.Combine(ExtrasDir, "steam-play.txt"); // on / off
 
         private static string EnsureStableCopy()
         {
@@ -505,38 +505,108 @@ namespace BrokenCharactersLauncher
         }
 
         /// <summary>
-        /// Asks once whether Steam's Play button should open this launcher (it's their Steam account, so it's opt-in),
-        /// then runs install.ps1 -SteamPlayOnly: always a desktop shortcut, plus the Launch Options if they said yes.
-        /// If Steam is open the change can't be saved, so it's retried on the next start.
+        /// First run: make the desktop shortcut and show the toggle's saved state. The Steam change itself only happens
+        /// when the player flips the STEAM PLAY toggle (it's their Steam account, so it's opt-in).
         /// </summary>
         private async Task SetUpSteamPlayAsync()
         {
-            string script = Path.Combine(PackDir, "install.ps1");
-            if (!File.Exists(script)) return;
-            string answer = File.Exists(SteamPlayFile) ? File.ReadAllText(SteamPlayFile).Trim() : "";
-            if (answer == "done" || answer == "no") return;
-            if (answer == "")
-            {
-                MessageBoxResult r = MessageBox.Show(this,
-                    "Make Steam's Play button for Risk of Rain 2 open the Broken Characters Mod launcher?\n\n" +
-                    "Then pressing Play in Steam always updates the mods first. You can undo it anytime with " +
-                    "\"Restore Steam Play.bat\".\n\n(Either way you also get a desktop shortcut.)",
-                    "Broken Characters Mod", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                answer = r == MessageBoxResult.Yes ? "yes" : "no";
-                Directory.CreateDirectory(ExtrasDir);
-                File.WriteAllText(SteamPlayFile, answer);
-            }
+            string saved = File.Exists(SteamPlayFile) ? File.ReadAllText(SteamPlayFile).Trim() : "";
+            SteamPlayToggle.IsChecked = saved == "on" || saved == "done";
+            if (!File.Exists(Path.Combine(PackDir, "install.ps1"))) return;
+            await RunSteamPlayScriptAsync("");   // shortcut only (it's skipped if one already exists)
+        }
 
-            string args = $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -SteamPlayOnly -LauncherPath \"{EnsureStableCopy()}\"" +
-                          (answer == "yes" ? " -SetSteamPlay" : "");
+        private async Task<string> RunSteamPlayScriptAsync(string extra)
+        {
+            string script = Path.Combine(PackDir, "install.ps1");
+            string args = $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -SteamPlayOnly -LauncherPath \"{EnsureStableCopy()}\" {extra}";
             var psi = new ProcessStartInfo("powershell.exe", args) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true };
             using Process? p = Process.Start(psi);
-            if (p == null) return;
+            if (p == null) return "";
             string output = await p.StandardOutput.ReadToEndAsync();
             await p.WaitForExitAsync();
-            if (answer != "yes") return;
-            if (output.Contains("STEAM_OPEN")) SetStatus("Close Steam and reopen the launcher once to finish setting up Steam's Play button.");
-            else File.WriteAllText(SteamPlayFile, "done");
+            return output;
+        }
+
+        private static string? SteamExe()
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
+                string? exe = key?.GetValue("SteamExe") as string;
+                return exe != null && File.Exists(exe) ? exe : null;
+            }
+            catch (System.Security.SecurityException) { return null; }
+        }
+
+        private static bool SteamRunning() => Process.GetProcessesByName("steam").Length > 0;
+
+        /// <summary>
+        /// The STEAM PLAY toggle. Steam keeps its settings in memory and rewrites the file when it closes, so a change
+        /// made while Steam is open would be lost: the launcher closes Steam, saves the change, and opens Steam again.
+        /// </summary>
+        private async void SteamPlayToggle_Click(object sender, RoutedEventArgs e)
+        {
+            bool turnOn = SteamPlayToggle.IsChecked == true;
+            void Revert() => SteamPlayToggle.IsChecked = !turnOn;
+
+            if (SteamGameCommand(out _, out _))
+            {
+                MessageBox.Show(this, "Steam opened this launcher, so Steam can't be closed right now.\n\nOpen the launcher from its desktop shortcut to change this.",
+                    "Broken Characters Mod", MessageBoxButton.OK, MessageBoxImage.Information);
+                Revert(); return;
+            }
+            if (!File.Exists(Path.Combine(PackDir, "install.ps1")))
+            {
+                MessageBox.Show(this, "Let the launcher finish installing first, then try again.", "Broken Characters Mod", MessageBoxButton.OK, MessageBoxImage.Information);
+                Revert(); return;
+            }
+
+            string? steam = SteamExe();
+            bool restart = false;
+            if (SteamRunning())
+            {
+                if (MessageBox.Show(this, "Steam has to close for a moment to save this (it would undo the change otherwise).\n\nClose Steam, save, and open it again?",
+                        "Broken Characters Mod", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) { Revert(); return; }
+                SteamPlayToggle.IsEnabled = false;
+                SetStatus("Closing Steam...");
+                try { if (steam != null) Process.Start(steam, "-shutdown"); else Process.Start(new ProcessStartInfo("steam://exit") { UseShellExecute = true }); }
+                catch (System.ComponentModel.Win32Exception) { }
+                for (int i = 0; i < 60 && SteamRunning(); i++) await Task.Delay(500);
+                if (SteamRunning())
+                {
+                    SetStatus("Steam didn't close. Close it yourself (Steam menu > Exit) and flip the switch again.");
+                    SteamPlayToggle.IsEnabled = true; Revert(); return;
+                }
+                restart = true;
+            }
+
+            SteamPlayToggle.IsEnabled = false;
+            SetStatus(turnOn ? "Pointing Steam's Play button at the launcher..." : "Putting Steam's Play button back to normal...");
+            string output = await RunSteamPlayScriptAsync(turnOn ? "-SetSteamPlay" : "-UnsetSteamPlay");
+            bool ok = output.Contains("STEAMPLAY_ON") || output.Contains("STEAMPLAY_OFF") || output.Contains("already set") || (!turnOn && !output.Contains("STEAM_OPEN"));
+
+            if (output.Contains("STEAMPLAY_KEPT"))
+            {
+                MessageBox.Show(this, "You already have your own Launch Options for Risk of Rain 2 in Steam, so they were left alone.\n\n" +
+                    "To use this anyway: Steam > Risk of Rain 2 > Properties > clear Launch Options, then flip the switch again.",
+                    "Broken Characters Mod", MessageBoxButton.OK, MessageBoxImage.Information);
+                ok = false;
+            }
+            if (ok)
+            {
+                Directory.CreateDirectory(ExtrasDir);
+                File.WriteAllText(SteamPlayFile, turnOn ? "on" : "off");
+                SetStatus(turnOn ? "Done: Steam's Play button now opens this launcher." : "Done: Steam's Play button starts the game normally again.");
+            }
+            else
+            {
+                Revert();
+                if (!output.Contains("STEAMPLAY_KEPT"))
+                    SetStatus("Couldn't change Steam's settings. " + (output.Contains("STEAM_OPEN") ? "Steam is still open." : "Has Risk of Rain 2 been played on this Steam account?"));
+            }
+            if (restart && steam != null) { try { Process.Start(steam); } catch (System.ComponentModel.Win32Exception) { } }
+            SteamPlayToggle.IsEnabled = true;
         }
 
         // ================================================================== extras key
