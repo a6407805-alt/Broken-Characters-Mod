@@ -5,6 +5,7 @@ name: Build Duelist
 on:
   push:
     branches: [ main ]
+  pull_request:          # pull requests (from branches or forks) are built and tested, never published
   workflow_dispatch:
 
 permissions:
@@ -100,6 +101,7 @@ jobs:
 
   publish:
     needs: test-installer
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
