@@ -45,3 +45,35 @@ Tips:
 - Every push reaches everyone's updater, so test in game before pushing when you can.
 
 Multiplayer needs everyone on the same build, so tell the group when a merge goes in.
+
+## Adding a new character (checklist for you and your Claude)
+
+1. **Source:** `src/<Name>/<Name>.csproj` + code. Copy the setup of `src/CarMaxSpecialist/` (NuGet references,
+   `netstandard2.1`, `BepInDependency` on the R2API modules you use). A new mod needs no workflow changes: every
+   `src/*/*.csproj` is built automatically and its dll lands in `mods/<Name>/`.
+2. **Unique names:** your own BepInEx GUID (`com.<you>.<name>`), language token prefix and prefab names, so nothing
+   clashes with the other mods.
+3. **Files that ship:** icons in `mods/<Name>/Icons/` (`portrait.png`, `primary.png`, ...), sounds in
+   `mods/<Name>/Sounds/`, plus a short `README.md` and `manifest.json`.
+4. **Launcher card:** add an entry at the top of `launcher/roster.json`
+   (`name`, `tagline`, `added` = now in ISO format, `accent` = hex colour, `image` = `Assets/Roster/<Name>.png`) and
+   put a square portrait at `launcher/Assets/Roster/<Name>.png`. The newest `added` date sits on the far left with a
+   NEW badge. Launchers read this file from the repo, so the card shows up without a new launcher.
+5. **Copyrighted files** (sounds, models, art from other games or shows) go in the private
+   `BrokenCharacters-Extras` repo under `files/<Name>/`, never here.
+6. Push, check the build (`gh run list`), then test in game.
+
+### Gotchas we already hit (save yourself the time)
+
+- **Shaders:** `Shader.Find` only works for the game's own shaders. Use `"Hopoo Games/Deferred/Standard"` (fall back to
+  `LegacyResourcesAPI.Load<Shader>("Shaders/Deferred/HGStandard")`). `"Sprites/Default"` and `"Standard"` throw and
+  stop your skill mid-way. For lines, borrow a material from a game prefab (e.g. `TracerCommandoDefault`).
+- **Publicized game library:** GameLibs makes private fields look public, and using them compiles but crashes in
+  game with `FieldAccessException`. Known trap: `characterBody.transform` → use `characterBody.gameObject.transform`.
+- **Networking:** damage via `BulletAttack`/`BlastAttack` from the player's own client (`isAuthority`); gold, items,
+  buffs and summons on the host (`NetworkServer.active`). Skill states also run on the host, so host-only work can
+  go in `OnEnter` behind `if (NetworkServer.active)`.
+- **Sounds:** Unity audio is off in RoR2. Either play vanilla events with `Util.PlaySound("Play_...", gameObject)` or
+  play `.wav` files through winmm like `CarMaxSpecialist/Ui.cs` (`CmxAudio`).
+- **Debugging:** everything that goes wrong in game is in `Risk of Rain 2\BepInEx\LogOutput.log`. Give that file to
+  your Claude first; it shows the exact line that broke.
