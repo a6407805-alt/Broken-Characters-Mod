@@ -28,10 +28,20 @@ is compiled by GitHub Actions, the installer is tested on Windows, and the resul
 
 ## How to contribute (for you and your Claude)
 
-1. Work on a **branch**, not `main`: `git checkout -b <yourname>/<what-you-changed>`.
-2. Only change your own mod's folders (`src/<YourMod>/`, `mods/<YourMod>/`) unless you've agreed otherwise.
-3. Push the branch and open a **pull request** to `main` describing what changed and how to test it.
-4. GitHub Actions builds it; fix any errors it reports (`gh run list -R a6407805-alt/Broken-Characters-Mod`).
-5. Once it's reviewed and merged, the new download is published automatically.
+Both owners of the pack can **push straight to `main`**: no pull request or approval needed.
+
+1. Pull first so you build on the latest version: `git pull --rebase`.
+2. Make your change and commit it with a clear message (it shows up as the changelog in the launcher).
+3. Push to `main`. GitHub Actions builds it, tests the installer and publishes the new download automatically.
+4. Check the build passed (`gh run list -R a6407805-alt/Broken-Characters-Mod`). If it failed, the previous download
+   stays published, so fix it and push again.
+5. If the push is rejected because the other person pushed first, run `git pull --rebase` and push again.
+
+Tips:
+- Mostly change your own mod's folders (`src/<YourMod>/`, `mods/<YourMod>/`); tell each other before changing shared
+  files (`release/`, `launcher/`, `.github/`, the Duelist).
+- A branch and pull request is still handy for a big or risky change you want the other person to look at first,
+  but it's optional.
+- Every push reaches everyone's updater, so test in game before pushing when you can.
 
 Multiplayer needs everyone on the same build, so tell the group when a merge goes in.
