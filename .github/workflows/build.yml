@@ -71,7 +71,13 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           Expand-Archive Broken-Characters-Collection.zip upd
-          & .\upd\update.ps1 -Key $env:GH_TOKEN -DownloadOnly -OutDir (Join-Path $env:RUNNER_TEMP 'u1')
+          if (Test-Path .\upd\pack-key.txt) {
+            Write-Host 'Testing the pack key built into the zip'
+            & .\upd\update.ps1 -DownloadOnly -OutDir (Join-Path $env:RUNNER_TEMP 'u1')
+          } else {
+            Write-Host 'No pack key in the zip (PACK_KEY secret not set): testing with the workflow token'
+            & .\upd\update.ps1 -Key $env:GH_TOKEN -DownloadOnly -OutDir (Join-Path $env:RUNNER_TEMP 'u1')
+          }
           if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'u1\pack.zip'))) { throw 'keyed download failed' }
           Remove-Item upd -Recurse -Force
 
