@@ -1021,6 +1021,15 @@ namespace DuelistMod
                 return;
             }
 
+            if (Resolute && !_resolveShown)
+            {
+                _resolveShown = true;
+                ShowBanner("PHARAOH'S RESOLVE!");
+                AddLog($"<color=#f2c640>Pharaoh's Resolve: your LP is low, so every monster you control gains {DuelConfig.ResolveAtk.Value} ATK.</color>");
+                DuelSfx.Play(DuelSound.Activate, Player.gameObject);
+            }
+            else if (!Resolute) _resolveShown = false;
+
             if (ChainBusy) { TickChain(dt); return; }
             TickPhases(dt);
         }
@@ -1690,6 +1699,10 @@ namespace DuelistMod
         public int MonsterCountAll { get { int n = 0; foreach (FieldMonster m in Monsters) if (m != null) n++; return n; } }
 
         /// <summary>A monster's ATK right now: its own, boosted by face-up Link monsters and its effects.</summary>
+        /// <summary>Pharaoh's Resolve: backed into a corner, your monsters fight harder.</summary>
+        public bool Resolute => DuelConfig.ResolveLP.Value > 0 && Result == Outcome.None && PlayerLP > 0 && PlayerLP <= DuelConfig.ResolveLP.Value;
+        private bool _resolveShown;
+
         public int MonsterAtk(FieldMonster fm)
         {
             if (fm == null) return 0;
@@ -1698,7 +1711,8 @@ namespace DuelistMod
             foreach (FieldMonster m in Monsters)
                 if (m != null && m != fm && !m.FaceDown && !m.IsAlly && m.Card.Extra == ExtraKind.Link)
                     boost += DuelConfig.LinkBoost.Value * m.Card.LinkRating;
-            return Mathf.Max(0, DuelStats.Round50(baseAtk * (1f + boost) * (1f + fm.AtkBonus)) + fm.TempAtk);
+            int resolve = Resolute ? DuelConfig.ResolveAtk.Value : 0;
+            return Mathf.Max(0, DuelStats.Round50(baseAtk * (1f + boost) * (1f + fm.AtkBonus)) + fm.TempAtk + resolve);
         }
 
         public int MonsterDef(FieldMonster fm)
@@ -2627,6 +2641,7 @@ namespace DuelistMod
         private void DestroyRep(Representative rep, string source, ItemIndex item)
         {
             if (rep == null || rep.Destroyed || rep.IsCommander) return;
+            int soul = Mathf.RoundToInt(rep.Atk * Mathf.Max(0f, DuelConfig.SoulDamage.Value) / 50f) * 50;
             DuelMember first = rep.Members.Find(x => x.Alive && x.Body);
             Vector3 soulFrom = first != null ? first.Body.corePosition : Vector3.zero;
             if (first != null) Step("soul harvest", () => DuelEcho.SoulHarvest(Player, soulFrom));
@@ -2638,6 +2653,11 @@ namespace DuelistMod
             Pop(rep.BoardPosition + Vector3.up * 4.4f, "DESTROYED", rep.Label, new Color(1f, 0.45f, 0.3f), true);
             DuelSfx.Play(DuelSound.Destroy, Player.gameObject);
             if (_hitVfx) EffectManager.SpawnEffect(_hitVfx, new EffectData { origin = rep.BoardPosition + Vector3.up * 2f, scale = 3f }, true);
+            if (soul > 0 && (Commander == null ? DirectorLifeMax > 0f : !Commander.Defeated))
+            {
+                AddLog($"Soul damage: {rep.Label}'s destruction burns {soul} off the enemy's LP.");
+                DamageEnemyLP(soul, "soul damage");
+            }
         }
 
         /// <summary>Damage to the enemy's LP: the commander's real health (8000 LP = full), or the Director's.</summary>

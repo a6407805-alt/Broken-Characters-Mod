@@ -311,6 +311,9 @@ namespace DuelistMod
         public static ConfigEntry<float> ArenaHeight;
         public static ConfigEntry<int> MaxRounds;
         public static ConfigEntry<bool> DeckOut;
+        public static ConfigEntry<float> SoulDamage;
+        public static ConfigEntry<int> ResolveLP;
+        public static ConfigEntry<int> ResolveAtk;
         public static ConfigEntry<int> StartingHand;
         public static ConfigEntry<int> DrawPerTurn;
         public static ConfigEntry<int> MaxHandSize;
@@ -406,11 +409,14 @@ namespace DuelistMod
             DuelCooldown = cfg.Bind("Duel", "Cooldown", 30f, "Special cooldown in seconds, starting when the duel ends. Needs a restart.");
             ArenaHeight = cfg.Bind("Duel", "ArenaHeight", 250f, "How far above you the duel arena is built.");
             MaxRounds = cfg.Bind("Duel", "MaxRounds_v3", 0, "Turn limit before the duel dimension collapses (0 = no limit: duel until someone's LP hits zero or a deck runs out).");
+            SoulDamage = cfg.Bind("Rules", "SoulDamage", 0.5f, "Destroying an enemy monster also burns this fraction of its ATK off the enemy's LP (0 = card-game rules).");
+            ResolveLP = cfg.Bind("Rules", "PharaohsResolveLP", 3000, "Pharaoh's Resolve: while your LP is at or below this, your monsters fight harder (0 = off).");
+            ResolveAtk = cfg.Bind("Rules", "PharaohsResolveAtk", 500, "ATK each of your monsters gains from Pharaoh's Resolve.");
             DeckOut = cfg.Bind("Duel", "DeckOut", true, "Yu-Gi-Oh! deck-out: if you have to draw and your deck is empty, you lose. The enemy too: at its Draw Phase with no monsters left to draw, it loses.");
             StartingHand = cfg.Bind("Duel", "StartingHand", 5, "Cards drawn when the duel begins.");
             DrawPerTurn = cfg.Bind("Duel", "DrawPerTurn", 2, "Cards drawn at the start of each later turn.");
             MaxHandSize = cfg.Bind("Duel", "MaxHandSize", 8, "Hand size limit.");
-            NormalSummonsPerTurn = cfg.Bind("Duel", "NormalSummonsPerTurn", 1, "Monsters you can summon from your hand each turn (fusions from the Extra Deck don't count).");
+            NormalSummonsPerTurn = cfg.Bind("Duel", "NormalSummonsPerTurn_v2", 2, "Monsters you can summon from your hand each turn (fusions from the Extra Deck don't count).");
             MaxDuelSeconds = cfg.Bind("Duel", "MaxDuelSeconds_v3", 0f, "Safety time limit in seconds (0 = no limit).");
             EnemyTurnSpeed = cfg.Bind("Duel", "EnemyActionDelay", 0.9f, "Seconds between enemy attacks, so each hit can be read.");
 
@@ -473,13 +479,13 @@ namespace DuelistMod
             FanDamage = cfg.Bind("Skills", "CardFanDamage", 1.0f, "Secondary damage per card.");
             FanCount = cfg.Bind("Skills", "CardFanCount", 5, "Secondary card count.");
 
-            EnemyAtkScale = cfg.Bind("Rules", "EnemyAtkScale", 2.5f, "Enemy ATK = their real damage compared to yours, x this, on the card game's scale (a Beetle is about 1000 ATK).");
-            EnemyDefScale = cfg.Bind("Rules", "EnemyDefScale", 0.75f, "Enemy DEF from their health compared to yours, x this (a Beetle is about 1150 DEF).");
+            EnemyAtkScale = cfg.Bind("Rules", "EnemyAtkScale_v2", 1.8f, "Enemy ATK = their real damage compared to yours, x this, on the card game's scale (a Beetle is about 1000 ATK).");
+            EnemyDefScale = cfg.Bind("Rules", "EnemyDefScale_v2", 0.6f, "Enemy DEF from their health compared to yours, x this (a Beetle is about 1150 DEF).");
             PhaseDelay = cfg.Bind("Rules", "PhaseDelay", 0.9f, "Seconds the automatic phases (Draw, Standby, End, enemy phases) stay on screen.");
             ChainWindow = cfg.Bind("Rules", "ChainWindowSeconds", 8f, "How long you get to respond with a set card before the chain resolves without you.");
             FirstTurnNoBattle = cfg.Bind("Rules", "FirstTurnNoBattlePhase", true, "Like the card game: the player who goes first can't conduct a Battle Phase on turn 1.");
             EndPhaseHandLimit = cfg.Bind("Rules", "EndPhaseHandLimit", 6, "In your End Phase you discard down to this many cards (the card game uses 6).");
-            EnemyResponseChance = cfg.Bind("Rules", "EnemyResponseChance", 0.6f, "Chance an enemy elite card chains a response when it's allowed to.");
+            EnemyResponseChance = cfg.Bind("Rules", "EnemyResponseChance_v2", 0.4f, "Chance an enemy elite card chains a response when it's allowed to.");
             CritInBattle = cfg.Bind("Rules", "CritsDoubleAtk", true, "Your crit chance still matters: a critical attack doubles the attacker's ATK for that battle.");
             Hover = cfg.Bind("Skills", "Hover", true, "Allow the hoverboard: double-tap jump to whip it out or put it away. On the board, jump to ollie; big air = tricks = speed boosts.");
             StartHovering = cfg.Bind("Skills", "StartHovering", false, "Start each stage already on the hoverboard instead of walking.");
