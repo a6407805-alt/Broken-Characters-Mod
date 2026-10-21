@@ -118,16 +118,19 @@ jobs:
           $cfg = Join-Path $steam 'userdata\123\config'
           New-Item -ItemType Directory -Force -Path $cfg | Out-Null
           $vdf = Join-Path $cfg 'localconfig.vdf'
-          Set-Content $vdf "`"UserLocalConfigStore`"`n{`n`t`"Software`"`n`t{`n`t`t`"apps`"`n`t`t{`n`t`t`t`"632360`"`n`t`t`t{`n`t`t`t`t`"LastPlayed`"`t`t`"1`"`n`t`t`t}`n`t`t}`n`t}`n}"
+          # realistic nesting, plus a decoy "632360" block earlier in the file that must NOT be edited
+          Set-Content $vdf "`"UserLocalConfigStore`"`n{`n`t`"apptickets`"`n`t{`n`t`t`"632360`"`n`t`t{`n`t`t`t`"x`"`t`"1`"`n`t`t}`n`t}`n`t`"Software`"`n`t{`n`t`t`"Valve`"`n`t`t{`n`t`t`t`"Steam`"`n`t`t`t{`n`t`t`t`t`"apps`"`n`t`t`t`t{`n`t`t`t`t`t`"632360`"`n`t`t`t`t`t{`n`t`t`t`t`t`t`"LastPlayed`"`t`t`"1`"`n`t`t`t`t`t}`n`t`t`t`t}`n`t`t`t}`n`t`t}`n`t}`n}"
           $exe = Join-Path $env:RUNNER_TEMP 'Broken-Characters-Mod.exe'; Set-Content $exe 'x'
           Expand-Archive Broken-Characters-Mod.zip steamtest -Force
           pwsh -NoProfile -File steamtest\install.ps1 -SteamPlayOnly -LauncherPath $exe -SetSteamPlay -SteamRoot $steam
           $t = Get-Content $vdf -Raw
           if ($t -notmatch '"LaunchOptions"\s+"\\"[^"]*Broken-Characters-Mod\.exe\\" %command%"') { $t; throw 'LaunchOptions not set' }
           if (-not (Test-Path "$vdf.bc-backup")) { throw 'no backup' }
+          if ($t -match '(?s)"apptickets".{0,40}LaunchOptions') { $t; throw 'edited the decoy block' }
+          if ($t -notmatch '(?s)"apps"\s*\{\s*"632360"\s*\{\s*"LaunchOptions"') { $t; throw 'not in the apps section' }
           pwsh -NoProfile -File steamtest\install.ps1 -SteamPlayOnly -LauncherPath $exe -SetSteamPlay -SteamRoot $steam
           if (([regex]::Matches((Get-Content $vdf -Raw), 'LaunchOptions')).Count -ne 1) { throw 'set twice' }
-          pwsh -NoProfile -File steamtest\install.ps1 -ClearLaunchOptions -SteamRoot $steam
+          pwsh -NoProfile -File steamtest\install.ps1 -SteamPlayOnly -UnsetSteamPlay -SteamRoot $steam
           if ((Get-Content $vdf -Raw) -match 'Broken-Characters') { throw 'not cleared' }
           Write-Host 'Steam Play opt-in: set, idempotent, undone - OK'
 

@@ -2,7 +2,7 @@
 # Finds Risk of Rain 2 (Steam), installs BepInEx and the shared libraries straight into the game folder
 # (downloaded from Thunderstore, pinned to the exact versions we play with), then the Duelist and the
 # group's other mods. Re-running it only fetches what is missing or out of date.
-param([switch]$Uninstall, [string]$GameDir, [switch]$SkipExtras, [string]$ExtrasKey, [string]$LauncherPath, [switch]$SetSteamPlay, [switch]$SteamPlayOnly, [switch]$ClearLaunchOptions, [string]$SteamRoot)
+param([switch]$Uninstall, [string]$GameDir, [switch]$SkipExtras, [string]$ExtrasKey, [string]$LauncherPath, [switch]$SetSteamPlay, [switch]$UnsetSteamPlay, [switch]$SteamPlayOnly, [switch]$ClearLaunchOptions, [string]$SteamRoot)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'      # makes Invoke-WebRequest much faster
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -194,44 +194,84 @@ function Get-SteamRoot {
     return $null
 }
 
+# --- tiny VDF reader: finds a key's {block} or "value" at the top level of a range, respecting quotes and nesting
+$script:VdfStr = [regex]'\G"((?:[^"\\]|\\.)*)"'
+function Skip-Ws($t, $i) { while ($i -lt $t.Length -and [char]::IsWhiteSpace($t[$i])) { $i++ }; return $i }
+function Skip-Block($t, $i) {   # $t[$i] is '{'; returns the index just after its matching '}'
+    $depth = 0
+    while ($i -lt $t.Length) {
+        $c = $t[$i]
+        if ($c -eq '"') { $m = $script:VdfStr.Match($t, $i); $i += [Math]::Max(1, $m.Length); continue }
+        if ($c -eq '{') { $depth++ } elseif ($c -eq '}') { $depth--; if ($depth -eq 0) { return $i + 1 } }
+        $i++
+    }
+    return $t.Length
+}
+# returns @{ Kind='block'|'value'; Start; End; Value } for $key directly inside [$from, $to), or $null
+function Find-VdfKey($t, [int]$from, [int]$to, [string]$key) {
+    $i = $from
+    while ($i -lt $to) {
+        $i = Skip-Ws $t $i
+        if ($i -ge $to) { break }
+        if ($t[$i] -ne '"') { $i++; continue }
+        $k = $script:VdfStr.Match($t, $i); if (-not $k.Success) { $i++; continue }
+        $i = Skip-Ws $t ($i + $k.Length)
+        if ($i -lt $to -and $t[$i] -eq '{') {
+            $end = Skip-Block $t $i
+            if ($k.Groups[1].Value -ieq $key) { return @{ Kind = 'block'; Start = $i + 1; End = $end - 1 } }
+            $i = $end; continue
+        }
+        if ($i -lt $to -and $t[$i] -eq '"') {
+            $v = $script:VdfStr.Match($t, $i)
+            if ($k.Groups[1].Value -ieq $key) { return @{ Kind = 'value'; Start = $i; End = $i + $v.Length; Value = $v.Groups[1].Value } }
+            $i += [Math]::Max(1, $v.Length); continue
+        }
+    }
+    return $null
+}
+
 function Set-RoR2LaunchOptions([string]$value) {   # $value = '' clears ours
     $root = Get-SteamRoot
-    if (-not $root) { Say '  (Steam not found; skipped the Play button setup.)' 'DarkGray'; return }
+    if (-not $root) { Say '  STEAMPLAY: Steam not found.' 'DarkGray'; return }
     $vdfValue = if ($value) { ($value -replace '\\', '\\' -replace '"', '\"') } else { '' }
     $files = Get-ChildItem (Join-Path $root 'userdata') -Directory -ErrorAction SilentlyContinue |
         ForEach-Object { Join-Path $_.FullName 'config\localconfig.vdf' } | Where-Object { Test-Path $_ }
-    $steamOpen = [bool](Get-Process steam -ErrorAction SilentlyContinue)
-    $changed = 0; $pending = 0
+    if (-not $files) { Say '  STEAMPLAY: no Steam accounts found on this PC.' 'DarkGray'; return }
+    if (Get-Process steam -ErrorAction SilentlyContinue) { Say '  STEAM_OPEN: close Steam first (it rewrites this file when it closes).' 'Yellow'; return }
     foreach ($f in $files) {
-        $text = [IO.File]::ReadAllText($f)
-        $m = [regex]::Match($text, '(?s)"632360"\s*\{')
-        if (-not $m.Success) { continue }                                   # this account never ran RoR2
-        $start = $m.Index + $m.Length
-        $depth = 1; $i = $start
-        while ($i -lt $text.Length -and $depth -gt 0) { if ($text[$i] -eq '{') { $depth++ } elseif ($text[$i] -eq '}') { $depth-- }; $i++ }
-        $body = $text.Substring($start, $i - 1 - $start)
-        $lo = [regex]::Match($body, '(?m)^(\s*)"LaunchOptions"\s*"((?:[^"\\]|\\.)*)"')
-        if ($value) {
-            if ($lo.Success -and $lo.Groups[2].Value -eq $vdfValue) { continue }   # already set
-            if ($lo.Success -and $lo.Groups[2].Value -and $lo.Groups[2].Value -notmatch 'Broken-Characters') {
-                Say "  Kept your own Steam launch options ($($lo.Groups[2].Value)); the launcher shortcut still works." 'DarkGray'; continue
-            }
-        } else {
-            if (-not $lo.Success -or $lo.Groups[2].Value -notmatch 'Broken-Characters') { continue }   # nothing of ours
+        $t = [IO.File]::ReadAllText($f)
+        # Steam reads launch options only from UserLocalConfigStore > Software > Valve > Steam > apps > 632360
+        $node = @{ Start = 0; End = $t.Length }
+        $ok = $true
+        foreach ($k in 'UserLocalConfigStore', 'Software', 'Valve', 'Steam', 'apps') {
+            $n = Find-VdfKey $t $node.Start $node.End $k
+            if (-not $n -or $n.Kind -ne 'block') { $ok = $false; break }
+            $node = $n
         }
-        if ($steamOpen) { $pending++; continue }
-        $newBody = if ($lo.Success) {
-            $body.Remove($lo.Index, $lo.Length).Insert($lo.Index, "$($lo.Groups[1].Value)`"LaunchOptions`"`t`t`"$vdfValue`"")
+        if (-not $ok) { Say "  STEAMPLAY: $f has no apps section; skipped." 'DarkGray'; continue }
+        $app = Find-VdfKey $t $node.Start $node.End '632360'
+        $new = $null
+        if (-not $app) {
+            if (-not $value) { continue }
+            $new = $t.Insert($node.Start, "`n`t`t`t`t`t`"632360`"`n`t`t`t`t`t{`n`t`t`t`t`t`t`"LaunchOptions`"`t`t`"$vdfValue`"`n`t`t`t`t`t}")
         } else {
-            $indent = [regex]::Match($body, '(?m)^(\s*)"').Groups[1].Value; if (-not $indent) { $indent = "`t`t`t`t`t`t" }
-            "`n$indent`"LaunchOptions`"`t`t`"$vdfValue`"" + $body
+            $lo = Find-VdfKey $t $app.Start $app.End 'LaunchOptions'
+            if ($value) {
+                if ($lo -and $lo.Value -eq $vdfValue) { Say '  STEAMPLAY: already set.' 'Green'; continue }
+                if ($lo -and $lo.Value -and $lo.Value -notmatch 'Broken-Characters') {
+                    Say "  STEAMPLAY_KEPT: you already have your own launch options ($($lo.Value)); not changed." 'Yellow'; continue
+                }
+                $new = if ($lo) { $t.Remove($lo.Start, $lo.End - $lo.Start).Insert($lo.Start, "`"$vdfValue`"") }
+                       else { $t.Insert($app.Start, "`n`t`t`t`t`t`t`"LaunchOptions`"`t`t`"$vdfValue`"") }
+            } else {
+                if (-not $lo -or $lo.Value -notmatch 'Broken-Characters') { continue }
+                $new = $t.Remove($lo.Start, $lo.End - $lo.Start).Insert($lo.Start, '""')
+            }
         }
         Copy-Item $f "$f.bc-backup" -Force
-        [IO.File]::WriteAllText($f, $text.Substring(0, $start) + $newBody + $text.Substring($i - 1))
-        $changed++
+        [IO.File]::WriteAllText($f, $new)
+        Say $(if ($value) { "  STEAMPLAY_ON: Steam's Play button now opens the Broken Characters Mod launcher." } else { '  STEAMPLAY_OFF: Steam''s Play button starts the game normally again.' }) 'Green'
     }
-    if ($changed) { Say $(if ($value) { "  Steam's Play button now opens the Broken Characters Mod launcher." } else { '  Removed the launcher from Steam''s launch options.' }) 'Green' }
-    if ($pending) { Say "  STEAM_OPEN: close Steam and run this again to $(if ($value) { 'make Steam''s Play button open the launcher' } else { 'remove the launch options' })." 'Yellow' }
 }
 
 function Set-DesktopShortcut([string]$target, [bool]$remove) {
@@ -249,11 +289,13 @@ Say ('  BROKEN CHARACTERS MOD ' + $(if ($Uninstall) { 'UNINSTALLER' } else { 'IN
 if (($ClearLaunchOptions -or $SteamPlayOnly) -and -not $Uninstall) {
     # Just the Steam Play button / desktop shortcut, mods untouched:
     #   -ClearLaunchOptions        undo (Play back to normal, shortcut removed)
-    #   -SteamPlayOnly -LauncherPath x [-SetSteamPlay]   shortcut, plus Play -> launcher if the player opted in
+    #   -SteamPlayOnly -LauncherPath x               desktop shortcut only
+    #   ... -SetSteamPlay / -UnsetSteamPlay           also turn Steam's Play -> launcher on / off (the launcher's toggle)
     if ($ClearLaunchOptions) { Set-RoR2LaunchOptions ''; Set-DesktopShortcut '' $true }
-    elseif ($LauncherPath -and (Test-Path $LauncherPath)) {
-        Set-DesktopShortcut $LauncherPath $false
-        if ($SetSteamPlay) { Set-RoR2LaunchOptions "`"$LauncherPath`" %command%" }
+    else {
+        if ($LauncherPath -and (Test-Path $LauncherPath)) { Set-DesktopShortcut $LauncherPath $false }
+        if ($SetSteamPlay -and $LauncherPath) { Set-RoR2LaunchOptions "`"$LauncherPath`" %command%" }
+        elseif ($UnsetSteamPlay) { Set-RoR2LaunchOptions '' }
     }
     try { Stop-Transcript | Out-Null } catch { }
     exit 0

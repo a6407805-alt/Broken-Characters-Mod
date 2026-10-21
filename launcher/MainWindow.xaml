@@ -331,6 +331,40 @@
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,8,0">
                         <!-- Patch notes live in a pop-up now; the changelog code still fills ChangelogText -->
+                        <!-- Opt-in: make Steam's Play button open this launcher (it closes and reopens Steam to save it) -->
+                        <ToggleButton x:Name="SteamPlayToggle" Click="SteamPlayToggle_Click" Height="34" Padding="12,0" Margin="0,0,6,0" Cursor="Hand"
+                                      FontSize="12" FontWeight="Bold" BorderThickness="0" Background="Transparent"
+                                      ToolTip="When on, pressing Play in Steam opens this launcher first (updates, then the game).">
+                            <ToggleButton.Style>
+                                <Style TargetType="ToggleButton">
+                                    <Setter Property="Foreground" Value="#9FB3D1" />
+                                    <Setter Property="Content" Value="STEAM PLAY &#x2192; LAUNCHER: OFF" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border x:Name="Bg" Background="#30FFFFFF" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter VerticalAlignment="Center" />
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsChecked" Value="True">
+                                                        <Setter TargetName="Bg" Property="Background" Value="#40FFC928" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsEnabled" Value="False">
+                                                        <Setter Property="Opacity" Value="0.5" />
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter Property="Foreground" Value="#FFC928" />
+                                            <Setter Property="Content" Value="STEAM PLAY &#x2192; LAUNCHER: ON" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ToggleButton.Style>
+                        </ToggleButton>
                         <ToggleButton x:Name="PatchNotesToggle" Content="PATCH NOTES" Foreground="{StaticResource Accent}" FontSize="12" FontWeight="Bold"
                                       Background="Transparent" BorderThickness="0" Padding="12,0" Height="34" Cursor="Hand" Margin="0,0,6,0" />
                         <Button Content="&#x2014;" Style="{StaticResource TitleButton}" Click="Minimize_Click" ToolTip="Minimize" />
