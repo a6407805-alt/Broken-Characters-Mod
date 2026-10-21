@@ -13,10 +13,14 @@ parts, has lazy coworkers and impossible deadlines. A sister character to the Ce
   and it calms down after 6 s without being hit. Every point is **+0.5% damage**.
 - **Burnout** at 100: he slams the desk and freezes for 3 s, plus a random debuff (cripple, slow, no healing, written
   up, paycheck garnished or HR training).
-- **Deadlines** every 40-55 s: move N units (kills), deal with an elite customer, month-end close (damage), approve a PO
-  (open a chest), customer satisfaction survey (don't get hit for 15 s) or a cycle count (scan units with Inventory Audit).
-  - **Met:** bonus pay, -35 stress, a pizza party (+40% attack speed, regen) and maybe an item.
-  - **Missed:** +25 stress and maybe written up (-25% damage).
+- **Busywork pop-ups:** task windows pop up on your screen like ads and stay there, blocking your view, until you
+  finish their minigame. Each open one adds stress every second; finishing one takes off 12 stress and pays a little.
+  They come faster the more stressed you are (and on overtime). Up to 3 at once; the newest (yellow border) takes your keys.
+  - **Parts Counter:** type the 9-digit part number with the number keys.
+  - **RO Sign Off:** press the arrow keys shown for each line, in order.
+  - **Write the Story:** pick the right cause, then the right correction (1, 2 or 3).
+  - **Invoice:** total labor and parts and type it in.
+- The timed combat deadlines from the first version can be turned back on in the config (`CombatDeadlines`).
 
 ## Skills
 

@@ -230,10 +230,17 @@ namespace CarMaxSpecialist
                 Shadowed(new Rect(x + w - pad - 102f * sc, cy, 110f * sc, line), prog + "  " + time, _text);
                 cy += line;
             }
-            else
+            else if (CmxPlugin.CombatDeadlines.Value)
             {
                 _text.fontSize = Mathf.RoundToInt(15f * sc);
                 Shadowed(new Rect(x + pad, cy, w, line), "<color=#9FB3D1>Next deadline in " + Mathf.CeilToInt(Mathf.Max(0f, s.NextIn)) + "s</color>", _text);
+                cy += line;
+            }
+            else
+            {
+                _text.fontSize = Mathf.RoundToInt(15f * sc);
+                int open = CmxTasks.Open;
+                Shadowed(new Rect(x + pad, cy, w, line), open == 0 ? "<color=#9FB3D1>Inbox: all caught up</color>" : "<color=#FF8080><b>Open tasks: " + open + "</b></color>  <color=#9FB3D1>(finish them!)</color>", _text);
                 cy += line;
             }
 

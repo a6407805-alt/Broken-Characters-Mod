@@ -39,6 +39,9 @@ namespace CarMaxSpecialist
         // ---------------------------------------------------------------- config
         public static ConfigEntry<float> HourSeconds, PayPerHour, OvertimeAfter, OvertimePay;
         public static ConfigEntry<float> StressPerHit, StressDecay, StressDamage, BurnoutSeconds;
+        public static ConfigEntry<bool> Tasks, CombatDeadlines;
+        public static ConfigEntry<int> MaxTasks;
+        public static ConfigEntry<float> TaskEveryMin, TaskEveryMax, TaskRelief, TaskNag;
         public static ConfigEntry<float> DeadlineMin, DeadlineMax, DeadlineStressRelief, DeadlineFailStress;
         public static ConfigEntry<float> EmailDamage, AuditDamage, AuditRange, AuditSeconds, PalletDamage, PalletRadius, BackorderChance;
         public static ConfigEntry<float> CoworkerSeconds, LazyChance, DiyStress;
@@ -58,6 +61,7 @@ namespace CarMaxSpecialist
             Application.quitting += CmxAudio.Unload;
             CmxIcons.Folder = Folder("Icons");
             gameObject.AddComponent<CmxHud>();
+            gameObject.AddComponent<CmxTasks>();
 
             RegisterLanguage();
             CreateBuffs();
@@ -81,6 +85,13 @@ namespace CarMaxSpecialist
             StressDecay = Config.Bind("2. Stress", "StressDecayPerSecond", 1.5f, "Stress lost per second after 6 s without being hit (not during overtime).");
             StressDamage = Config.Bind("2. Stress", "DamagePerStress", 0.005f, "Extra damage per point of stress (0.005 = +50% at 100).");
             BurnoutSeconds = Config.Bind("2. Stress", "BurnoutSeconds", 3f, "How long a Burnout freezes him.");
+            Tasks = Config.Bind("3. Tasks", "TaskPopups", true, "Task windows pop up on your screen (part numbers, ROs, stories, invoices) until you finish them.");
+            MaxTasks = Config.Bind("3. Tasks", "MaxOpenTasks", 3, "Most task windows open at once.");
+            TaskEveryMin = Config.Bind("3. Tasks", "SecondsBetweenAtFullStress", 12f, "Gap between new task windows at 100 stress.");
+            TaskEveryMax = Config.Bind("3. Tasks", "SecondsBetweenAtNoStress", 30f, "Gap between new task windows at 0 stress.");
+            TaskRelief = Config.Bind("3. Tasks", "StressReliefPerTask", 12f, "Stress removed per finished task.");
+            TaskNag = Config.Bind("3. Tasks", "StressPerOpenTaskPerSecond", 0.35f, "Stress each open task adds per second.");
+            CombatDeadlines = Config.Bind("3. Tasks", "CombatDeadlines", false, "Also give timed combat deadlines (kill N, deal damage, ...) from the first version.");
             DeadlineMin = Config.Bind("3. Deadlines", "SecondsBetweenMin", 40f, "Shortest gap between deadlines.");
             DeadlineMax = Config.Bind("3. Deadlines", "SecondsBetweenMax", 55f, "Longest gap between deadlines.");
             DeadlineStressRelief = Config.Bind("3. Deadlines", "StressRelief", 35f, "Stress removed when a deadline is met.");
@@ -126,7 +137,7 @@ namespace CarMaxSpecialist
             LanguageAPI.Add(T + "DESCRIPTION",
                 "The Auto Repair Specialist is paid by the hour, not by the job, and there is always more job.<color=#CCD3E0>\r\n\r\n" +
                 "< ! > Your paycheck comes every hour no matter what. After 8 hours it's overtime: more pay, more stress.\r\n\r\n" +
-                "< ! > Stress makes you hit harder, but at 100% you burn out. Meet deadlines to calm down.\r\n\r\n" +
+                "< ! > Stress makes you hit harder, but at 100% you burn out. Clear your task pop-ups (number keys, arrow keys) to calm down.\r\n\r\n" +
                 "< ! > Audit enemies before killing them: tagged units take more damage and sell for gold.\r\n\r\n" +
                 "< ! > Your coworkers might help. They might also be on break.</color>");
             LanguageAPI.Add(T + "OUTRO", "..and so he left, still on the clock.");
@@ -138,7 +149,7 @@ namespace CarMaxSpecialist
                 "Every hour (" + HourSeconds.Value.ToString("0") + "s) pays a <style=cShrine>paycheck</style>, no matter how you're doing. After " + OvertimeAfter.Value.ToString("0") +
                 " hours: <style=cIsUtility>Overtime</style>, x" + OvertimePay.Value.ToString("0.#") + " pay and +15% attack speed, but stress keeps climbing. " +
                 "<style=cIsDamage>Stress</style> builds when customers yell at you (taking damage), and gives <style=cIsDamage>+" + (StressDamage.Value * 100f).ToString("0.#") + "% damage per point</style>. " +
-                "<style=cDeath>At 100: Burnout.</style> Every ~45s a <style=cIsUtility>Deadline</style> appears: meet it for gold, items, a pizza party and less stress; miss it and get written up.");
+                "<style=cDeath>At 100: Burnout.</style> <style=cIsUtility>Busywork</style> pops up on your screen like ads (punch in part numbers, sign off ROs, write the story, total invoices). Open tasks block your view and add stress; finishing one pays a little and <style=cIsHealing>clears your head</style>.");
             LanguageAPI.Add(T + "PRIMARY_NAME", "Per My Last Email");
             LanguageAPI.Add(T + "PRIMARY_DESC", "Fire a passive-aggressive email that <style=cIsDamage>pierces</style> for <style=cIsDamage>" + (EmailDamage.Value * 100f).ToString("0") + "% damage</style>. Every 3rd is <style=cIsDamage>Reply All</style>: three emails at once.");
             LanguageAPI.Add(T + "SECONDARY_NAME", "Inventory Audit");

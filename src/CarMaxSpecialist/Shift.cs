@@ -22,6 +22,7 @@ namespace CarMaxSpecialist
         public bool Overtime;
         public Deadline Kind;
         public int Coworkers, OnBreak;
+        public int OpenTasks; // host: task windows open on the owner's screen
 
         // local only
         public int EmailCount;
@@ -67,7 +68,8 @@ namespace CarMaxSpecialist
             if (Overtime) AddStress(0.4f * dt);
             else if (Time.time - _lastHurt > 6f) AddStress(-CmxPlugin.StressDecay.Value * dt);
 
-            UpdateDeadline(dt);
+            if (OpenTasks > 0) AddStress(OpenTasks * CmxPlugin.TaskNag.Value * dt);
+            if (CmxPlugin.CombatDeadlines.Value || Kind != Deadline.None) UpdateDeadline(dt);
             UpdateCrew();
 
             int stacks = Mathf.Clamp(Mathf.RoundToInt(Stress), 0, 100);
@@ -263,6 +265,14 @@ namespace CarMaxSpecialist
         public void OnPurchase()
         {
             if (Kind == Deadline.Purchase) Progress += 1f;
+        }
+
+        public void ServerTaskDone()
+        {
+            AddStress(-CmxPlugin.TaskRelief.Value);
+            int gold = Scaled(CmxPlugin.PayPerHour.Value * 0.6f);
+            Pay(gold);
+            CmxNet.Say(_body, gameObject, "<color=#7CFF7C>Task closed +$" + gold + "</color>", Style.Small, null);
         }
 
         public void OnScanned(int count)
@@ -501,6 +511,23 @@ namespace CarMaxSpecialist
         {
             NetworkingAPI.RegisterMessageType<CmxStateMessage>();
             NetworkingAPI.RegisterMessageType<CmxSayMessage>();
+            NetworkingAPI.RegisterMessageType<CmxTaskMessage>();
+        }
+
+        public static void TaskDone(CmxShift s)
+        {
+            if (!s) return;
+            if (NetworkServer.active) { s.ServerTaskDone(); return; }
+            try { new CmxTaskMessage { Body = Id(s.gameObject), Done = true }.Send(NetworkDestination.Server); }
+            catch (Exception e) { CmxPlugin.Log.LogDebug("Task sync: " + e.Message); }
+        }
+
+        public static void TaskOpen(CmxShift s, int open)
+        {
+            if (!s) return;
+            if (NetworkServer.active) { s.OpenTasks = open; return; }
+            try { new CmxTaskMessage { Body = Id(s.gameObject), Done = false, Open = (byte)Mathf.Clamp(open, 0, 255) }.Send(NetworkDestination.Server); }
+            catch (Exception e) { CmxPlugin.Log.LogDebug("Task sync: " + e.Message); }
         }
 
         private static NetworkInstanceId Id(GameObject go)
