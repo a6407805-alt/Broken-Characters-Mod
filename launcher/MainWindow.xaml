@@ -1,0 +1,229 @@
+<Window x:Class="BrokenCharactersLauncher.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Broken Characters Launcher"
+        Width="1040" Height="620"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="CanMinimize"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <!-- Palette -->
+        <SolidColorBrush x:Key="Accent" Color="#FFC928" />
+        <SolidColorBrush x:Key="AccentDark" Color="#B8860B" />
+        <SolidColorBrush x:Key="Panel" Color="#C0101420" />
+        <SolidColorBrush x:Key="TextDim" Color="#9FB3D1" />
+
+        <!-- Small flat buttons for the title bar (minimize / close) -->
+        <Style x:Key="TitleButton" TargetType="Button">
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#40FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Secondary text buttons (Retry, Save key) -->
+        <Style x:Key="GhostButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource Accent}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="14,6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="#30FFC928" BorderBrush="{StaticResource Accent}" BorderThickness="1" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#60FFC928" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- The big PLAY button: gold and glowing when ready, grey and flat while updating -->
+        <Style x:Key="PlayButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#1A1205" />
+            <Setter Property="FontSize" Value="34" />
+            <Setter Property="FontWeight" Value="Black" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" CornerRadius="6" BorderThickness="2" BorderBrush="#FFE89A">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="#FFD95A" Offset="0" />
+                                    <GradientStop Color="#E0A410" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FFC928" BlurRadius="28" ShadowDepth="0" Opacity="0.85" />
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="White" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bg" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.97" ScaleY="0.97" CenterX="140" CenterY="35" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <!-- Disabled = updating: grey, no glow -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bg" Property="Background" Value="#55606A7A" />
+                                <Setter TargetName="Bg" Property="BorderBrush" Value="#55FFFFFF" />
+                                <Setter TargetName="Bg" Property="Effect" Value="{x:Null}" />
+                                <Setter Property="Foreground" Value="#88FFFFFF" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Slim gold progress bar -->
+        <Style x:Key="GoldProgress" TargetType="ProgressBar">
+            <Setter Property="Height" Value="10" />
+            <Setter Property="Foreground" Value="{StaticResource Accent}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid>
+                            <Border Background="#40FFFFFF" CornerRadius="5" />
+                            <Border x:Name="PART_Track" CornerRadius="5" />
+                            <Border x:Name="PART_Indicator" HorizontalAlignment="Left" CornerRadius="5" Background="{TemplateBinding Foreground}">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#FFC928" BlurRadius="12" ShadowDepth="0" Opacity="0.8" />
+                                </Border.Effect>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- Rounded, borderless frame with the background art -->
+    <Border CornerRadius="12" BorderBrush="#60FFC928" BorderThickness="1">
+        <Border.Background>
+            <ImageBrush ImageSource="Assets/background.jpg" Stretch="UniformToFill" />
+        </Border.Background>
+
+        <Grid>
+            <!-- Darkening gradient so text stays readable on any art -->
+            <Border CornerRadius="12">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#C0000000" Offset="0" />
+                        <GradientStop Color="#30000000" Offset="0.55" />
+                        <GradientStop Color="#D0000000" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+
+            <Grid Margin="28,0,28,24">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="44" />   <!-- title bar -->
+                    <RowDefinition Height="Auto" /> <!-- logo -->
+                    <RowDefinition Height="*" />    <!-- changelog -->
+                    <RowDefinition Height="Auto" /> <!-- status + progress + PLAY -->
+                </Grid.RowDefinitions>
+
+                <!-- Title bar: drag anywhere on it to move the window -->
+                <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown" Margin="-28,0,-28,0">
+                    <TextBlock Text="BROKEN CHARACTERS LAUNCHER" Foreground="{StaticResource TextDim}" FontSize="12" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="28,0,0,0" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,6,0">
+                        <Button Content="&#x2014;" Style="{StaticResource TitleButton}" Click="Minimize_Click" ToolTip="Minimize" />
+                        <Button Content="&#x2715;" Style="{StaticResource TitleButton}" Click="Close_Click" ToolTip="Close" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Logo -->
+                <StackPanel Grid.Row="1" Margin="0,6,0,14">
+                    <TextBlock Text="BROKEN CHARACTERS" Foreground="White" FontSize="46" FontWeight="Black">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="Black" BlurRadius="12" ShadowDepth="3" Opacity="0.9" />
+                        </TextBlock.Effect>
+                    </TextBlock>
+                    <TextBlock Text="COLLECTION  ·  RISK OF RAIN 2 MOD PACK" Foreground="{StaticResource Accent}" FontSize="15" FontWeight="SemiBold" Margin="3,-4,0,0" />
+                </StackPanel>
+
+                <!-- Changelog panel -->
+                <Border Grid.Row="2" Background="{StaticResource Panel}" CornerRadius="8" Padding="18,14" Width="470" HorizontalAlignment="Left">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="LATEST CHANGES" Foreground="{StaticResource Accent}" FontSize="13" FontWeight="Bold" Margin="0,0,0,8" />
+                        <TextBlock DockPanel.Dock="Bottom" x:Name="VersionText" Foreground="{StaticResource TextDim}" FontSize="11" Margin="0,8,0,0" Text="Installed: -" />
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <TextBlock x:Name="ChangelogText" Foreground="#E6EAF2" FontSize="13" TextWrapping="Wrap" LineHeight="20" Text="Loading release notes..." />
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+
+                <!-- Friends-only extras key (only shown when no key is saved yet) -->
+                <Border Grid.Row="2" x:Name="ExtrasPanel" Visibility="Collapsed" Background="{StaticResource Panel}" CornerRadius="8" Padding="16,12"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="340">
+                    <StackPanel>
+                        <TextBlock Text="FRIENDS-ONLY EXTRAS" Foreground="{StaticResource Accent}" FontSize="12" FontWeight="Bold" />
+                        <TextBlock Text="Got an extras key? Paste it here once (Ctrl+V)." Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,8" />
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" x:Name="SaveKeyButton" Content="Save" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="SaveKey_Click" />
+                            <PasswordBox x:Name="ExtrasKeyBox" Height="30" VerticalContentAlignment="Center" Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" />
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Bottom bar: status, progress and PLAY -->
+                <Grid Grid.Row="3" Margin="0,18,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="300" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,28,0">
+                        <DockPanel Margin="0,0,0,8">
+                            <Button DockPanel.Dock="Right" x:Name="RetryButton" Content="Retry" Style="{StaticResource GhostButton}" Visibility="Collapsed" Click="Retry_Click" />
+                            <TextBlock DockPanel.Dock="Right" x:Name="ProgressText" Foreground="{StaticResource TextDim}" FontSize="13" Margin="10,0,10,0" VerticalAlignment="Center" />
+                            <TextBlock x:Name="StatusText" Text="Starting..." Foreground="White" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                        <ProgressBar x:Name="DownloadProgress" Style="{StaticResource GoldProgress}" Minimum="0" Maximum="100" Value="0" />
+                    </StackPanel>
+
+                    <Button Grid.Column="1" x:Name="PlayButton" Content="PLAY" Style="{StaticResource PlayButton}" Height="78" IsEnabled="False" Click="PlayButton_Click" />
+                </Grid>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

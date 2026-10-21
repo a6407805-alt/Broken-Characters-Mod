@@ -1,0 +1,511 @@
+// ============================================================================================================
+//  Broken Characters Launcher - MainWindow
+//
+//  What it does, in order:
+//    1. Reads the installed version from %LOCALAPPDATA%\BrokenCharacters\Launcher\version.txt
+//    2. Asks the GitHub API for the latest release of the mod pack (and the recent commits for the changelog)
+//    3. If GitHub has a newer build: downloads Broken-Characters-Collection.zip with a live progress bar,
+//       extracts it (overwriting the old copy) and runs the pack's own install.ps1, which puts the mods into
+//       the Risk of Rain 2 folder and fetches the libraries (BepInEx, R2API, ...) and the friends-only extras
+//    4. Writes the new version to version.txt and lights up PLAY
+//    5. PLAY launches Risk of Rain 2 through Steam and closes the launcher
+//
+//  Why the version is NOT the release tag: the build server republishes every build under the same tag,
+//  "latest", so the tag never changes. Each release is created from one commit, and the release's
+//  target_commitish is that commit's SHA, which is unique per build, so that is what version.txt stores.
+// ============================================================================================================
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.IO.Compression;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Input;
+
+namespace BrokenCharactersLauncher
+{
+    public partial class MainWindow : Window
+    {
+        // ------------------------------------------------------------------ settings
+
+        /// <summary>The GitHub repository the pack is published from (owner/name).</summary>
+        private const string Repo = "a6407805-alt/Broken-Characters-Mod";
+
+        /// <summary>The release asset that holds the whole pack.</summary>
+        private const string AssetName = "Broken-Characters-Collection.zip";
+
+        /// <summary>Steam's URL for Risk of Rain 2 (app id 632360).</summary>
+        private const string SteamLaunchUri = "steam://rungameid/632360";
+
+        // Where the launcher keeps its own files: %LOCALAPPDATA%\BrokenCharacters\Launcher
+        private static readonly string LauncherDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BrokenCharacters", "Launcher");
+        private static readonly string VersionFile = Path.Combine(LauncherDir, "version.txt");
+        private static readonly string PackDir = Path.Combine(LauncherDir, "pack");
+        private static readonly string DownloadFile = Path.Combine(LauncherDir, "download.zip.part");
+
+        // The installer (install.ps1) keeps the extras key here; the launcher shares the same files.
+        private static readonly string ExtrasDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BrokenCharacters");
+        private static readonly string ExtrasKeyFile = Path.Combine(ExtrasDir, "extras-key.txt");
+        private static readonly string ExtrasSkipFile = Path.Combine(ExtrasDir, "extras-skip.txt");
+
+        /// <summary>
+        /// One HttpClient for the launcher's whole life (creating one per request can exhaust sockets).
+        /// GitHub's API rejects requests without a User-Agent, so one is always sent. Timeouts are handled
+        /// per request with CancellationTokens, so the client itself never times out a long download.
+        /// </summary>
+        private static readonly HttpClient Http = CreateHttpClient();
+
+        private static HttpClient CreateHttpClient()
+        {
+            var handler = new HttpClientHandler
+            {
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+                AllowAutoRedirect = true // release downloads redirect to GitHub's file storage
+            };
+            var client = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+            client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("BrokenCharactersLauncher", "1.0"));
+            return client;
+        }
+
+        /// <summary>What the GitHub API tells us about the latest release.</summary>
+        private sealed record ReleaseInfo(string Version, string DownloadUrl, long Size, DateTimeOffset Published);
+
+        /// <summary>The release we found on this check (kept so "Save" on the extras key can reinstall it).</summary>
+        private ReleaseInfo? _remote;
+
+        /// <summary>True while a check or update is running, so buttons can't start a second one.</summary>
+        private bool _busy;
+
+        public MainWindow()
+        {
+            InitializeComponent();
+        }
+
+        // ================================================================== startup
+
+        private async void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            // Offer the extras key box only if the player has never entered (or declined) one.
+            ExtrasPanel.Visibility = File.Exists(ExtrasKeyFile) ? Visibility.Collapsed : Visibility.Visible;
+
+            // The changelog loads on its own; if it fails the launcher still works.
+            _ = LoadChangelogAsync();
+
+            await CheckAndUpdateAsync();
+        }
+
+        /// <summary>The main flow: compare versions, update if needed, then enable PLAY.</summary>
+        private async Task CheckAndUpdateAsync(bool forceInstall = false)
+        {
+            if (_busy) return;
+            _busy = true;
+            RetryButton.Visibility = Visibility.Collapsed;
+            PlayButton.IsEnabled = false; // never playable while we might be changing files
+            SetProgress(0, indeterminate: true);
+
+            try
+            {
+                string? local = ReadLocalVersion();
+                ShowInstalledVersion(local);
+                SetStatus("Checking for updates...");
+
+                // ---- 1. Ask GitHub what the newest build is
+                try
+                {
+                    _remote = await GetLatestReleaseAsync();
+                }
+                catch (Exception ex) when (IsNetworkError(ex))
+                {
+                    // Offline or GitHub is down. If something is installed, let them play it anyway.
+                    if (local != null)
+                    {
+                        Ready("Can't reach GitHub right now. Playing the version you have.");
+                        return;
+                    }
+                    Fail("Can't reach GitHub to download the pack. Check your internet and press Retry.", ex);
+                    return;
+                }
+
+                // ---- 2. Compare
+                bool installed = local != null && File.Exists(Path.Combine(PackDir, "install.ps1"));
+                if (!forceInstall && installed && string.Equals(local, _remote.Version, StringComparison.OrdinalIgnoreCase))
+                {
+                    Ready("Up to date. Have fun!");
+                    return;
+                }
+
+                // ---- 3. Update (download, extract, install), unless the pack is current and only the extras changed
+                if (!installed || !string.Equals(local, _remote.Version, StringComparison.OrdinalIgnoreCase))
+                    await DownloadAndExtractAsync(_remote);
+                await RunInstallerAsync();
+
+                // ---- 4. Remember what we installed
+                WriteLocalVersion(_remote.Version);
+                ShowInstalledVersion(_remote.Version);
+                Ready("Update complete. Have fun!");
+            }
+            catch (Exception ex)
+            {
+                Fail("Update failed: " + ex.Message, ex);
+            }
+            finally
+            {
+                _busy = false;
+            }
+        }
+
+        // ================================================================== version checking
+
+        /// <summary>Reads version.txt; null if the pack has never been installed by the launcher.</summary>
+        private static string? ReadLocalVersion()
+        {
+            try
+            {
+                if (!File.Exists(VersionFile)) return null;
+                string v = File.ReadAllText(VersionFile).Trim();
+                return v.Length > 0 ? v : null;
+            }
+            catch (IOException) { return null; }
+            catch (UnauthorizedAccessException) { return null; }
+        }
+
+        private static void WriteLocalVersion(string version)
+        {
+            Directory.CreateDirectory(LauncherDir);
+            File.WriteAllText(VersionFile, version);
+        }
+
+        /// <summary>
+        /// GET /repos/{repo}/releases/latest. The version is the commit the release was built from
+        /// (target_commitish), and the download URL is the pack asset's browser_download_url.
+        /// </summary>
+        private static async Task<ReleaseInfo> GetLatestReleaseAsync()
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Repo}/releases/latest");
+            request.Headers.Accept.ParseAdd("application/vnd.github+json");
+
+            using HttpResponseMessage response = await Http.SendAsync(request, cts.Token);
+            if (response.StatusCode == HttpStatusCode.Forbidden || (int)response.StatusCode == 429)
+                throw new HttpRequestException("GitHub is rate-limiting this PC (60 checks an hour). Try again in a few minutes.");
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                throw new InvalidOperationException("No release found for " + Repo + ".");
+            response.EnsureSuccessStatusCode();
+
+            await using Stream body = await response.Content.ReadAsStreamAsync(cts.Token);
+            using JsonDocument json = await JsonDocument.ParseAsync(body, cancellationToken: cts.Token);
+            JsonElement root = json.RootElement;
+
+            // The commit SHA identifies the build. Fall back to the publish date if it's ever missing.
+            string version = root.TryGetProperty("target_commitish", out JsonElement sha) && sha.GetString() is { Length: > 0 } s
+                ? s
+                : root.GetProperty("published_at").GetString() ?? "unknown";
+            DateTimeOffset published = root.TryGetProperty("published_at", out JsonElement p) && p.TryGetDateTimeOffset(out DateTimeOffset d)
+                ? d : DateTimeOffset.MinValue;
+
+            foreach (JsonElement asset in root.GetProperty("assets").EnumerateArray())
+            {
+                if (asset.GetProperty("name").GetString() != AssetName) continue;
+                return new ReleaseInfo(
+                    version,
+                    asset.GetProperty("browser_download_url").GetString() ?? throw new InvalidOperationException("The release has no download link."),
+                    asset.GetProperty("size").GetInt64(),
+                    published);
+            }
+            throw new InvalidOperationException($"The latest release doesn't contain {AssetName}.");
+        }
+
+        // ================================================================== changelog
+
+        /// <summary>
+        /// Shows the last 12 commit messages as the changelog. The release notes themselves are the same boilerplate
+        /// every build, so the commit history is where the real "what's new" lives.
+        /// </summary>
+        private async Task LoadChangelogAsync()
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Repo}/commits?per_page=12");
+                request.Headers.Accept.ParseAdd("application/vnd.github+json");
+                using HttpResponseMessage response = await Http.SendAsync(request, cts.Token);
+                response.EnsureSuccessStatusCode();
+
+                await using Stream body = await response.Content.ReadAsStreamAsync(cts.Token);
+                using JsonDocument json = await JsonDocument.ParseAsync(body, cancellationToken: cts.Token);
+
+                var sb = new StringBuilder();
+                foreach (JsonElement c in json.RootElement.EnumerateArray())
+                {
+                    JsonElement commit = c.GetProperty("commit");
+                    string message = commit.GetProperty("message").GetString() ?? "";
+                    string firstLine = message.Split('\n')[0].Trim();
+                    if (firstLine.Length == 0 || firstLine.StartsWith("Merge ", StringComparison.Ordinal)) continue;
+
+                    string date = commit.GetProperty("author").TryGetProperty("date", out JsonElement de) && de.TryGetDateTimeOffset(out DateTimeOffset dt)
+                        ? dt.ToLocalTime().ToString("MMM d") : "";
+                    sb.Append("•  ").Append(firstLine);
+                    if (date.Length > 0) sb.Append("   (").Append(date).Append(')');
+                    sb.AppendLine().AppendLine();
+                }
+                ChangelogText.Text = sb.Length > 0 ? sb.ToString().TrimEnd() : "No changes listed.";
+            }
+            catch (Exception ex) when (IsNetworkError(ex) || ex is JsonException || ex is KeyNotFoundException || ex is InvalidOperationException)
+            {
+                ChangelogText.Text = "Couldn't load the changelog (offline?). The launcher still works.";
+            }
+        }
+
+        // ================================================================== downloading & extracting
+
+        /// <summary>
+        /// Downloads the pack zip to a temporary ".part" file while updating the progress bar, then extracts it into
+        /// the launcher's pack folder. The download only replaces the old pack once it has fully arrived, so a dropped
+        /// connection never leaves a half-written pack behind.
+        /// </summary>
+        private async Task DownloadAndExtractAsync(ReleaseInfo release)
+        {
+            Directory.CreateDirectory(LauncherDir);
+            SetStatus("Downloading the latest build...");
+            SetProgress(0, indeterminate: false);
+
+            // Progress<T> runs its callback on the UI thread (it captures the dispatcher's context),
+            // so it can touch the progress bar and text directly.
+            var progress = new Progress<(long Done, long Total)>(p =>
+            {
+                double percent = p.Total > 0 ? p.Done * 100.0 / p.Total : 0;
+                DownloadProgress.Value = percent;
+                ProgressText.Text = $"{p.Done / 1048576.0:0.0} / {p.Total / 1048576.0:0.0} MB";
+            });
+
+            await DownloadFileAsync(release.DownloadUrl, DownloadFile, release.Size, progress);
+
+            // ---- Extract
+            SetStatus("Unpacking...");
+            SetProgress(0, indeterminate: true);
+            ProgressText.Text = "";
+            await Task.Run(() =>
+            {
+                // Start from an empty folder so files removed from the pack don't linger and get reinstalled.
+                if (Directory.Exists(PackDir)) Directory.Delete(PackDir, recursive: true);
+                Directory.CreateDirectory(PackDir);
+                // overwriteFiles: true replaces anything already there. ExtractToDirectory also refuses entries
+                // that try to escape the folder (e.g. "..\..\file"), so a bad zip can't write elsewhere.
+                ZipFile.ExtractToDirectory(DownloadFile, PackDir, overwriteFiles: true);
+                File.Delete(DownloadFile);
+            });
+        }
+
+        /// <summary>
+        /// Streams a URL to a file in 80 KB chunks, reporting (bytes done, total bytes) as it goes.
+        /// A "stall" timeout cancels if no data arrives for 30 seconds, without limiting how long a slow download may take.
+        /// </summary>
+        private static async Task DownloadFileAsync(string url, string destination, long expectedSize, IProgress<(long, long)> progress)
+        {
+            using var stall = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+            // ResponseHeadersRead: start reading as soon as headers arrive instead of buffering 70 MB in memory.
+            using HttpResponseMessage response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, stall.Token);
+            response.EnsureSuccessStatusCode();
+            long total = response.Content.Headers.ContentLength ?? expectedSize;
+
+            await using Stream source = await response.Content.ReadAsStreamAsync(stall.Token);
+            await using (var target = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+            {
+                var buffer = new byte[81920];
+                long done = 0;
+                long lastReport = 0;
+                int read;
+                while ((read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), stall.Token)) > 0)
+                {
+                    await target.WriteAsync(buffer.AsMemory(0, read), stall.Token);
+                    done += read;
+                    stall.CancelAfter(TimeSpan.FromSeconds(30)); // data arrived: reset the stall timer
+
+                    // Report about every 256 KB so the UI isn't flooded with updates.
+                    if (done - lastReport >= 262144 || done == total)
+                    {
+                        lastReport = done;
+                        progress.Report((done, total));
+                    }
+                }
+                progress.Report((done, total));
+
+                if (total > 0 && done != total)
+                    throw new IOException($"The download was cut short ({done:N0} of {total:N0} bytes). Press Retry.");
+            }
+        }
+
+        // ================================================================== installing into the game
+
+        /// <summary>
+        /// Runs the pack's own install.ps1 (the same one INSTALL.bat uses). It finds the Risk of Rain 2 folder through
+        /// Steam, puts BepInEx and the libraries in place, copies the mods into BepInEx\plugins and adds the
+        /// friends-only extras if an extras key is saved. Its output lines are shown as the status text.
+        /// </summary>
+        private async Task RunInstallerAsync()
+        {
+            string script = Path.Combine(PackDir, "install.ps1");
+            if (!File.Exists(script)) throw new FileNotFoundException("The pack has no install.ps1.", script);
+
+            SetStatus("Installing into Risk of Rain 2...");
+            SetProgress(0, indeterminate: true);
+
+            // Without a saved key or a "skip" choice, install.ps1 would stop and ask for one in a console nobody can
+            // see. The launcher has its own key box instead, so in that case the extras are skipped for now.
+            bool askedAboutExtras = File.Exists(ExtrasKeyFile) || File.Exists(ExtrasSkipFile);
+            string args = $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\"" + (askedAboutExtras ? "" : " -SkipExtras");
+
+            var psi = new ProcessStartInfo("powershell.exe", args)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,            // no console window; we show progress ourselves
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = PackDir
+            };
+
+            using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            var errors = new StringBuilder();
+            process.OutputDataReceived += (_, e) =>
+            {
+                if (string.IsNullOrWhiteSpace(e.Data)) return;
+                string line = e.Data.Trim();
+                Dispatcher.InvokeAsync(() => SetStatus(line)); // events arrive on a background thread
+            };
+            process.ErrorDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) lock (errors) errors.AppendLine(e.Data); };
+
+            try
+            {
+                process.Start();
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                throw new InvalidOperationException("Windows PowerShell couldn't be started: " + ex.Message, ex);
+            }
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode != 0)
+            {
+                string detail = errors.ToString().Trim();
+                throw new InvalidOperationException("the installer stopped (code " + process.ExitCode + ")" +
+                    (detail.Length > 0 ? ": " + detail.Split('\n')[0] : ". See install_log.txt in " + PackDir));
+            }
+        }
+
+        // ================================================================== PLAY
+
+        /// <summary>
+        /// Hands the steam:// link to Windows, which passes it to Steam, then closes the launcher.
+        /// UseShellExecute must be true: on .NET 8, Process.Start with a URL and the default false fails.
+        /// </summary>
+        private void PlayButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(SteamLaunchUri) { UseShellExecute = true });
+                Application.Current.Shutdown(); // job done; Steam takes it from here
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                // Happens when Steam isn't installed (nothing handles steam:// links).
+                MessageBox.Show(this, "Couldn't start Steam: " + ex.Message + "\n\nIs Steam installed?",
+                    "Broken Characters Launcher", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        // ================================================================== extras key
+
+        /// <summary>Saves the friends-only extras key where install.ps1 looks for it, then reinstalls to add the extras.</summary>
+        private async void SaveKey_Click(object sender, RoutedEventArgs e)
+        {
+            string key = ExtrasKeyBox.Password.Trim();
+            if (key.Length == 0) return;
+            try
+            {
+                Directory.CreateDirectory(ExtrasDir);
+                File.WriteAllText(ExtrasKeyFile, key);
+                if (File.Exists(ExtrasSkipFile)) File.Delete(ExtrasSkipFile);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                Fail("Couldn't save the key: " + ex.Message, ex);
+                return;
+            }
+            ExtrasKeyBox.Clear();
+            ExtrasPanel.Visibility = Visibility.Collapsed;
+            await CheckAndUpdateAsync(forceInstall: true); // reruns install.ps1, which now downloads the extras
+        }
+
+        // ================================================================== UI helpers
+
+        private void Ready(string message)
+        {
+            SetStatus(message);
+            SetProgress(100, indeterminate: false);
+            ProgressText.Text = "";
+            PlayButton.IsEnabled = true;  // light it up
+            PlayButton.Focus();           // Enter / Space now plays
+        }
+
+        private void Fail(string message, Exception ex)
+        {
+            Debug.WriteLine(ex);
+            SetStatus(message);
+            SetProgress(0, indeterminate: false);
+            ProgressText.Text = "";
+            RetryButton.Visibility = Visibility.Visible;
+            // If an older build is installed, it can still be played.
+            PlayButton.IsEnabled = ReadLocalVersion() != null;
+        }
+
+        private void SetStatus(string text) => StatusText.Text = text;
+
+        private void SetProgress(double percent, bool indeterminate)
+        {
+            DownloadProgress.IsIndeterminate = indeterminate;
+            DownloadProgress.Value = percent;
+        }
+
+        private void ShowInstalledVersion(string? version)
+        {
+            VersionText.Text = version == null
+                ? "Installed: nothing yet"
+                : "Installed build: " + (version.Length > 7 ? version.Substring(0, 7) : version);
+        }
+
+        /// <summary>Errors that mean "the network didn't work", as opposed to bugs.</summary>
+        private static bool IsNetworkError(Exception ex) =>
+            ex is HttpRequestException || ex is TaskCanceledException || ex is OperationCanceledException || ex is IOException;
+
+        private async void Retry_Click(object sender, RoutedEventArgs e) => await CheckAndUpdateAsync();
+
+        // ---- borderless window chrome
+
+        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ButtonState == MouseButtonState.Pressed) DragMove();
+        }
+
+        private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+        private void Close_Click(object sender, RoutedEventArgs e)
+        {
+            if (_busy && MessageBox.Show(this, "An update is running. Close anyway?", "Broken Characters Launcher",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            Application.Current.Shutdown();
+        }
+    }
+}

@@ -110,14 +110,33 @@ jobs:
             exit 1
           }
 
+  launcher:
+    # The Warframe-style launcher (launcher/): a self-contained Windows exe. A failure here never blocks the pack.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build Broken-Characters-Launcher.exe
+        run: dotnet publish launcher/BrokenCharactersLauncher.csproj -c Release -o launcher-out -nologo
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Launcher
+          path: launcher-out/Broken-Characters-Launcher.exe
+
   publish:
-    needs: test-installer
-    if: github.event_name != 'pull_request'
+    needs: [test-installer, launcher]
+    if: always() && github.event_name != 'pull_request' && needs.test-installer.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: Broken-Characters-Collection
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: Launcher
       - name: Publish as the latest release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -125,7 +144,9 @@ jobs:
           gh release delete latest --yes --cleanup-tag -R "$GITHUB_REPOSITORY" || true
           # the old name is published too, so older "Update Duelist.bat" copies keep working
           cp Broken-Characters-Collection.zip Duelist-Install.zip
-          gh release create latest Broken-Characters-Collection.zip Duelist-Install.zip \
+          files="Broken-Characters-Collection.zip Duelist-Install.zip"
+          [ -f Broken-Characters-Launcher.exe ] && files="$files Broken-Characters-Launcher.exe"
+          gh release create latest $files \
             --title "Broken Characters Collection (latest build)" \
             --notes "Built automatically from commit ${GITHUB_SHA::7}. Download Broken-Characters-Collection.zip, extract it and run INSTALL.bat, or run Update Broken Characters.bat if you already have it. (Duelist-Install.zip is the same file under its old name.)" \
             --target "$GITHUB_SHA" --latest -R "$GITHUB_REPOSITORY"
