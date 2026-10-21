@@ -44,6 +44,9 @@ namespace BrokenCharactersLauncher
         /// <summary>The release asset that holds the whole pack.</summary>
         private const string AssetName = "Broken-Characters-Mod.zip";
 
+        /// <summary>The pack's earlier name, still accepted if a release only has that one.</summary>
+        private const string LegacyAssetName = "Broken-Characters-Collection.zip";
+
         /// <summary>Steam's URL for Risk of Rain 2 (app id 632360).</summary>
         private const string SteamLaunchUri = "steam://rungameid/632360";
 
@@ -238,9 +241,10 @@ namespace BrokenCharactersLauncher
             DateTimeOffset published = root.TryGetProperty("published_at", out JsonElement p) && p.TryGetDateTimeOffset(out DateTimeOffset d)
                 ? d : DateTimeOffset.MinValue;
 
+            foreach (string wanted in new[] { AssetName, LegacyAssetName })
             foreach (JsonElement asset in root.GetProperty("assets").EnumerateArray())
             {
-                if (asset.GetProperty("name").GetString() != AssetName) continue;
+                if (asset.GetProperty("name").GetString() != wanted) continue;
                 return new ReleaseInfo(
                     version,
                     asset.GetProperty("browser_download_url").GetString() ?? throw new InvalidOperationException("The release has no download link."),
