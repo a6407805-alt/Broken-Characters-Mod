@@ -47,6 +47,9 @@ namespace BrokenCharactersLauncher
         /// <summary>The pack's earlier name, still accepted if a release only has that one.</summary>
         private const string LegacyAssetName = "Broken-Characters-Collection.zip";
 
+        /// <summary>The launcher program itself, as published on the release.</summary>
+        private const string LauncherAssetName = "Broken-Characters-Mod.exe";
+
         /// <summary>Steam's URL for Risk of Rain 2 (app id 632360).</summary>
         private const string SteamLaunchUri = "steam://rungameid/632360";
 
@@ -83,7 +86,7 @@ namespace BrokenCharactersLauncher
         }
 
         /// <summary>What the GitHub API tells us about the latest release.</summary>
-        private sealed record ReleaseInfo(string Version, string DownloadUrl, long Size, DateTimeOffset Published);
+        private sealed record ReleaseInfo(string Version, string DownloadUrl, long Size, DateTimeOffset Published, long LauncherSize = 0);
 
         /// <summary>The release we found on this check (kept so "Save" on the extras key can reinstall it).</summary>
         private ReleaseInfo? _remote;
@@ -244,6 +247,13 @@ namespace BrokenCharactersLauncher
             DateTimeOffset published = root.TryGetProperty("published_at", out JsonElement p) && p.TryGetDateTimeOffset(out DateTimeOffset d)
                 ? d : DateTimeOffset.MinValue;
 
+            // The launcher program itself is published too; its size tells the REFRESH button if this copy is out of date.
+            long launcherSize = 0;
+            foreach (JsonElement asset in root.GetProperty("assets").EnumerateArray())
+            {
+                if (asset.GetProperty("name").GetString() == LauncherAssetName) launcherSize = asset.GetProperty("size").GetInt64();
+            }
+
             foreach (string wanted in new[] { AssetName, LegacyAssetName })
             foreach (JsonElement asset in root.GetProperty("assets").EnumerateArray())
             {
@@ -252,7 +262,8 @@ namespace BrokenCharactersLauncher
                     version,
                     asset.GetProperty("browser_download_url").GetString() ?? throw new InvalidOperationException("The release has no download link."),
                     asset.GetProperty("size").GetInt64(),
-                    published);
+                    published,
+                    launcherSize);
             }
             throw new InvalidOperationException($"The latest release doesn't contain {AssetName}.");
         }
@@ -610,6 +621,59 @@ namespace BrokenCharactersLauncher
         }
 
         // ================================================================== creator tools
+
+        /// <summary>
+        /// REFRESH button: reloads the character/map cards and patch notes, checks GitHub for a newer pack (and installs
+        /// it), and tells the player if this launcher program itself is older than the one on the release.
+        /// </summary>
+        private async void Refresh_Click(object sender, RoutedEventArgs e)
+        {
+            if (_busy || PreviewMode) return;
+            RefreshButton.IsEnabled = false;
+            try
+            {
+                Task roster = RefreshRosterFromGitHubAsync();
+                Task changelog = LoadChangelogAsync();
+                await CheckAndUpdateAsync();
+                await roster;
+                await changelog;
+                OfferNewLauncher();
+            }
+            finally
+            {
+                RefreshButton.IsEnabled = true;
+            }
+        }
+
+        /// <summary>
+        /// The launcher exe does not replace itself, so compare it with the one on the latest release (by size) and, if
+        /// they differ, offer to open the release page where the new Broken-Characters-Mod.exe is.
+        /// </summary>
+        private void OfferNewLauncher()
+        {
+            long mine;
+            try
+            {
+                string? me = Environment.ProcessPath;
+                if (me == null) return;
+                mine = new FileInfo(me).Length;
+            }
+            catch (IOException) { return; }
+            catch (UnauthorizedAccessException) { return; }
+
+            if (_remote == null || _remote.LauncherSize <= 0 || _remote.LauncherSize == mine) return;
+
+            SetStatus("A newer launcher is available. The pack itself is up to date.");
+            MessageBoxResult answer = MessageBox.Show(this,
+                "A newer launcher is available.\n\nOpen the download page? Close this launcher, then replace it with the new Broken-Characters-Mod.exe.",
+                "Broken Characters Mod", MessageBoxButton.YesNo, MessageBoxImage.Information);
+            if (answer != MessageBoxResult.Yes) return;
+            try
+            {
+                Process.Start(new ProcessStartInfo("https://github.com/" + Repo + "/releases/latest") { UseShellExecute = true });
+            }
+            catch (System.ComponentModel.Win32Exception ex) { Debug.WriteLine("Could not open the release page: " + ex.Message); }
+        }
 
         /// <summary>Opens the "publish my mod" window (see PublishWindow.xaml.cs / Publisher.cs).</summary>
         private void Creator_Click(object sender, RoutedEventArgs e)
