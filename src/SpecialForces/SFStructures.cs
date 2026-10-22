@@ -74,7 +74,7 @@ namespace SpecialForces
             cb.baseNameToken = Tokens.Prefix + name.ToUpperInvariant() + "_NAME";
             cb.subtitleNameToken = "";
             cb.bodyFlags = CharacterBody.BodyFlags.IgnoreFallDamage | CharacterBody.BodyFlags.Mechanical | CharacterBody.BodyFlags.ImmuneToExecutes |
-                           CharacterBody.BodyFlags.IgnoreKnockback | CharacterBody.BodyFlags.ImmuneToGoo | CharacterBody.BodyFlags.ImmuneToLava;
+                           SFUtil.IgnoreKnockback | CharacterBody.BodyFlags.ImmuneToGoo | CharacterBody.BodyFlags.ImmuneToLava;
             cb.baseMaxHealth = health;
             cb.levelMaxHealth = health * 0.3f;
             cb.baseArmor = armor;

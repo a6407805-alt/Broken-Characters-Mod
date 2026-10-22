@@ -55,7 +55,7 @@ namespace SpecialForces
             body.isChampion = true;
             body.hullClassification = HullClassification.BeetleQueen;
             body.bodyColor = new Color(0.45f, 0.75f, 1f);
-            body.bodyFlags |= CharacterBody.BodyFlags.ImmuneToExecutes | CharacterBody.BodyFlags.IgnoreFallDamage | CharacterBody.BodyFlags.IgnoreKnockback;
+            body.bodyFlags |= CharacterBody.BodyFlags.ImmuneToExecutes | CharacterBody.BodyFlags.IgnoreFallDamage | SFUtil.IgnoreKnockback;
             body.portraitIcon = IconFactory.Solid(new Color(0.25f, 0.4f, 0.6f));
             var motor = BodyPrefab.GetComponent<CharacterMotor>();
             if (motor) motor.mass = 5000f;

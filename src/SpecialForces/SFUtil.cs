@@ -40,6 +40,11 @@ namespace SpecialForces
 
         public static T GetStatic<T>(Type type, string field) where T : class => type.GetField(field, AnyStatic)?.GetValue(null) as T;
 
+        // BodyFlags.IgnoreKnockback is newer than the NuGet GameLibs the pack builds against: look it up by name at
+        // runtime, so it still applies on the current game and is just skipped (0) on one that lacks it.
+        public static readonly CharacterBody.BodyFlags IgnoreKnockback =
+            Enum.TryParse("IgnoreKnockback", out CharacterBody.BodyFlags f) ? f : 0;
+
         public static void SetStatic(Type type, string field, object value)
         {
             FieldInfo info = type.GetField(field, AnyStatic);
