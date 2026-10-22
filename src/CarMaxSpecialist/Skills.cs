@@ -22,7 +22,7 @@ namespace CarMaxSpecialist
         private bool _crit;
 
         private static readonly float[] LightMult = { 0.6f, 0.8f, 1.2f, 2.4f };
-        private static readonly float[] HeavyMult = { 1f, 1.3f, 1.8f, 2.5f };
+        private static readonly float[] HeavyMult = { 1f, 1.2f, 1.5f, 2f };
 
         public override void OnEnter()
         {
@@ -30,8 +30,8 @@ namespace CarMaxSpecialist
             CmxShift shift = GetComponent<CmxShift>();
             if (isAuthority) Step = shift ? shift.NextStep(Heavy) : 0;
             bool last = Step == 3;
-            float baseDur = Heavy ? (last ? 1.0f : 0.6f) : (last ? 0.62f : 0.32f);
-            _duration = baseDur / Mathf.Max(0.1f, attackSpeedStat);
+            float baseDur = Heavy ? (last ? 1.6f : 0.8f) : (last ? 0.62f : 0.32f);
+            _duration = baseDur / Mathf.Clamp(attackSpeedStat, 0.1f, Heavy ? 1.5f : 4f);
 
             Ray aim = GetAimRay();
             StartAimMode(aim, 2f, false);
@@ -137,7 +137,7 @@ namespace CarMaxSpecialist
                     {
                         CmxHud.Bubble(transform, transform.position, "<color=#FFCA26>TOTALED.</color>", Style.Small);
                         Blast(at, 9f, dmg, 3000f, fly, 8f, true);
-                        Blast(farAt, 15f, damageStat * CmxPlugin.HeavyDamage.Value * 3f, 5000f, building, 10f, true);
+                        Blast(farAt, 15f, damageStat * CmxPlugin.HeavyDamage.Value * 2f, 5000f, building, 10f, true);
                     }
                     break;
                 }

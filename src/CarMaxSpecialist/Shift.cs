@@ -37,7 +37,7 @@ namespace CarMaxSpecialist
         {
             int h = heavy ? 1 : 0;
             float now = Time.time;
-            if (now - _stepT[h] > (heavy ? 2.2f : 1.3f)) _step[h] = 0;
+            if (now - _stepT[h] > (heavy ? 4.5f : 1.3f)) _step[h] = 0;
             int s = _step[h];
             _step[h] = (s + 1) % 4;
             _stepT[h] = now + (s == 3 ? 0.4f : 0f);
