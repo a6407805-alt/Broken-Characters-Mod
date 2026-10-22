@@ -33,6 +33,7 @@ namespace CarMaxSpecialist
         {
             if (string.IsNullOrEmpty(text)) return;
             if (CmxPlugin.Bubbles != null && !CmxPlugin.Bubbles.Value && style != Style.Small) return;
+            if (style != Style.Small) CmxTts.Say(text);
             if (Bubs.Count > 40) Bubs.RemoveAt(0);
             Bubs.Add(new Bub { Anchor = anchor, Pos = pos, Text = text, Style = style, Born = Time.unscaledTime, Life = style == Style.Small ? 1.8f : 3.2f });
         }
@@ -40,6 +41,7 @@ namespace CarMaxSpecialist
         public static void Banner(string text, float seconds)
         {
             _banner = text;
+            CmxTts.Say(text);
             _bannerBorn = Time.unscaledTime;
             _bannerUntil = Time.unscaledTime + seconds;
         }
@@ -354,18 +356,88 @@ namespace CarMaxSpecialist
             {
                 CharacterModel.RendererInfo ri = _cm.baseRendererInfos[i];
                 if (!ri.renderer) continue;
-                if (ri.renderer.name.IndexOf("gun", StringComparison.OrdinalIgnoreCase) >= 0) { ri.renderer.forceRenderingOff = true; continue; }
+                if (!CmxPlugin.AudiModel && ri.renderer.name.IndexOf("gun", StringComparison.OrdinalIgnoreCase) >= 0) { ri.renderer.forceRenderingOff = true; continue; }
                 Material src = ri.defaultMaterial;
                 if (!src || Mine.Contains(src)) continue;
                 if (!Tinted.TryGetValue(src, out Material t) || !t)
                 {
                     t = new Material(src) { name = src.name + "_CarMax" };
-                    if (t.HasProperty("_Color")) t.SetColor("_Color", src.GetColor("_Color") * Shirt);
+                    if (CmxPlugin.AudiModel) Blue(src, t);
+                    else if (t.HasProperty("_Color")) t.SetColor("_Color", src.GetColor("_Color") * Shirt);
                     Tinted[src] = t;
                     Mine.Add(t);
                 }
                 ri.defaultMaterial = t;
                 _cm.baseRendererInfos[i] = ri;
+            }
+        }
+
+        // ---- red -> CarMax blue
+
+        private static readonly Dictionary<Texture, Texture2D> BlueTex = new Dictionary<Texture, Texture2D>();
+
+        private static bool IsRed(Color c, out float s, out float v)
+        {
+            Color.RGBToHSV(c, out float h, out s, out v);
+            return (h < 0.06f || h > 0.92f) && s > 0.35f && v > 0.12f;
+        }
+
+        private static Color ToBlue(Color c)
+        {
+            Color.RGBToHSV(c, out _, out float s, out float v);
+            Color o = Color.HSVToRGB(0.6f, Mathf.Min(1f, s * 1.05f), v);
+            o.a = c.a;
+            return o;
+        }
+
+        private static void Blue(Material src, Material dst)
+        {
+            try
+            {
+                if (dst.HasProperty("_Color"))
+                {
+                    Color c = src.GetColor("_Color");
+                    if (IsRed(c, out _, out _)) dst.SetColor("_Color", ToBlue(c));
+                }
+                if (dst.HasProperty("_MainTex"))
+                {
+                    Texture tex = src.GetTexture("_MainTex");
+                    if (tex)
+                    {
+                        if (!BlueTex.TryGetValue(tex, out Texture2D blue)) { blue = BlueCopy(tex); BlueTex[tex] = blue; }
+                        if (blue) dst.SetTexture("_MainTex", blue);
+                    }
+                }
+            }
+            catch (Exception e) { CmxPlugin.Log.LogWarning("Recolor of " + src.name + " skipped: " + e.Message); }
+        }
+
+        // Textures from asset bundles aren't readable, so the copy is made through the GPU.
+        private static Texture2D BlueCopy(Texture tex)
+        {
+            int w = Mathf.Min(tex.width, 2048), h = Mathf.Min(tex.height, 2048);
+            RenderTexture rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            RenderTexture prev = RenderTexture.active;
+            try
+            {
+                Graphics.Blit(tex, rt);
+                RenderTexture.active = rt;
+                Texture2D copy = new Texture2D(w, h, TextureFormat.RGBA32, true);
+                copy.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+                Color[] px = copy.GetPixels();
+                int changed = 0;
+                for (int i = 0; i < px.Length; i++)
+                    if (IsRed(px[i], out _, out _)) { px[i] = ToBlue(px[i]); changed++; }
+                if (changed == 0) { Object.Destroy(copy); return null; }
+                copy.SetPixels(px);
+                copy.Apply(true);
+                copy.name = tex.name + "_CarMaxBlue";
+                return copy;
+            }
+            finally
+            {
+                RenderTexture.active = prev;
+                RenderTexture.ReleaseTemporary(rt);
             }
         }
 

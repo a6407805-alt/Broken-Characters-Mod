@@ -23,6 +23,7 @@ namespace CarMaxSpecialist
     [BepInDependency(PrefabAPI.PluginGUID)]
     [BepInDependency(LanguageAPI.PluginGUID)]
     [BepInDependency(R2APIContentManager.PluginGUID)]
+    [BepInDependency(AudiGuid, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
     public class CmxPlugin : BaseUnityPlugin
     {
@@ -30,6 +31,8 @@ namespace CarMaxSpecialist
         public const string PluginName = "CarMax Auto Repair Specialist";
         public const string PluginVersion = "1.0.0";
         public const string T = "BC_CARMAX_";
+        public const string AudiGuid = "com.VincentMacaluso.AudiTechnician";
+        public static bool AudiModel;
 
         public static ManualLogSource Log;
         public static CmxPlugin Instance;
@@ -43,7 +46,7 @@ namespace CarMaxSpecialist
         public static ConfigEntry<int> MaxTasks, LowCap, MedCap, HighCap, HighBurst, AuditBacklog;
         public static ConfigEntry<bool> AuditLockdown;
         public static ConfigEntry<float> MediumFrom, HighFrom, LowEvery, MedEveryMin, MedEveryMax, HighEveryMin, HighEveryMax, AuditEvery;
-        public static ConfigEntry<float> EroRelief, ApptRelief, EroChance, ApptChance, SliderSensitivity, SliderTolerance;
+        public static ConfigEntry<float> EroRelief, ApptRelief, EroChance, ApptChance, InvChance, MatchChance, SliderSensitivity, SliderTolerance;
         public static ConfigEntry<float> TaskEveryMin, TaskEveryMax, TaskRelief, TaskNag;
         public static ConfigEntry<float> DeadlineMin, DeadlineMax, DeadlineStressRelief, DeadlineFailStress;
         public static ConfigEntry<KeyCode> MouseKey;
@@ -51,7 +54,8 @@ namespace CarMaxSpecialist
         public static ConfigEntry<float> CoworkerSeconds, LazyChance, DiyStress;
         public static ConfigEntry<float> SecondaryCooldown, UtilityCooldown, SpecialCooldown;
         public static ConfigEntry<int> Volume;
-        public static ConfigEntry<bool> Bubbles, Props;
+        public static ConfigEntry<bool> Bubbles, Props, UseAudiModel, Tts;
+        public static ConfigEntry<int> TtsRate, TtsVolume;
         public static ConfigEntry<float> HudX, HudY;
 
         private string Folder(string sub) => System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Info.Location), sub);
@@ -105,6 +109,8 @@ namespace CarMaxSpecialist
             AuditLockdown = Config.Bind("3. Tasks", "ManagementAudit_v2", true, "At 100 stress a Management Audit locks the screen and keeps the windows coming until the backlog is cleared (instead of Burnout).");
             AuditBacklog = Config.Bind("3. Tasks", "AuditBacklog_v2", 8, "Windows to clear to pass the audit.");
             AuditEvery = Config.Bind("3. Tasks", "AuditSecondsBetween_v2", 0.8f, "Audit: gap between windows.");
+            InvChance = Config.Bind("3. Tasks", "InventoryAuditChance_v2", 0.15f, "Chance a new window is a parts inventory audit (match the shelf count).");
+            MatchChance = Config.Bind("3. Tasks", "PartMatchChance_v2", 0.15f, "Chance a new window is a part-number lookup (fit the right part to the car).");
             EroChance = Config.Bind("3. Tasks", "EroChance_v2", 0.2f, "Chance a new window is an ERO repair order.");
             ApptChance = Config.Bind("3. Tasks", "AppointmentChance_v2", 0.15f, "Chance a new window is the appointment scheduler.");
             EroRelief = Config.Bind("3. Tasks", "EroStressRelief_v2", 35f, "Stress removed by finishing an ERO.");
@@ -139,6 +145,10 @@ namespace CarMaxSpecialist
             SpecialCooldown = Config.Bind("4. Skills", "CoworkersCooldown", 20f, "");
             Volume = Config.Bind("5. Look and sound", "Volume", 70, "Sound volume 0-100 (his own sounds, Windows only).");
             Bubbles = Config.Bind("5. Look and sound", "SpeechBubbles", true, "Corporate speech bubbles over heads.");
+            UseAudiModel = Config.Bind("5. Look and sound", "UseAudiTechnicianModel", true, "Wear the Audi Technician's model, recolored CarMax blue (needs the AudiTechnician mod).");
+            Tts = Config.Bind("5. Look and sound", "TextToSpeech_v2", true, "Read his lines, pop-ups and mini-game prompts out loud with the Windows voice.");
+            TtsRate = Config.Bind("5. Look and sound", "TtsRate_v2", 1, "Voice speed -5 (slow) to 8 (fast).");
+            TtsVolume = Config.Bind("5. Look and sound", "TtsVolume_v2", 90, "Voice volume 0-100.");
             Props = Config.Bind("5. Look and sound", "OfficeProps_v2", false, "Tie, lanyard and clipboard on top of the model.");
             HudX = Config.Bind("5. Look and sound", "TimecardX", 0.012f, "Timecard panel position (fraction of the screen).");
             HudY = Config.Bind("5. Look and sound", "TimecardY", 0.26f, "Timecard panel position (fraction of the screen).");
@@ -216,10 +226,49 @@ namespace CarMaxSpecialist
 
         // ---------------------------------------------------------------- body
 
+        /// <summary>
+        /// The Audi Technician's body (with his custom model) if that mod is installed, so the Specialist wears the
+        /// same model in CarMax blue. Falls back to Commando.
+        /// </summary>
+        private static GameObject FindAudi(string name)
+        {
+            if (!UseAudiModel.Value) return null;
+            try
+            {
+                foreach (GameObject go in Resources.FindObjectsOfTypeAll<GameObject>())
+                {
+                    if (!go || go.name != name) continue;
+                    if (name.EndsWith("Body") && !go.GetComponent<CharacterBody>()) continue;
+                    if (go.scene.IsValid() && go.scene.isLoaded && go.activeInHierarchy) continue;
+                    return go;
+                }
+            }
+            catch (Exception e) { Log.LogWarning("Audi model lookup failed: " + e.Message); }
+            return null;
+        }
+
+        // The Audi Technician's own scripts (his Flat Rate clock etc.) are removed from the copy.
+        private static void StripAudiScripts(GameObject root)
+        {
+            int n = 0;
+            for (int pass = 0; pass < 2; pass++)
+                foreach (MonoBehaviour mb in root.GetComponentsInChildren<MonoBehaviour>(true))
+                {
+                    if (!mb) continue;
+                    string ns = mb.GetType().Namespace ?? "";
+                    if (ns.StartsWith("AudiTechnician")) { Object.DestroyImmediate(mb); n++; }
+                }
+            if (n > 0) Log.LogInfo("Removed " + n + " Audi Technician scripts from the Specialist's copy.");
+        }
+
         private void CreateBody()
         {
-            GameObject source = LegacyResourcesAPI.Load<GameObject>("Prefabs/CharacterBodies/CommandoBody");
+            GameObject audi = FindAudi("AudiTechBody");
+            GameObject source = audi ? audi : LegacyResourcesAPI.Load<GameObject>("Prefabs/CharacterBodies/CommandoBody");
+            AudiModel = audi;
             BodyPrefab = PrefabAPI.InstantiateClone(source, "CarMaxSpecialistBody", true);
+            if (audi) StripAudiScripts(BodyPrefab);
+            Log.LogInfo(audi ? "Using the Audi Technician's model (in CarMax blue)." : "Audi Technician not found; using Commando's model.");
 
             CharacterBody body = BodyPrefab.GetComponent<CharacterBody>();
             body.baseNameToken = T + "NAME";
@@ -240,8 +289,10 @@ namespace CarMaxSpecialist
             if (model) { model.gameObject.AddComponent<CmxLook>(); AddSkin(model); }
             ContentAddition.AddBody(BodyPrefab);
 
-            GameObject display = LegacyResourcesAPI.Load<GameObject>("Prefabs/CharacterDisplays/CommandoDisplay");
+            GameObject audiDisplay = audi ? FindAudi("AudiTechDisplay") : null;
+            GameObject display = audiDisplay ? audiDisplay : LegacyResourcesAPI.Load<GameObject>("Prefabs/CharacterDisplays/CommandoDisplay");
             DisplayPrefab = PrefabAPI.InstantiateClone(display, "CarMaxSpecialistDisplay", false);
+            if (audiDisplay) StripAudiScripts(DisplayPrefab);
             Transform dm = Model(DisplayPrefab) ?? DisplayPrefab.transform;
             CharacterModel dcm = DisplayPrefab.GetComponentInChildren<CharacterModel>(true);
             if (dcm) dm = dcm.transform;

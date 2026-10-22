@@ -23,7 +23,7 @@ namespace CarMaxSpecialist
     /// </summary>
     public class CmxTasks : MonoBehaviour
     {
-        private enum Kind { PartNumber, RepairOrder, Story, Invoice, Ero, Appt, Error }
+        private enum Kind { PartNumber, RepairOrder, Story, Invoice, Ero, Appt, Error, Inventory, PartMatch }
 
         private class Task
         {
@@ -52,6 +52,10 @@ namespace CarMaxSpecialist
             public float Pos = 420f, TargetMin, Hold, ErrCool, ProgT, Prog;
             public bool Released;
             public bool[] Checks = new bool[3];
+            public int Qty;
+            public int[] InvShelf = new int[2], InvSys = new int[2];
+            public string[] InvParts = new string[2];
+            public string Bin, Car, Fmt;
             public int[] Order;
             public char[] Letters = new char[3];
             public int LetterOk;
@@ -115,6 +119,48 @@ namespace CarMaxSpecialist
             "Dealer goodwill, no charge to customer.",
             "No-show adjustment, internal credit."
         };
+
+        private static readonly string[] InvNames =
+        {
+            "Oil filter", "Brake pad set", "Spark plug", "Wiper blade", "Cabin air filter", "Serpentine belt", "Headlight bulb", "Brake rotor", "Air filter", "Battery"
+        };
+
+        private static readonly string[] CarNames =
+        {
+            "2019 Dodge Charger", "2021 Ram 1500", "2018 Jeep Wrangler", "2020 Ford F-150", "2017 Ford Mustang", "2019 Chevrolet Silverado",
+            "2016 GMC Sierra", "2020 Toyota Camry", "2018 Honda Accord", "2019 BMW 330i", "2018 Audi A4", "2020 Volkswagen Jetta"
+        };
+        // which part-number style each car uses (index into MakeHints)
+        private static readonly int[] CarMake = { 0, 0, 0, 1, 1, 2, 2, 3, 4, 5, 6, 6 };
+
+        private static readonly string[] MakeHints =
+        {
+            "MOPAR (Dodge, Ram, Jeep, Chrysler): 8 digits, then a letter pair like AA or AB. Example 68258471AA",
+            "FORD: letters and a digit, then Z, a dash, digits, a dash, a letter. Example FL3Z-6731-A",
+            "GM (Chevy, GMC): 8 digits and no letters. Example 12677234",
+            "TOYOTA: 5 digits, a dash, then 5 mixed characters. Example 04152-YZZA1",
+            "HONDA: 5 digits, 3 letters, then A and 2 digits, all dashed. Example 15400-PLM-A02",
+            "BMW: 11 digits in groups. Example 11 42 7 953 129",
+            "VW / AUDI: 3 characters, then two groups of 3 digits, then a letter. Example 8V0 615 301 A"
+        };
+
+        private static string Dig(int n) { string r = ""; for (int i = 0; i < n; i++) r += Random.Range(0, 10); return r; }
+        private static string Let(int n) { string r = ""; for (int i = 0; i < n; i++) r += (char)('A' + Random.Range(0, 26)); return r; }
+        private static string Pick(string set) { return set[Random.Range(0, set.Length)].ToString(); }
+
+        private static string PartNo(int make)
+        {
+            switch (make)
+            {
+                case 0: return Dig(8) + "A" + Pick("ABCD");
+                case 1: return Pick("EFGH") + Pick("LOPTU") + Random.Range(1, 9) + "Z-" + Dig(Random.Range(4, 6)) + "-" + Let(1);
+                case 2: return Dig(8);
+                case 3: return Dig(5) + "-" + Pick("0123456789") + Let(1) + Dig(2) + Pick("0123456789ABCDEFGH");
+                case 4: return Dig(5) + "-" + Let(3) + "-A" + Dig(2);
+                case 5: return Dig(2) + " " + Dig(2) + " " + Dig(1) + " " + Dig(3) + " " + Dig(3);
+                default: return Dig(1) + Let(1) + "0 " + Dig(3) + " " + Dig(3) + " " + Let(1);
+            }
+        }
 
         private static readonly string[] ApptNames = { "OMAR", "ABEL", "IVAN", "ELLA", "ERIN", "OLGA" };
 
@@ -198,9 +244,92 @@ namespace CarMaxSpecialist
             _nextSpawn -= dt;
             if (_nextSpawn <= 0f) SpawnTick(shift);
 
+            // mouse wheel cycles through the windows
+            float sw = Input.mouseScrollDelta.y;
+            if (Mathf.Abs(sw) > 0.01f && _tasks.Count > 1)
+            {
+                if (sw > 0f) { Task f = _tasks[0]; _tasks.RemoveAt(0); _tasks.Add(f); }
+                else { Task l = _tasks[_tasks.Count - 1]; _tasks.RemoveAt(_tasks.Count - 1); _tasks.Insert(0, l); }
+                CmxAudio.Play("typing");
+            }
+
             if (_tasks.Count > 0) HandleInput(_tasks[_tasks.Count - 1], shift, dt);
+            SpeakTop();
             _clickDigit = -1; _clickArrow = -1; _clickLetter = '\0';
             Report(shift);
+        }
+
+        // ------------------------------------------------------------ text to speech
+
+        private Task _lastTop;
+        private int _lastKey = -1;
+        private string _lastMsg = "";
+
+        private static string Spaced(string s)
+        {
+            string r = "";
+            for (int i = 0; i < s.Length; i++) r += s[i] + " ";
+            return r.Trim();
+        }
+
+        private static int SpokenKey(Task t)
+        {
+            switch (t.Kind)
+            {
+                case Kind.Appt: return t.Step * 100 + t.Name.Length;
+                case Kind.Ero: case Kind.Story: case Kind.Inventory: return t.Step;
+                default: return 0;
+            }
+        }
+
+        private string Spoken(Task t)
+        {
+            switch (t.Kind)
+            {
+                case Kind.PartNumber: return "Parts counter. Type the part number: " + Spaced(t.Answer);
+                case Kind.RepairOrder:
+                {
+                    string r = "Sign off the repair order. Press";
+                    for (int i = 0; i < t.Arrows.Length; i++) r += " " + ArrowNames[t.Arrows[i]].ToLower() + ",";
+                    return r;
+                }
+                case Kind.Story: return t.Step == 0 ? "Warranty claim. Customer states " + t.Story.Complaint + ". Pick the cause." : "Now pick the correction.";
+                case Kind.Invoice: return "Invoice. " + t.Header.Replace("$", "").Replace("+", "plus").Replace("=", "equals").Replace("?", "what");
+                case Kind.Ero:
+                    return t.Step == 0 ? "Repair order entry. " + t.Says + " Pick the matching complaint." : t.Step == 1 ? "Pick the pay type. " + PayHints[t.NeedPay] : "Stamp it. Press num enter.";
+                case Kind.Appt:
+                    switch (t.Step)
+                    {
+                        case 0: return "Service scheduler. Pick the appointment date. Press a number, then num enter.";
+                        case 1: return "Pick the same date again. The order has changed.";
+                        case 2: return t.Name.Length == 0 ? "Type the customer's name: " + Spaced(t.TargetName) + ". First letter " + t.TargetName[0] + "." : "Next letter " + t.TargetName[t.Name.Length] + ".";
+                        case 3: return "Set the promise time to " + FormatTime((int)t.TargetMin) + ". Hold 4 for earlier, 6 for later, then num enter.";
+                        default: return "Submitting. Wait for the bar, then tick all three compliance boxes.";
+                    }
+                case Kind.Inventory: return "Inventory audit. " + t.InvParts[t.Step] + ". Count the boxes on the shelf and match the system quantity.";
+                case Kind.PartMatch: return "Parts lookup. " + t.Car + ". Which part number fits? " + t.Fmt.Split(new[] { " Example" }, StringSplitOptions.None)[0];
+                case Kind.Error: return "Error. Promise time exceeds bay capacity. Press zero.";
+            }
+            return t.Title;
+        }
+
+        private void SpeakTop()
+        {
+            if (_tasks.Count == 0) { _lastTop = null; _lastKey = -1; return; }
+            Task top = _tasks[_tasks.Count - 1];
+            int k = SpokenKey(top);
+            if (top != _lastTop || k != _lastKey)
+            {
+                _lastTop = top; _lastKey = k;
+                _lastMsg = top.Msg ?? "";
+                CmxTts.Say(Spoken(top));
+            }
+            else if (!string.IsNullOrEmpty(top.Msg) && top.Msg != _lastMsg)
+            {
+                _lastMsg = top.Msg;
+                CmxTts.Say(top.Msg);
+            }
+            else if (string.IsNullOrEmpty(top.Msg)) _lastMsg = "";
         }
 
         // ------------------------------------------------------------ mouse mode
@@ -319,6 +448,7 @@ namespace CarMaxSpecialist
         private void StartAudit()
         {
             _audit = true;
+            CmxTts.Say("Management audit. Clear the backlog.");
             _backlog = Mathf.Max(1, CmxPlugin.AuditBacklog.Value);
             _nextSpawn = 0.3f;
             CmxAudio.Play("slam");
@@ -343,6 +473,8 @@ namespace CarMaxSpecialist
             float r = Random.value;
             if (r < CmxPlugin.ApptChance.Value) return Kind.Appt;
             if (r < CmxPlugin.ApptChance.Value + CmxPlugin.EroChance.Value) return Kind.Ero;
+            if (r < CmxPlugin.ApptChance.Value + CmxPlugin.EroChance.Value + CmxPlugin.InvChance.Value) return Kind.Inventory;
+            if (r < CmxPlugin.ApptChance.Value + CmxPlugin.EroChance.Value + CmxPlugin.InvChance.Value + CmxPlugin.MatchChance.Value) return Kind.PartMatch;
             return (Kind)Random.Range(0, 4);
         }
 
@@ -368,6 +500,8 @@ namespace CarMaxSpecialist
             if (kind == Kind.PartNumber || kind == Kind.Invoice) h = 310f * sc;
             if (kind == Kind.Ero) { w = 640f * sc; h = 440f * sc; }
             else if (kind == Kind.Appt) { w = 620f * sc; h = 400f * sc; }
+            else if (kind == Kind.Inventory) { w = 580f * sc; h = 380f * sc; }
+            else if (kind == Kind.PartMatch) { w = 560f * sc; h = 320f * sc; }
 
             Task t = new Task { Rect = PickRect(w, h, tier), Born = Time.unscaledTime, Kind = kind };
             switch (t.Kind)
@@ -399,10 +533,40 @@ namespace CarMaxSpecialist
                     break;
                 case Kind.Invoice:
                     t.Title = "Invoice - Customer Waiting";
-                    int hours = Random.Range(1, 5), rate = Random.Range(8, 13) * 10, parts = Random.Range(12, 90);
-                    t.Header = "Labor " + hours + " hr x $" + rate + "  +  parts $" + parts + "  =  ?";
-                    t.Answer = (hours * rate + parts).ToString();
+                    int labor = Random.Range(2, 10) * 10, parts = Random.Range(1, 9) * 10;
+                    t.Header = "Labor $" + labor + "  +  Parts $" + parts + "  =  ?";
+                    t.Answer = (labor + parts).ToString();
                     break;
+                case Kind.Inventory:
+                {
+                    t.Title = "Parts Inventory Audit - Cycle Count";
+                    t.Header = "Count the boxes on the shelf, then make SYSTEM QTY match.";
+                    t.Bin = "B-" + Random.Range(10, 60);
+                    int p1 = Random.Range(0, InvNames.Length), p2 = (p1 + 1 + Random.Range(0, InvNames.Length - 1)) % InvNames.Length;
+                    t.InvParts[0] = InvNames[p1]; t.InvParts[1] = InvNames[p2];
+                    for (int i = 0; i < 2; i++)
+                    {
+                        int shelf = Random.Range(2, 10);
+                        int sys = Mathf.Clamp(shelf + (Random.value < 0.5f ? -1 : 1) * Random.Range(1, 4), 0, 12);
+                        if (sys == shelf) sys = shelf + 1;
+                        t.InvShelf[i] = shelf; t.InvSys[i] = sys;
+                    }
+                    t.Qty = t.InvSys[0];
+                    break;
+                }
+                case Kind.PartMatch:
+                {
+                    t.Title = "Parts Lookup - Fit the Right Part";
+                    int ci = Random.Range(0, CarNames.Length);
+                    int make = CarMake[ci];
+                    int m1 = (make + 1 + Random.Range(0, 6)) % 7, m2 = m1;
+                    while (m2 == make || m2 == m1) m2 = Random.Range(0, 7);
+                    t.Car = CarNames[ci];
+                    t.Header = t.Car + "  -  " + InvNames[Random.Range(0, InvNames.Length)] + "\nWhich part number fits this vehicle?";
+                    t.Fmt = MakeHints[make];
+                    Shuffle(t, PartNo(make), new[] { PartNo(m1), PartNo(m2) });
+                    break;
+                }
                 case Kind.Ero:
                 {
                     t.Title = "ERO - Repair Order Entry   [RO #29751]";
@@ -522,6 +686,30 @@ namespace CarMaxSpecialist
                 case Kind.Ero:
                     EroInput(t, shift);
                     break;
+                case Kind.Inventory:
+                {
+                    int d = DigitDown();
+                    if (ArrowPressed(0) || Input.GetKeyDown(KeyCode.KeypadPlus)) { t.Qty = Mathf.Min(20, t.Qty + 1); CmxAudio.Play("typing"); }
+                    else if (ArrowPressed(2) || Input.GetKeyDown(KeyCode.KeypadMinus)) { t.Qty = Mathf.Max(0, t.Qty - 1); CmxAudio.Play("typing"); }
+                    if (d >= 0 && d <= 9) { t.Qty = d; t.Msg = ""; CmxAudio.Play("typing"); break; }
+                    if (d != 11) break;
+                    if (t.Qty == t.InvShelf[t.Step])
+                    {
+                        CmxAudio.Play("stamp");
+                        if (t.Step == 0) { t.Step = 1; t.Qty = t.InvSys[1]; t.Msg = ""; }
+                        else Complete(t, shift);
+                    }
+                    else { t.Msg = "QTY DOES NOT MATCH THE SHELF."; Wrong(t); }
+                    break;
+                }
+                case Kind.PartMatch:
+                {
+                    int d = DigitDown();
+                    if (d < 1 || d > 3) break;
+                    if (d - 1 == t.Correct) { CmxAudio.Play("stamp"); Complete(t, shift); }
+                    else Wrong(t);
+                    break;
+                }
                 case Kind.Appt:
                     ApptInput(t, shift, dt);
                     break;
@@ -897,6 +1085,20 @@ namespace CarMaxSpecialist
                     break;
                 }
                 case Kind.Ero: DrawEro(t, inner, y, w, pad, sc); break;
+                case Kind.Inventory: DrawInventory(t, inner, y, w, pad, sc); break;
+                case Kind.PartMatch:
+                {
+                    float lh = 28f * sc;
+                    for (int i = 0; i < 3; i++)
+                    {
+                        Rect o = new Rect(inner.x + pad, y + i * lh, w, lh);
+                        Opt(t, o, i + 1);
+                        GUI.Label(o, "<b><color=#003B75>[" + (i + 1) + "]</color></b>   " + t.Options[i], _label);
+                    }
+                    GUI.Label(new Rect(inner.x + pad, y + 3f * lh + 8f * sc, w, 70f * sc), "<color=#B8860B><b>HINT</b></color>  " + t.Fmt, _label);
+                    Hint(inner, "Press 1, 2 or 3", sc);
+                    break;
+                }
                 case Kind.Appt: DrawAppt(t, inner, y, w, pad, sc); break;
                 case Kind.Error:
                 {
@@ -964,6 +1166,42 @@ namespace CarMaxSpecialist
             GUI.Label(stamp, "LARGE COMPLETED", _mono);
             _mono.fontSize = old;
             Hint(inner, t.Step == 0 ? "Press 1, 2 or 3" : t.Step == 1 ? "Press 1-4 for the pay type the bill-to calls for" : "Press NUM ENTER to stamp it", sc);
+        }
+
+        private void DrawInventory(Task t, Rect inner, float y, float w, float pad, float sc)
+        {
+            float x = inner.x + pad, lh = 24f * sc;
+            int shelf = t.InvShelf[t.Step];
+            GUI.Label(new Rect(x, y - 6f * sc, w, lh), "<b>" + t.InvParts[t.Step] + "</b>   <color=#888888>bin " + t.Bin + "   (count " + (t.Step + 1) + " of 2)</color>", _label);
+            y += lh - 4f * sc;
+            // the shelf: one box per unit actually on it
+            Rect shelfR = new Rect(x, y, w * 0.55f, 120f * sc);
+            Box(shelfR, new Color(0.16f, 0.2f, 0.3f));
+            float cell = 40f * sc;
+            for (int i = 0; i < shelf; i++)
+            {
+                Rect c = new Rect(shelfR.x + 10f * sc + (i % 5) * (cell + 6f * sc), shelfR.y + 10f * sc + (i / 5) * (cell + 6f * sc), cell, cell);
+                Box(c, new Color(0.04f, 0.06f, 0.1f));
+                Box(new Rect(c.x + 3f * sc, c.y + 3f * sc, c.width - 6f * sc, c.height - 6f * sc), new Color(1f, 0.79f, 0.15f));
+            }
+            // system quantity
+            float rx = shelfR.xMax + 14f * sc, rw = w - shelfR.width - 14f * sc;
+            GUI.Label(new Rect(rx, y, rw, lh), "<b>SYSTEM QTY</b>", _label);
+            Box(new Rect(rx, y + lh, rw, 50f * sc), Color.white);
+            _mono.normal.textColor = new Color(0.05f, 0.25f, 0.65f);
+            GUI.Label(new Rect(rx, y + lh, rw, 50f * sc), t.Qty.ToString(), _mono);
+            float bw = (rw - 6f * sc) / 2f;
+            Btn(t, new Rect(rx, y + lh + 56f * sc, bw, 30f * sc), "-", arrow: 2);
+            Btn(t, new Rect(rx + bw + 6f * sc, y + lh + 56f * sc, bw, 30f * sc), "+", arrow: 0);
+            Btn(t, new Rect(rx, y + lh + 90f * sc, rw, 30f * sc), "NUM ENTER", 11);
+            GUI.Label(new Rect(x, shelfR.yMax + 6f * sc, shelfR.width, lh * 3f), "Change SYSTEM QTY with <b>Up / Down</b>, <b>+ / -</b> or just <b>press the number</b>, then <b>NUM ENTER</b>.", _label);
+            if (t.Msg.Length > 0)
+            {
+                _label.normal.textColor = new Color(0.7f, 0.05f, 0.05f);
+                GUI.Label(new Rect(x, inner.yMax - 52f * sc, w, lh), "<b>" + t.Msg + "</b>", _label);
+                _label.normal.textColor = new Color(0.1f, 0.12f, 0.18f);
+            }
+            Hint(inner, "Match the number on the shelf", sc);
         }
 
         private void DrawAppt(Task t, Rect inner, float y, float w, float pad, float sc)
