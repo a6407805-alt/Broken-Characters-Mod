@@ -297,7 +297,7 @@ namespace CarMaxSpecialist
             if (state == 2 && was)
             {
                 Stress = 45f;
-                CmxNet.Say(_body, gameObject, "<color=#7CFF7C>AUDIT PASSED</color>\n<size=70%>Backlog cleared. Back to work.</size>", Style.Banner, null);
+                CmxNet.Say(_body, gameObject, "<color=#FFC928>AUDIT PASSED</color>\n<size=70%>Backlog cleared. Back to work.</size>", Style.Banner, null);
             }
         }
 
@@ -306,7 +306,7 @@ namespace CarMaxSpecialist
             AddStress(-(relief >= 0f ? relief : CmxPlugin.TaskRelief.Value));
             int gold = Scaled(CmxPlugin.PayPerHour.Value * 0.6f);
             Pay(gold);
-            CmxNet.Say(_body, gameObject, "<color=#7CFF7C>Task closed +$" + gold + "</color>", Style.Small, null);
+            CmxNet.Say(_body, gameObject, "<color=#FFC928>Task closed +$" + gold + "</color>", Style.Small, null);
         }
 
         public void OnScanned(int count)
@@ -338,6 +338,7 @@ namespace CarMaxSpecialist
                 return;
             }
 
+            Layoffs();
             GameObject prefab = Coworker.Prefab();
             if (!prefab) { CmxNet.Say(_body, gameObject, "Nobody's answering the phone.", Style.Bubble, null); return; }
             Vector3 right = Vector3.Cross(Vector3.up, _body.gameObject.transform.forward).normalized;
@@ -377,6 +378,47 @@ namespace CarMaxSpecialist
             _crewEnd = Time.time + CmxPlugin.CoworkerSeconds.Value;
             _lastBreakLine = Time.time;
             CmxNet.Say(_body, gameObject, Lines.Pick(Lines.CallIn), Style.Bubble, "phone");
+        }
+
+        /// <summary>The coworkers clear out the floor: every enemy nearby is let go (bosses just take a big hit).</summary>
+        private void Layoffs()
+        {
+            if (!_body.teamComponent) return;
+            BullseyeSearch s = new BullseyeSearch
+            {
+                searchOrigin = _body.corePosition,
+                searchDirection = Vector3.forward,
+                maxDistanceFilter = CmxPlugin.LayoffRange.Value,
+                maxAngleFilter = 180f,
+                teamMaskFilter = TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex),
+                sortMode = BullseyeSearch.SortMode.Distance,
+                filterByLoS = false
+            };
+            s.RefreshCandidates();
+            s.FilterOutGameObject(gameObject);
+            HashSet<HealthComponent> done = new HashSet<HealthComponent>();
+            int count = 0;
+            foreach (HurtBox hb in s.GetResults())
+            {
+                HealthComponent hc = hb ? hb.healthComponent : null;
+                if (!hc || !hc.alive || !done.Add(hc)) continue;
+                CharacterBody v = hc.body;
+                bool boss = v && v.isChampion;
+                hc.TakeDamage(new DamageInfo
+                {
+                    attacker = gameObject,
+                    inflictor = gameObject,
+                    damage = boss ? _body.damage * CmxPlugin.LayoffDamage.Value : hc.fullCombinedHealth + 1f,
+                    crit = false,
+                    position = hb.transform.position,
+                    force = Vector3.zero,
+                    procCoefficient = 0f,
+                    damageType = boss ? DamageType.Generic : (DamageType.BypassArmor | DamageType.BypassBlock),
+                    damageColorIndex = DamageColorIndex.Item
+                });
+                if (count < 6 && v) CmxNet.Say(_body, v.gameObject, "<color=#FFC928>LAID OFF</color>", Style.Small, null);
+                if (++count >= 60) break;
+            }
         }
 
         private void Clean()

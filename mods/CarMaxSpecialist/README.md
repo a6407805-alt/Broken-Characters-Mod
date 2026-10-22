@@ -43,3 +43,9 @@ At 100 stress a **Management Audit** locks the screen and keeps windows coming u
 New windows: **ERO repair order** (RO #29751, -35 stress) and the **appointment scheduler** (-10 stress; date twice,
 scrambled-vowel name, twitchy promise time that throws error popups, fake progress bar that needs the compliance boxes).
 Keyboard only: number keys and arrows. Tunable in the "3. Tasks" config section (`*_v2` keys).
+
+## Controls update
+- **M2** is thrown from his hand now (lug nuts, tools, jack and stands, then a car that grows as it flies, and the building right behind it).
+- **R** clears every pop-up off the screen (and ends a Management Audit), lays off every enemy within ~45 m (bosses take heavy damage) and calls in the coworkers.
+- **Appointment scheduler** is all number keys: press a number to choose, **NUM ENTER** to confirm. Date picked twice from a list (the order changes), the name one letter at a time (1/2/3), Promise Time with **hold 4 / hold 6** then NUM ENTER, then the compliance boxes (1, 2, 3).
+- The character no longer needs or uses the Audi Technician mod. Blue and gold throughout.

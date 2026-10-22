@@ -18,7 +18,6 @@ namespace CarMaxSpecialist
     /// The CarMax Auto Repair Specialist: an hourly, overworked associate. He's paid by the hour no matter what,
     /// gets yelled at by customers, has to order his own parts, has lazy coworkers and impossible deadlines.
     /// </summary>
-    [BepInDependency(AudiGuid, BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency(NetworkingAPI.PluginGUID)]
     [BepInDependency(RecalculateStatsAPI.PluginGUID)]
     [BepInDependency(PrefabAPI.PluginGUID)]
@@ -31,8 +30,6 @@ namespace CarMaxSpecialist
         public const string PluginName = "CarMax Auto Repair Specialist";
         public const string PluginVersion = "1.0.0";
         public const string T = "BC_CARMAX_";
-        public const string AudiGuid = "com.VincentMacaluso.AudiTechnician";
-        public static bool AudiModel;
 
         public static ManualLogSource Log;
         public static CmxPlugin Instance;
@@ -50,11 +47,11 @@ namespace CarMaxSpecialist
         public static ConfigEntry<float> TaskEveryMin, TaskEveryMax, TaskRelief, TaskNag;
         public static ConfigEntry<float> DeadlineMin, DeadlineMax, DeadlineStressRelief, DeadlineFailStress;
         public static ConfigEntry<KeyCode> MouseKey;
-        public static ConfigEntry<float> HeavyDamage, EmailDamage, AuditDamage, AuditRange, AuditSeconds, PalletDamage, PalletRadius, BackorderChance;
+        public static ConfigEntry<float> LayoffRange, LayoffDamage, HeavyDamage, EmailDamage, AuditDamage, AuditRange, AuditSeconds, PalletDamage, PalletRadius, BackorderChance;
         public static ConfigEntry<float> CoworkerSeconds, LazyChance, DiyStress;
         public static ConfigEntry<float> SecondaryCooldown, UtilityCooldown, SpecialCooldown;
         public static ConfigEntry<int> Volume;
-        public static ConfigEntry<bool> Bubbles, Props, UseAudiModel;
+        public static ConfigEntry<bool> Bubbles, Props;
         public static ConfigEntry<float> HudX, HudY;
 
         private string Folder(string sub) => System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Info.Location), sub);
@@ -132,6 +129,8 @@ namespace CarMaxSpecialist
             PalletDamage = Config.Bind("4. Skills", "PalletDamage", 5f, "Parts pallet damage (doubled when backordered).");
             PalletRadius = Config.Bind("4. Skills", "PalletRadius", 9f, "Parts pallet blast radius (x1.4 when backordered).");
             BackorderChance = Config.Bind("4. Skills", "BackorderChance", 0.3f, "Chance the parts are backordered (late, but twice as big).");
+            LayoffRange = Config.Bind("4. Skills", "LayoffRange_v2", 45f, "R: enemies within this range are let go (killed) when the coworkers arrive.");
+            LayoffDamage = Config.Bind("4. Skills", "LayoffBossDamage_v2", 15f, "R: bosses can't be laid off, they take this much damage instead (15 = 1500%).");
             CoworkerSeconds = Config.Bind("4. Skills", "CoworkerSeconds", 15f, "How long coworkers stay on the clock.");
             LazyChance = Config.Bind("4. Skills", "LazyChance", 0.4f, "Chance each coworker is 'on break'.");
             DiyStress = Config.Bind("4. Skills", "DoItYourselfStress", 15f, "Stress from doing it yourself.");
@@ -140,7 +139,6 @@ namespace CarMaxSpecialist
             SpecialCooldown = Config.Bind("4. Skills", "CoworkersCooldown", 20f, "");
             Volume = Config.Bind("5. Look and sound", "Volume", 70, "Sound volume 0-100 (his own sounds, Windows only).");
             Bubbles = Config.Bind("5. Look and sound", "SpeechBubbles", true, "Corporate speech bubbles over heads.");
-            UseAudiModel = Config.Bind("5. Look and sound", "UseAudiTechnicianModel", true, "Wear the Audi Technician's model, recolored CarMax blue (needs the AudiTechnician mod).");
             Props = Config.Bind("5. Look and sound", "OfficeProps_v2", false, "Tie, lanyard and clipboard on top of the model.");
             HudX = Config.Bind("5. Look and sound", "TimecardX", 0.012f, "Timecard panel position (fraction of the screen).");
             HudY = Config.Bind("5. Look and sound", "TimecardY", 0.26f, "Timecard panel position (fraction of the screen).");
@@ -187,7 +185,7 @@ namespace CarMaxSpecialist
             LanguageAPI.Add(T + "UTILITY_NAME", "Order Your Own Parts");
             LanguageAPI.Add(T + "UTILITY_DESC", "<style=cIsUtility>Dash</style>. A parts pallet drops where you stood for <style=cIsDamage>" + (PalletDamage.Value * 100f).ToString("0") + "% damage</style>. " + (BackorderChance.Value * 100f).ToString("0") + "% chance it's <style=cIsUtility>backordered</style>: it lands 4 seconds late, but twice as hard.");
             LanguageAPI.Add(T + "SPECIAL_NAME", "Lazy Coworkers");
-            LanguageAPI.Add(T + "SPECIAL_DESC", "Call in 2 coworkers for " + CoworkerSeconds.Value.ToString("0") + "s. Each has a " + (LazyChance.Value * 100f).ToString("0") + "% chance to be <style=cDeath>on break</style> (more stress). Press again while they're out to <style=cIsDamage>Do It Yourself</style>: send them home and gain <style=cIsDamage>+50% damage and +30% attack speed</style> for 8s, plus " + DiyStress.Value.ToString("0") + " stress.");
+            LanguageAPI.Add(T + "SPECIAL_DESC", "<style=cIsUtility>Clears every pop-up off your screen</style>, <style=cIsDamage>lays off every enemy nearby</style> (bosses take " + (LayoffDamage.Value * 100f).ToString("0") + "% damage), and calls in 2 coworkers for " + CoworkerSeconds.Value.ToString("0") + "s. Each has a " + (LazyChance.Value * 100f).ToString("0") + "% chance to be <style=cDeath>on break</style> (more stress). Press again while they're out to <style=cIsDamage>Do It Yourself</style>: send them home and gain <style=cIsDamage>+50% damage and +30% attack speed</style> for 8s, plus " + DiyStress.Value.ToString("0") + " stress.");
 
             LanguageAPI.Add(T + "BUFF_STRESS", "Stress");
         }
@@ -218,49 +216,10 @@ namespace CarMaxSpecialist
 
         // ---------------------------------------------------------------- body
 
-        /// <summary>
-        /// The Audi Technician's body (with his custom model) if that mod is installed, so the Specialist wears the
-        /// same model in CarMax blue. Falls back to Commando.
-        /// </summary>
-        private static GameObject FindAudi(string name)
-        {
-            if (!UseAudiModel.Value) return null;
-            try
-            {
-                foreach (GameObject go in Resources.FindObjectsOfTypeAll<GameObject>())
-                {
-                    if (!go || go.name != name) continue;
-                    if (name.EndsWith("Body") && !go.GetComponent<CharacterBody>()) continue;
-                    if (go.scene.IsValid() && go.scene.isLoaded && go.activeInHierarchy) continue;
-                    return go;
-                }
-            }
-            catch (Exception e) { Log.LogWarning("Audi model lookup failed: " + e.Message); }
-            return null;
-        }
-
-        // The Audi Technician's own scripts (his Flat Rate clock etc.) are removed from the copy.
-        private static void StripAudiScripts(GameObject root)
-        {
-            int n = 0;
-            for (int pass = 0; pass < 2; pass++)
-                foreach (MonoBehaviour mb in root.GetComponentsInChildren<MonoBehaviour>(true))
-                {
-                    if (!mb) continue;
-                    string ns = mb.GetType().Namespace ?? "";
-                    if (ns.StartsWith("AudiTechnician")) { Object.DestroyImmediate(mb); n++; }
-                }
-            if (n > 0) Log.LogInfo("Removed " + n + " Audi Technician scripts from the Specialist's copy.");
-        }
-
         private void CreateBody()
         {
-            GameObject audi = FindAudi("AudiTechBody");
-            GameObject source = audi ? audi : LegacyResourcesAPI.Load<GameObject>("Prefabs/CharacterBodies/CommandoBody");
-            AudiModel = audi;
+            GameObject source = LegacyResourcesAPI.Load<GameObject>("Prefabs/CharacterBodies/CommandoBody");
             BodyPrefab = PrefabAPI.InstantiateClone(source, "CarMaxSpecialistBody", true);
-            if (audi) StripAudiScripts(BodyPrefab);
-            Log.LogInfo(audi ? "Using the Audi Technician's model (in CarMax blue)." : "Audi Technician not found; using Commando's model.");
 
             CharacterBody body = BodyPrefab.GetComponent<CharacterBody>();
             body.baseNameToken = T + "NAME";
@@ -281,10 +240,8 @@ namespace CarMaxSpecialist
             if (model) { model.gameObject.AddComponent<CmxLook>(); AddSkin(model); }
             ContentAddition.AddBody(BodyPrefab);
 
-            GameObject audiDisplay = audi ? FindAudi("AudiTechDisplay") : null;
-            GameObject display = audiDisplay ? audiDisplay : LegacyResourcesAPI.Load<GameObject>("Prefabs/CharacterDisplays/CommandoDisplay");
+            GameObject display = LegacyResourcesAPI.Load<GameObject>("Prefabs/CharacterDisplays/CommandoDisplay");
             DisplayPrefab = PrefabAPI.InstantiateClone(display, "CarMaxSpecialistDisplay", false);
-            if (audiDisplay) StripAudiScripts(DisplayPrefab);
             Transform dm = Model(DisplayPrefab) ?? DisplayPrefab.transform;
             CharacterModel dcm = DisplayPrefab.GetComponentInChildren<CharacterModel>(true);
             if (dcm) dm = dcm.transform;

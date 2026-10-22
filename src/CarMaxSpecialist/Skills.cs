@@ -108,34 +108,36 @@ namespace CarMaxSpecialist
 
         private void FireHeavy(Ray aim)
         {
-            Vector3 at = CmxFx.Ground(CmxFx.Target(aim, 45f));
+            Vector3 from = CmxFx.Hand(characterBody, aim);
+            Vector3 at = CmxFx.Ground(CmxFx.Target(aim, 40f));
             float dmg = damageStat * CmxPlugin.HeavyDamage.Value * HeavyMult[Step];
             if (isAuthority) CmxAudio.Play(Step == 0 ? "typing" : Step == 1 ? "stamp" : Step == 2 ? "clock" : "slam");
-            float fall;
+            float fly;
 
             switch (Step)
             {
                 case 0:
-                    fall = CmxFx.LugNuts(at);
-                    Blast(at, 5f, dmg, 1200f, fall, 4f, false);
+                    fly = CmxFx.LugNuts(from, at);
+                    Blast(at, 5f, dmg, 1200f, fly, 4f, false);
                     break;
                 case 1:
-                    fall = CmxFx.Tools(at);
-                    Blast(at, 6f, dmg, 1600f, fall, 5f, false);
+                    fly = CmxFx.Tools(from, at);
+                    Blast(at, 6f, dmg, 1600f, fly, 5f, false);
                     break;
                 case 2:
-                    fall = CmxFx.Jack(at);
-                    Blast(at, 7f, dmg, 2200f, fall, 6f, false);
+                    fly = CmxFx.Jack(from, at);
+                    Blast(at, 7f, dmg, 2200f, fly, 6f, false);
                     break;
                 default:
                 {
-                    fall = CmxFx.Car(at);
-                    float building = CmxFx.Building(at + dir2(aim) * 3f, fall + 0.45f);
+                    Vector3 farAt = at + dir2(aim) * 3f;
+                    fly = CmxFx.Car(from, at);
+                    float building = CmxFx.Building(from, farAt, 0.35f);
                     if (isAuthority)
                     {
                         CmxHud.Bubble(transform, transform.position, "<color=#FFCA26>TOTALED.</color>", Style.Small);
-                        Blast(at, 9f, dmg, 3000f, fall, 8f, true);
-                        Blast(at + dir2(aim) * 3f, 15f, damageStat * CmxPlugin.HeavyDamage.Value * 3f, 5000f, building, 10f, true);
+                        Blast(at, 9f, dmg, 3000f, fly, 8f, true);
+                        Blast(farAt, 15f, damageStat * CmxPlugin.HeavyDamage.Value * 3f, 5000f, building, 10f, true);
                     }
                     break;
                 }
@@ -314,6 +316,7 @@ namespace CarMaxSpecialist
             base.OnEnter();
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
             Util.PlaySound("Play_UI_menuClick", gameObject);
+            if (isAuthority) CmxTasks.ClearRequest = true;
             if (NetworkServer.active)
             {
                 CmxShift shift = GetComponent<CmxShift>();
@@ -584,8 +587,8 @@ namespace CarMaxSpecialist
             GameObject g = new GameObject("stapler");
             g.transform.SetParent(parent, false);
             g.transform.localPosition = pos;
-            Part(g.transform, PrimitiveType.Cube, Vector3.zero, new Vector3(0.14f, 0.05f, 0.42f) * k, Dark());
-            Part(g.transform, PrimitiveType.Cube, new Vector3(0f, 0.05f, -0.02f) * k, new Vector3(0.15f, 0.05f, 0.38f) * k, M("red", new Color(0.85f, 0.1f, 0.1f)), new Vector3(-6f, 0f, 0f));
+            Part(g.transform, PrimitiveType.Cube, Vector3.zero, new Vector3(0.14f, 0.05f, 0.42f) * k, Navy());
+            Part(g.transform, PrimitiveType.Cube, new Vector3(0f, 0.05f, -0.02f) * k, new Vector3(0.15f, 0.05f, 0.38f) * k, M("gold", new Color(1f, 0.79f, 0.15f), 0.2f), new Vector3(-6f, 0f, 0f));
             return g;
         }
 
@@ -603,7 +606,7 @@ namespace CarMaxSpecialist
                         Part(t, PrimitiveType.Cube, new Vector3(Random.Range(-0.3f, 0.3f), Random.Range(-0.15f, 0.15f), Random.Range(-0.35f, 0.35f)), new Vector3(0.12f, 0.015f, 0.03f), Steel(), new Vector3(0f, Random.Range(0f, 180f), 0f));
                     break;
                 case 1: // desk phone
-                    Part(t, PrimitiveType.Cube, Vector3.zero, new Vector3(0.38f, 0.1f, 0.34f), M("beige", new Color(0.86f, 0.82f, 0.7f)));
+                    Part(t, PrimitiveType.Cube, Vector3.zero, new Vector3(0.38f, 0.1f, 0.34f), M("navy", new Color(0.04f, 0.17f, 0.4f)));
                     Part(t, PrimitiveType.Cube, new Vector3(0f, 0.1f, 0f), new Vector3(0.12f, 0.07f, 0.55f), Dark(), new Vector3(0f, 0f, 0f));
                     Part(t, PrimitiveType.Cube, new Vector3(0f, 0.1f, 0.25f), new Vector3(0.16f, 0.1f, 0.12f), Dark());
                     Part(t, PrimitiveType.Cube, new Vector3(0f, 0.1f, -0.25f), new Vector3(0.16f, 0.1f, 0.12f), Dark());
@@ -632,7 +635,7 @@ namespace CarMaxSpecialist
             Part(t, PrimitiveType.Cube, new Vector3(0f, 0.35f, 0.07f), new Vector3(0.9f, 0.6f, 0.02f), M("screen", new Color(0.2f, 0.45f, 0.95f), 1.2f));
             Part(t, PrimitiveType.Cube, new Vector3(0f, -0.05f, 0f), new Vector3(0.12f, 0.2f, 0.1f), Dark());
             Part(t, PrimitiveType.Cube, new Vector3(0f, -0.15f, 0f), new Vector3(0.45f, 0.04f, 0.3f), Dark());
-            Part(t, PrimitiveType.Cube, new Vector3(0.75f, 0.1f, 0f), new Vector3(0.38f, 0.85f, 0.75f), M("beige", new Color(0.86f, 0.82f, 0.7f)));
+            Part(t, PrimitiveType.Cube, new Vector3(0.75f, 0.1f, 0f), new Vector3(0.38f, 0.85f, 0.75f), M("navy", new Color(0.04f, 0.17f, 0.4f)));
             Part(t, PrimitiveType.Cube, new Vector3(0.75f, 0.35f, 0.38f), new Vector3(0.3f, 0.03f, 0.02f), Dark());
             Part(t, PrimitiveType.Cube, new Vector3(-0.1f, -0.2f, 0.55f), new Vector3(0.8f, 0.04f, 0.28f), M("kb", new Color(0.2f, 0.2f, 0.24f)));
             float dist = range;
@@ -646,45 +649,56 @@ namespace CarMaxSpecialist
             Mats();
             GameObject go = Prop("CmxCabinet", from);
             Transform t = go.transform;
-            Material grey = M("cabinet", new Color(0.52f, 0.56f, 0.6f));
+            Material grey = M("cabinet", new Color(0.12f, 0.27f, 0.55f));
             Part(t, PrimitiveType.Cube, Vector3.zero, new Vector3(0.9f, 2f, 0.75f), grey);
             for (int i = 0; i < 4; i++)
             {
                 float y = -0.75f + i * 0.5f;
-                Part(t, PrimitiveType.Cube, new Vector3(0f, y, 0.38f), new Vector3(0.82f, 0.42f, 0.03f), M("drawer", new Color(0.62f, 0.66f, 0.7f)));
+                Part(t, PrimitiveType.Cube, new Vector3(0f, y, 0.38f), new Vector3(0.82f, 0.42f, 0.03f), M("drawer", new Color(0.2f, 0.38f, 0.7f)));
                 Part(t, PrimitiveType.Cube, new Vector3(0f, y + 0.08f, 0.41f), new Vector3(0.3f, 0.04f, 0.04f), Steel());
             }
             Fly(go, from, at, 58f, 0.5f);
         }
 
-        /// <summary>M2 hit 1: a scatter of lug nuts. Returns the fall time.</summary>
-        public static float LugNuts(Vector3 at)
+        private static float Throw(GameObject go, Vector3 from, Vector3 to, float speed, float arc, float spin, float startScale = 1f)
+        {
+            go.transform.position = from;
+            go.AddComponent<CmxFlyer>().Init(from, to, speed, spin, arc, startScale);
+            return Mathf.Max(0.1f, Vector3.Distance(from, to) / speed);
+        }
+
+        private static Material Gold() { return M("gold", new Color(1f, 0.79f, 0.15f), 0.2f); }
+        private static Material Navy() { return M("navy", new Color(0.04f, 0.17f, 0.4f)); }
+
+        /// <summary>M2 hit 1: a handful of lug nuts flung from his hand. Returns the longest flight time.</summary>
+        public static float LugNuts(Vector3 from, Vector3 at)
         {
             Mats();
-            float fall = 0.3f;
+            float longest = 0.2f;
             for (int i = 0; i < 8; i++)
             {
-                GameObject go = Prop("CmxLugNut", at);
+                GameObject go = Prop("CmxLugNut", from);
                 Part(go.transform, PrimitiveType.Cylinder, Vector3.zero, new Vector3(0.28f, 0.1f, 0.28f), Steel());
                 Part(go.transform, PrimitiveType.Cylinder, new Vector3(0f, 0.1f, 0f), new Vector3(0.14f, 0.02f, 0.14f), Dark());
                 Vector2 o = Random.insideUnitCircle * 3f;
-                fall = Fall(go, at + new Vector3(o.x, 0f, o.y), Random.Range(11f, 15f), 48f, 0.6f);
+                longest = Mathf.Max(longest, Throw(go, from, at + new Vector3(o.x, 0f, o.y), 38f, 1.5f, 0.8f));
             }
-            return 0.3f;
+            return longest;
         }
 
-        /// <summary>M2 hit 2: wrenches, a hammer and a ratchet raining down.</summary>
-        public static float Tools(Vector3 at)
+        /// <summary>M2 hit 2: wrenches and a hammer, thrown spinning.</summary>
+        public static float Tools(Vector3 from, Vector3 at)
         {
             Mats();
+            float longest = 0.2f;
             for (int i = 0; i < 5; i++)
             {
-                GameObject go = Prop("CmxTool", at);
+                GameObject go = Prop("CmxTool", from);
                 Transform t = go.transform;
-                if (i % 5 == 4)
+                if (i == 4)
                 {
-                    Part(t, PrimitiveType.Cube, Vector3.zero, new Vector3(0.1f, 0.1f, 1.2f), M("wood", new Color(0.55f, 0.38f, 0.2f)));
-                    Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, 0.6f), new Vector3(0.22f, 0.22f, 0.5f), Steel(), new Vector3(0f, 0f, 0f));
+                    Part(t, PrimitiveType.Cube, Vector3.zero, new Vector3(0.1f, 0.1f, 1.2f), Navy());
+                    Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, 0.6f), new Vector3(0.22f, 0.22f, 0.5f), Steel());
                 }
                 else
                 {
@@ -695,79 +709,78 @@ namespace CarMaxSpecialist
                 }
                 t.localScale = Vector3.one * 1.5f;
                 Vector2 o = Random.insideUnitCircle * 3.5f;
-                Fall(go, at + new Vector3(o.x, 0f, o.y), Random.Range(14f, 19f), 50f, 0.5f);
+                longest = Mathf.Max(longest, Throw(go, from, at + new Vector3(o.x, 0f, o.y), 34f, 2.5f, 1.2f));
             }
-            return 0.36f;
+            return longest;
         }
 
-        /// <summary>M2 hit 3: a floor jack and two jack stands.</summary>
-        public static float Jack(Vector3 at)
+        /// <summary>M2 hit 3: a floor jack and two jack stands, lobbed.</summary>
+        public static float Jack(Vector3 from, Vector3 at)
         {
             Mats();
-            Material red = M("jackred", new Color(0.85f, 0.15f, 0.12f));
-            GameObject jack = Prop("CmxJack", at);
+            GameObject jack = Prop("CmxJack", from);
             Transform t = jack.transform;
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.15f, 0f), new Vector3(0.7f, 0.25f, 1.6f), red);
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.45f, -0.5f), new Vector3(0.3f, 0.5f, 0.3f), red);
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.15f, 0f), new Vector3(0.7f, 0.25f, 1.6f), Gold());
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.45f, -0.5f), new Vector3(0.3f, 0.5f, 0.3f), Gold());
             Part(t, PrimitiveType.Cube, new Vector3(0f, 0.65f, 0.1f), new Vector3(0.12f, 0.12f, 1.3f), Steel(), new Vector3(-18f, 0f, 0f));
             Part(t, PrimitiveType.Cylinder, new Vector3(0f, 0.9f, 0.7f), new Vector3(0.4f, 0.05f, 0.4f), Dark());
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.2f, 1.25f), new Vector3(0.1f, 0.1f, 1f), Steel(), new Vector3(0f, 0f, 0f));
-            t.localScale = Vector3.one * 2f;
-            Fall(jack, at, 20f, 52f);
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.2f, 1.25f), new Vector3(0.1f, 0.1f, 1f), Steel());
+            t.localScale = Vector3.one * 1.6f;
+            float longest = Throw(jack, from, at, 30f, 4f, 0.7f);
             for (int i = 0; i < 2; i++)
             {
-                GameObject stand = Prop("CmxJackStand", at);
+                GameObject stand = Prop("CmxJackStand", from);
                 Transform s = stand.transform;
                 Part(s, PrimitiveType.Cube, new Vector3(0f, 0.05f, 0f), new Vector3(0.9f, 0.1f, 0.9f), Dark());
-                Part(s, PrimitiveType.Cube, new Vector3(0f, 0.6f, 0f), new Vector3(0.22f, 1.1f, 0.22f), M("standred", new Color(0.8f, 0.2f, 0.1f)));
-                Part(s, PrimitiveType.Cube, new Vector3(0f, 1.2f, 0f), new Vector3(0.4f, 0.12f, 0.4f), Dark());
-                s.localScale = Vector3.one * 1.6f;
-                Fall(stand, at + new Vector3(i == 0 ? -3f : 3f, 0f, Random.Range(-1.5f, 1.5f)), 24f, 52f, 0.3f);
+                Part(s, PrimitiveType.Cube, new Vector3(0f, 0.6f, 0f), new Vector3(0.22f, 1.1f, 0.22f), Navy());
+                Part(s, PrimitiveType.Cube, new Vector3(0f, 1.2f, 0f), new Vector3(0.4f, 0.12f, 0.4f), Gold());
+                s.localScale = Vector3.one * 1.4f;
+                longest = Mathf.Max(longest, Throw(stand, from, at + new Vector3(i == 0 ? -2.5f : 2.5f, 0f, Random.Range(-1.5f, 1.5f)), 30f, 5f, 0.6f));
             }
-            return 0.4f;
+            return longest;
         }
 
-        /// <summary>M2 hit 4: a whole car. Returns the fall time.</summary>
-        public static float Car(Vector3 at)
+        /// <summary>M2 hit 4: the car. It starts small in his hand and grows as it flies. Returns the flight time.</summary>
+        public static float Car(Vector3 from, Vector3 at)
         {
             Mats();
-            GameObject go = Prop("CmxCar", at);
+            GameObject go = Prop("CmxCar", from);
             Transform t = go.transform;
-            Material body = M("carbody", new Color(0.12f, 0.3f, 0.75f));
+            Material body = M("carbody", new Color(0.1f, 0.28f, 0.72f));
             Part(t, PrimitiveType.Cube, new Vector3(0f, 0.55f, 0f), new Vector3(1.8f, 0.7f, 3.9f), body);
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 1.15f, -0.2f), new Vector3(1.55f, 0.55f, 2.0f), M("cabin", new Color(0.55f, 0.75f, 0.95f)));
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 1.18f, -0.2f), new Vector3(1.6f, 0.4f, 1.7f), M("glass", new Color(0.1f, 0.12f, 0.2f)));
-            Part(t, PrimitiveType.Cube, new Vector3(0.6f, 0.62f, 1.97f), new Vector3(0.3f, 0.15f, 0.04f), M("lamp", new Color(1f, 0.95f, 0.7f), 1f));
-            Part(t, PrimitiveType.Cube, new Vector3(-0.6f, 0.62f, 1.97f), new Vector3(0.3f, 0.15f, 0.04f), M("lamp", new Color(1f, 0.95f, 0.7f), 1f));
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.92f, 0f), new Vector3(1.82f, 0.08f, 0.5f), Gold());
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 1.15f, -0.2f), new Vector3(1.55f, 0.55f, 2.0f), M("cabin", new Color(0.35f, 0.5f, 0.85f)));
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 1.18f, -0.2f), new Vector3(1.6f, 0.4f, 1.7f), M("glass", new Color(0.08f, 0.1f, 0.2f)));
+            Part(t, PrimitiveType.Cube, new Vector3(0.6f, 0.62f, 1.97f), new Vector3(0.3f, 0.15f, 0.04f), M("lamp", new Color(1f, 0.9f, 0.5f), 1f));
+            Part(t, PrimitiveType.Cube, new Vector3(-0.6f, 0.62f, 1.97f), new Vector3(0.3f, 0.15f, 0.04f), M("lamp", new Color(1f, 0.9f, 0.5f), 1f));
             for (int i = 0; i < 4; i++)
                 Part(t, PrimitiveType.Cylinder, new Vector3(i % 2 == 0 ? 0.95f : -0.95f, 0.3f, i < 2 ? 1.25f : -1.25f), new Vector3(0.7f, 0.12f, 0.7f), Dark(), new Vector3(0f, 0f, 90f));
             t.localScale = Vector3.one * 1.6f;
-            return Fall(go, at, 34f, 62f, 0f);
+            return Throw(go, from, at, 26f, 7f, 0.25f, 0.3f);
         }
 
-        /// <summary>M2 finale: the dealership falls on them. Returns the fall time.</summary>
-        public static float Building(Vector3 at, float delay)
+        /// <summary>M2 finale: the whole dealership, thrown a beat after the car. Returns the time until it lands.</summary>
+        public static float Building(Vector3 from, Vector3 at, float delay)
         {
             Mats();
-            GameObject go = Prop("CmxBuilding", at);
+            GameObject go = Prop("CmxBuilding", from);
             Transform t = go.transform;
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 6f, 0f), new Vector3(10f, 12f, 8f), M("wall", new Color(0.62f, 0.6f, 0.58f)));
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 12.4f, 0f), new Vector3(10.6f, 0.8f, 8.6f), M("roof", new Color(0.15f, 0.3f, 0.7f)));
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 10.8f, 4.1f), new Vector3(6f, 1.4f, 0.2f), M("sign", new Color(0.1f, 0.3f, 0.8f), 1.2f));
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 6f, 0f), new Vector3(10f, 12f, 8f), Navy());
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 12.4f, 0f), new Vector3(10.6f, 0.8f, 8.6f), Gold());
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 10.8f, 4.1f), new Vector3(6f, 1.4f, 0.2f), M("sign", new Color(1f, 0.79f, 0.15f), 1.2f));
             for (int r = 0; r < 3; r++)
                 for (int c = 0; c < 4; c++)
                     Part(t, PrimitiveType.Cube, new Vector3(-3.6f + c * 2.4f, 2.2f + r * 2.6f, 4.05f), new Vector3(1.4f, 1.4f, 0.12f), M("win", new Color(1f, 0.9f, 0.5f), 0.8f));
-            // it starts where the car does, a beat later and much higher
-            Vector3 from = at + Vector3.up * 70f;
-            go.transform.position = from;
             go.SetActive(false);
-            CmxDelay.Run(delay - 70f / 80f > 0f ? delay - 70f / 80f : 0f, () =>
+            float flight = Vector3.Distance(from, at) / 30f;
+            CmxDelay.Run(delay, () =>
             {
                 if (!go) return;
                 go.SetActive(true);
-                go.AddComponent<CmxFlyer>().Init(from, at, 80f, 0f);
+                go.AddComponent<CmxFlyer>().Init(from, at, 30f, 0f, 10f, 0.06f);
             });
-            return 70f / 80f + Mathf.Max(0f, delay - 70f / 80f);
+            go.transform.position = from;
+            return delay + flight;
         }
 
         public static void Slam(Vector3 at, float scale, bool big)
@@ -827,20 +840,26 @@ namespace CarMaxSpecialist
     public class CmxFlyer : MonoBehaviour
     {
         private Vector3 _a, _b;
-        private float _t, _len, _speed;
-        private Vector3 _spin;
+        private float _t, _len, _speed, _arc, _s0 = 1f;
+        private Vector3 _spin, _base;
 
-        public void Init(Vector3 a, Vector3 b, float speed, float spin = 1f)
+        public void Init(Vector3 a, Vector3 b, float speed, float spin = 1f, float arc = 0f, float startScale = 1f)
         {
-            _a = a; _b = b; _speed = speed;
+            _a = a; _b = b; _speed = speed; _arc = arc; _s0 = startScale;
+            _base = transform.localScale;
             _len = Mathf.Max(0.1f, Vector3.Distance(a, b));
             _spin = new Vector3(Random.Range(-900f, 900f), Random.Range(-300f, 300f), Random.Range(-900f, 900f)) * spin;
+            if (_s0 != 1f) transform.localScale = _base * _s0;
         }
 
         private void Update()
         {
             _t += Time.deltaTime * _speed / _len;
-            transform.position = Vector3.Lerp(_a, _b, _t);
+            float k = Mathf.Clamp01(_t);
+            Vector3 p = Vector3.Lerp(_a, _b, k);
+            p.y += _arc * 4f * k * (1f - k);
+            transform.position = p;
+            if (_s0 != 1f) transform.localScale = _base * Mathf.Lerp(_s0, 1f, k);
             transform.Rotate(_spin * Time.deltaTime, Space.Self);
             if (_t >= 1f) Destroy(gameObject);
         }
