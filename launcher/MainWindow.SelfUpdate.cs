@@ -28,6 +28,9 @@ namespace BrokenCharactersLauncher
     {
         private const string LauncherDownloadUrl = "https://github.com/" + Repo + "/releases/latest/download/" + LauncherAssetName;
 
+        /// <summary>Set when PLAY started a self-update: once the pack is current, the restarted launcher starts the game.</summary>
+        private static bool PlayAfterUpdate => Array.Exists(Args, a => a == "--play");
+
         /// <summary>Set on the restart right after a self-update, so the new launcher doesn't check again.</summary>
         private static bool JustUpdated => Array.Exists(Args, a => a == "--updated");
 
@@ -35,8 +38,9 @@ namespace BrokenCharactersLauncher
         /// Replaces this launcher with the one on the latest release if they differ, then restarts it.
         /// Returns true when the launcher is restarting (the caller should stop what it was doing).
         /// </summary>
-        /// <param name="fromRefresh">REFRESH pressed: check even if this run was itself started by a self-update.</param>
-        private async Task<bool> TrySelfUpdateAsync(bool fromRefresh)
+        /// <param name="fromRefresh">REFRESH or PLAY pressed: check even if this run was itself started by a self-update.</param>
+        /// <param name="thenPlay">PLAY pressed: the restarted launcher updates the pack and then starts the game by itself.</param>
+        private async Task<bool> TrySelfUpdateAsync(bool fromRefresh, bool thenPlay = false)
         {
 #if DEBUG
             await Task.CompletedTask;
@@ -132,9 +136,10 @@ namespace BrokenCharactersLauncher
             {
                 var psi = new ProcessStartInfo(me) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(me) ?? "" };
                 psi.ArgumentList.Add("--updated");
+                if (thenPlay) psi.ArgumentList.Add("--play");
                 for (int i = 1; i < Args.Length; i++)
                 {
-                    if (Args[i] != "--updated") psi.ArgumentList.Add(Args[i]);
+                    if (Args[i] != "--updated" && Args[i] != "--play") psi.ArgumentList.Add(Args[i]);
                 }
                 Process.Start(psi);
             }

@@ -139,6 +139,9 @@ namespace BrokenCharactersLauncher
             try { await SetUpSteamPlayAsync(); }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.ComponentModel.Win32Exception)
             { Debug.WriteLine("Steam Play setup skipped: " + ex.Message); }
+
+            // PLAY was pressed and the launcher restarted to update itself: the pack is now checked too, so go.
+            if (PlayAfterUpdate && PlayButton.IsEnabled) LaunchGame();
         }
 
         /// <summary>The main flow: compare versions, update if needed, then enable PLAY.</summary>
@@ -457,7 +460,20 @@ namespace BrokenCharactersLauncher
         /// Hands the steam:// link to Windows, which passes it to Steam, then closes the launcher.
         /// UseShellExecute must be true: on .NET 8, Process.Start with a URL and the default false fails.
         /// </summary>
-        private void PlayButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// PLAY: first update the launcher itself (it restarts and carries on by itself), then make sure the pack is
+        /// current, then start the game.
+        /// </summary>
+        private async void PlayButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_busy) return;
+            PlayButton.IsEnabled = false;
+            if (await TrySelfUpdateAsync(fromRefresh: true, thenPlay: true)) return; // restarting; the new launcher plays
+            await CheckAndUpdateAsync();
+            if (PlayButton.IsEnabled) LaunchGame(); // stays off only if nothing is installed and the update failed
+        }
+
+        private void LaunchGame()
         {
             try
             {
