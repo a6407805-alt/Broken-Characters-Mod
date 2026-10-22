@@ -23,6 +23,8 @@ namespace CarMaxSpecialist
         public Deadline Kind;
         public int Coworkers, OnBreak;
         public int OpenTasks; // host: task windows open on the owner's screen
+        public bool AuditActive; // host: the owner's screen is in a management audit
+        private float _maxTime;
 
         // local only
         public int EmailCount;
@@ -74,7 +76,14 @@ namespace CarMaxSpecialist
 
             int stacks = Mathf.Clamp(Mathf.RoundToInt(Stress), 0, 100);
             if (_body.GetBuffCount(CmxPlugin.StressBuff) != stacks) _body.SetBuffCount(CmxPlugin.StressBuff.buffIndex, stacks);
-            if (Stress >= 100f) Burnout();
+            if (AuditActive) { Stress = 100f; _maxTime = 0f; }
+            else if (Stress >= 100f)
+            {
+                // Give the owner's screen a moment to report the audit before it falls back to Burnout.
+                _maxTime += dt;
+                if (!CmxPlugin.AuditLockdown.Value || !CmxTasks.Enabled || _maxTime > 2.5f) { _maxTime = 0f; Burnout(); }
+            }
+            else _maxTime = 0f;
 
             _syncTimer -= dt;
             if (_syncTimer <= 0f) { _syncTimer = 0.2f; CmxNet.SendState(this); }
@@ -267,9 +276,20 @@ namespace CarMaxSpecialist
             if (Kind == Deadline.Purchase) Progress += 1f;
         }
 
-        public void ServerTaskDone()
+        public void SetAudit(byte state)
         {
-            AddStress(-CmxPlugin.TaskRelief.Value);
+            bool was = AuditActive;
+            AuditActive = state == 1;
+            if (state == 2 && was)
+            {
+                Stress = 45f;
+                CmxNet.Say(_body, gameObject, "<color=#7CFF7C>AUDIT PASSED</color>\n<size=70%>Backlog cleared. Back to work.</size>", Style.Banner, null);
+            }
+        }
+
+        public void ServerTaskDone(float relief = -1f)
+        {
+            AddStress(-(relief >= 0f ? relief : CmxPlugin.TaskRelief.Value));
             int gold = Scaled(CmxPlugin.PayPerHour.Value * 0.6f);
             Pay(gold);
             CmxNet.Say(_body, gameObject, "<color=#7CFF7C>Task closed +$" + gold + "</color>", Style.Small, null);
@@ -514,19 +534,19 @@ namespace CarMaxSpecialist
             NetworkingAPI.RegisterMessageType<CmxTaskMessage>();
         }
 
-        public static void TaskDone(CmxShift s)
+        public static void TaskDone(CmxShift s, float relief = -1f)
         {
             if (!s) return;
-            if (NetworkServer.active) { s.ServerTaskDone(); return; }
-            try { new CmxTaskMessage { Body = Id(s.gameObject), Done = true }.Send(NetworkDestination.Server); }
+            if (NetworkServer.active) { s.ServerTaskDone(relief); return; }
+            try { new CmxTaskMessage { Body = Id(s.gameObject), Done = true, Relief = relief }.Send(NetworkDestination.Server); }
             catch (Exception e) { CmxPlugin.Log.LogDebug("Task sync: " + e.Message); }
         }
 
-        public static void TaskOpen(CmxShift s, int open)
+        public static void TaskOpen(CmxShift s, int open, byte audit = 0)
         {
             if (!s) return;
-            if (NetworkServer.active) { s.OpenTasks = open; return; }
-            try { new CmxTaskMessage { Body = Id(s.gameObject), Done = false, Open = (byte)Mathf.Clamp(open, 0, 255) }.Send(NetworkDestination.Server); }
+            if (NetworkServer.active) { s.OpenTasks = open; s.SetAudit(audit); return; }
+            try { new CmxTaskMessage { Body = Id(s.gameObject), Done = false, Open = (byte)Mathf.Clamp(open, 0, 255), Audit = audit }.Send(NetworkDestination.Server); }
             catch (Exception e) { CmxPlugin.Log.LogDebug("Task sync: " + e.Message); }
         }
 

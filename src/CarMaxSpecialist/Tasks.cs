@@ -11,12 +11,18 @@ namespace CarMaxSpecialist
 {
     /// <summary>
     /// Busywork: task windows pop up on his screen like ads and stay there (blocking the view and nagging stress)
-    /// until he finishes their little minigame: punch in a part number, sign off an RO, write the story
-    /// (complaint / cause / correction) or total an invoice. Only the Specialist's own player sees them.
+    /// until he finishes their little minigame. How often they come depends on his stress:
+    ///   calm (0-40)      rare, a couple at a time
+    ///   busy (41-74)     frequent, they pile up on each other
+    ///   overloaded (75+) bursts of several windows, the screen fills up
+    ///   100              MANAGEMENT AUDIT: the screen locks down and windows keep coming until the backlog is cleared
+    /// Windows: part number, RO sign-off, write the story, invoice, plus the ERO repair order (RO #29751) and the
+    /// appointment scheduler (date twice, scrambled-vowel name, twitchy promise time, fake progress bar).
+    /// Keyboard only, newest window takes the keys. Only the Specialist's own player sees them.
     /// </summary>
     public class CmxTasks : MonoBehaviour
     {
-        private enum Kind { PartNumber, RepairOrder, Story, Invoice }
+        private enum Kind { PartNumber, RepairOrder, Story, Invoice, Ero, Appt, Error }
 
         private class Task
         {
@@ -26,7 +32,7 @@ namespace CarMaxSpecialist
             public string Title, Header;
             // part number / invoice
             public string Answer = "", Typed = "";
-            // repair order
+            // repair order sign-off
             public string[] Lines;
             public int[] Arrows;
             public int Step;
@@ -34,6 +40,17 @@ namespace CarMaxSpecialist
             public Story Story;
             public string[] Options;
             public int Correct;
+            // ERO
+            public string Says, Chosen = "";
+            public int NeedPay;
+            // appointment
+            public string[] Dates;
+            public int Cursor, Picked = -1, AlphaIdx;
+            public char[] Alpha;
+            public string TargetName, Name = "", Msg = "";
+            public float Pos = 420f, TargetMin, Hold, ErrCool, ProgT, Prog;
+            public bool Released;
+            public bool[] Checks = new bool[3];
         }
 
         private class Story
@@ -66,6 +83,49 @@ namespace CarMaxSpecialist
             "Battery test", "Coolant top-off", "Road test", "Wash & vacuum", "Recall check", "Alignment check"
         };
 
+        // ERO: what the customer says, and the shorthand the tech types for it.
+        private static readonly string[] EroSays =
+        {
+            "Customer says the check engine light is on and it stalls at red lights.",
+            "Customer says the brakes squeal every time they stop.",
+            "Customer says the A/C only blows warm air.",
+            "Customer says there is a vibration at highway speed.",
+            "Customer says there is a clunk from the front end over bumps."
+        };
+
+        private static readonly string[] EroLines =
+        {
+            "CK ENG LT ON, STALLS AT IDLE. CK AND ADV.",
+            "BRAKES SQUEAL ON STOPPING. INSPECT F/R.",
+            "A/C BLOWS WARM. DIAGNOSE AND REPAIR.",
+            "VIBRATION AT HWY SPEED. CK TIRES/BALANCE.",
+            "CLUNK F/END OVER BUMPS. CK SUSPENSION."
+        };
+
+        private static readonly string[] PayCodes = { "RET", "WAR", "TWG", "NSA" };
+
+        private static readonly string[] PayHints =
+        {
+            "Customer is paying out of pocket.",
+            "Covered by manufacturer warranty.",
+            "Dealer goodwill, no charge to customer.",
+            "No-show adjustment, internal credit."
+        };
+
+        private static readonly string[] ApptNames = { "OMAR", "ABEL", "IVAN", "ELLA", "ERIN", "OLGA" };
+
+        private static readonly string[] ApptSteps =
+        {
+            "SELECT APPOINTMENT DATE", "CONFIRM APPOINTMENT DATE", "ENTER CUSTOMER NAME", "SET PROMISE TIME", "SUBMITTING APPOINTMENT"
+        };
+
+        private static readonly string[] ApptChecks =
+        {
+            "I certify the Promise Time is acceptable.",
+            "I acknowledge dates are subject to change.",
+            "I have read the Terms of Service (page 1 of 47)."
+        };
+
         private static readonly string[] ArrowNames = { "UP", "RIGHT", "DOWN", "LEFT" };
         private static readonly string[] ArrowGlyph = { "↑", "→", "↓", "←" };
         private static readonly KeyCode[] ArrowKeys = { KeyCode.UpArrow, KeyCode.RightArrow, KeyCode.DownArrow, KeyCode.LeftArrow };
@@ -74,9 +134,13 @@ namespace CarMaxSpecialist
         private readonly List<Task> _tasks = new List<Task>();
         private CharacterBody _body;
         private float _nextSpawn = 20f;
-        private int _sentOpen = -1;
+        private int _sentKey = -1;
+        private bool _audit, _auditEnded;
+        private int _backlog;
+        private float _postAudit, _toastT;
+        private string _toast = "";
         private Texture2D _white;
-        private GUIStyle _label, _center, _mono;
+        private GUIStyle _label, _center, _mono, _big;
 
         public static bool Enabled => CmxPlugin.Tasks == null || CmxPlugin.Tasks.Value;
 
@@ -86,32 +150,133 @@ namespace CarMaxSpecialist
             try { me = LocalUserManager.GetFirstLocalUser()?.cachedBody; } catch { }
             CmxShift shift = me ? me.GetComponent<CmxShift>() : null;
             bool alive = shift && me.healthComponent && me.healthComponent.alive;
-            if (me != _body) { _tasks.Clear(); _body = me; _nextSpawn = 20f; }
-            if (!alive || !Enabled) { if (_tasks.Count > 0) _tasks.Clear(); Report(shift); return; }
+            if (me != _body) { _tasks.Clear(); _body = me; _nextSpawn = 20f; _audit = false; _backlog = 0; }
+            if (!alive || !Enabled) { if (_tasks.Count > 0) _tasks.Clear(); _audit = false; Report(shift); return; }
             if (Time.timeScale <= 0f) return;
 
-            // New windows come faster the more stressed (and overtimed) he is.
-            _nextSpawn -= Time.deltaTime;
-            int max = Mathf.Max(1, CmxPlugin.MaxTasks.Value);
-            if (_nextSpawn <= 0f)
-            {
-                float k = Mathf.Clamp01(shift.Stress / 100f);
-                _nextSpawn = Mathf.Lerp(CmxPlugin.TaskEveryMax.Value, CmxPlugin.TaskEveryMin.Value, k) * (shift.Overtime ? 0.7f : 1f) * Random.Range(0.85f, 1.15f);
-                if (_tasks.Count < max) Spawn();
-            }
+            float dt = Time.deltaTime;
+            if (_toastT > 0f) _toastT -= dt;
+            if (_postAudit > 0f) _postAudit -= dt;
 
-            if (_tasks.Count > 0) HandleInput(_tasks[_tasks.Count - 1], shift);
+            // 100 stress = management audit (the host waits a moment for us to report it before it falls back to Burnout).
+            if (!_audit && CmxPlugin.AuditLockdown.Value && _postAudit <= 0f && shift.Stress >= 99.5f) StartAudit();
+            if (_audit && _backlog <= 0) EndAudit();
+
+            _nextSpawn -= dt;
+            if (_nextSpawn <= 0f) SpawnTick(shift);
+
+            if (_tasks.Count > 0) HandleInput(_tasks[_tasks.Count - 1], shift, dt);
             Report(shift);
+        }
+
+        // ------------------------------------------------------------ stress tiers + audit
+
+        private int Tier(float stress)
+        {
+            if (_audit) return 3;
+            int p = Mathf.FloorToInt(stress);
+            if (p >= 100) return 3;
+            if (p >= Mathf.RoundToInt(CmxPlugin.HighFrom.Value)) return 2;
+            if (p >= Mathf.RoundToInt(CmxPlugin.MediumFrom.Value)) return 1;
+            return 0;
+        }
+
+        private int TicketCount()
+        {
+            int n = 0;
+            for (int i = 0; i < _tasks.Count; i++) if (_tasks[i].Kind != Kind.Error) n++;
+            return n;
+        }
+
+        private void SpawnTick(CmxShift shift)
+        {
+            int tier = Tier(shift.Stress);
+            int cap, burst = 1;
+            float gap;
+            switch (tier)
+            {
+                case 0:
+                    cap = CmxPlugin.LowCap.Value;
+                    gap = CmxPlugin.LowEvery.Value * Random.Range(0.75f, 1.25f);
+                    break;
+                case 1:
+                    cap = CmxPlugin.MedCap.Value;
+                    gap = Random.Range(CmxPlugin.MedEveryMin.Value, Mathf.Max(CmxPlugin.MedEveryMin.Value, CmxPlugin.MedEveryMax.Value));
+                    break;
+                case 2:
+                    cap = CmxPlugin.HighCap.Value;
+                    burst = Random.Range(1, Mathf.Max(1, CmxPlugin.HighBurst.Value) + 1);
+                    gap = Random.Range(CmxPlugin.HighEveryMin.Value, Mathf.Max(CmxPlugin.HighEveryMin.Value, CmxPlugin.HighEveryMax.Value));
+                    break;
+                default:
+                    cap = Mathf.Max(CmxPlugin.HighCap.Value, 14);
+                    gap = CmxPlugin.AuditEvery.Value;
+                    break;
+            }
+            _nextSpawn = Mathf.Max(0.3f, gap * (shift.Overtime && tier < 3 ? 0.7f : 1f));
+
+            for (int i = 0; i < burst; i++)
+            {
+                int open = TicketCount();
+                if (open >= cap) break;
+                if (_audit && open >= _backlog) break; // never more windows than you can clear
+                Spawn(tier);
+            }
+        }
+
+        private void StartAudit()
+        {
+            _audit = true;
+            _backlog = Mathf.Max(1, CmxPlugin.AuditBacklog.Value);
+            _nextSpawn = 0.3f;
+            CmxAudio.Play("slam");
+        }
+
+        private void EndAudit()
+        {
+            _audit = false;
+            _auditEnded = true; // reported once so the host resets stress
+            _postAudit = 3f;
+            _nextSpawn = 6f;
+            _toast = "AUDIT PASSED";
+            _toastT = 2.5f;
+            for (int i = _tasks.Count - 1; i >= 0; i--) if (_tasks[i].Kind != Kind.Error) _tasks.RemoveAt(i);
+            CmxAudio.Play("cash");
         }
 
         // ------------------------------------------------------------ spawning
 
-        private void Spawn()
+        private Kind PickKind()
+        {
+            float r = Random.value;
+            if (r < CmxPlugin.ApptChance.Value) return Kind.Appt;
+            if (r < CmxPlugin.ApptChance.Value + CmxPlugin.EroChance.Value) return Kind.Ero;
+            return (Kind)Random.Range(0, 4);
+        }
+
+        private Rect PickRect(float w, float h, int tier)
+        {
+            float x = Random.Range(0.04f, 0.96f) * (Screen.width - w);
+            float y = Random.Range(0.08f, 0.85f) * (Screen.height - h);
+            // Under pressure, new windows love to land on the last one.
+            if (tier >= 1 && _tasks.Count > 0 && Random.value < 0.35f)
+            {
+                Rect last = _tasks[_tasks.Count - 1].Rect;
+                x = Mathf.Clamp(last.x + Random.Range(-90f, 90f), 0f, Mathf.Max(0f, Screen.width - w));
+                y = Mathf.Clamp(last.y + Random.Range(-70f, 70f), 0f, Mathf.Max(0f, Screen.height - h));
+            }
+            return new Rect(x, y, w, h);
+        }
+
+        private void Spawn(int tier)
         {
             float sc = Mathf.Max(0.6f, Screen.height / 1080f);
+            Kind kind = PickKind();
             float w = 460f * sc, h = 270f * sc;
-            Rect r = new Rect(Random.Range(0.04f, 0.96f) * (Screen.width - w), Random.Range(0.08f, 0.85f) * (Screen.height - h), w, h);
-            Task t = new Task { Rect = r, Born = Time.unscaledTime, Kind = (Kind)Random.Range(0, 4) };
+            if (kind == Kind.Ero) { w = 640f * sc; h = 440f * sc; }
+            else if (kind == Kind.Appt) { w = 620f * sc; h = 400f * sc; }
+
+            Task t = new Task { Rect = PickRect(w, h, tier), Born = Time.unscaledTime, Kind = kind };
             switch (t.Kind)
             {
                 case Kind.PartNumber:
@@ -145,9 +310,64 @@ namespace CarMaxSpecialist
                     t.Header = "Labor " + hours + " hr x $" + rate + "  +  parts $" + parts + "  =  ?";
                     t.Answer = (hours * rate + parts).ToString();
                     break;
+                case Kind.Ero:
+                {
+                    t.Title = "ERO - Repair Order Entry   [RO #29751]";
+                    t.Header = "RO #29751     USER: BECKA003     SC: ABADIA, OMAR";
+                    int ci = Random.Range(0, EroSays.Length);
+                    int a = (ci + 1 + Random.Range(0, EroLines.Length - 1)) % EroLines.Length;
+                    int b = a;
+                    while (b == a || b == ci) b = Random.Range(0, EroLines.Length);
+                    t.Says = EroSays[ci];
+                    t.NeedPay = Random.Range(0, PayCodes.Length);
+                    Shuffle(t, EroLines[ci], new[] { EroLines[a], EroLines[b] });
+                    break;
+                }
+                case Kind.Appt:
+                {
+                    t.Title = "Service Scheduler - New Appointment";
+                    t.Dates = new string[14];
+                    for (int i = 0; i < 14; i++)
+                        t.Dates[i] = DateTime.Today.AddDays(i + 1).ToString("ddd MM/dd", System.Globalization.CultureInfo.InvariantCulture);
+                    t.TargetName = ApptNames[Random.Range(0, ApptNames.Length)];
+                    t.Alpha = ScrambledAlphabet();
+                    t.AlphaIdx = Random.Range(0, 26);
+                    t.TargetMin = 540 + 5 * Random.Range(0, 85); // 9:00 AM to 4:00 PM
+                    break;
+                }
             }
             _tasks.Add(t);
             CmxAudio.Play("memo");
+        }
+
+        private void SpawnError()
+        {
+            float sc = Mathf.Max(0.6f, Screen.height / 1080f);
+            float w = 440f * sc, h = 190f * sc;
+            Task t = new Task
+            {
+                Kind = Kind.Error, Born = Time.unscaledTime, Title = "Error", Header = "ERROR 0x8007000E",
+                Rect = new Rect(Screen.width * 0.5f - w * 0.5f + Random.Range(-120f, 120f) * sc, Screen.height * 0.5f - h * 0.5f + Random.Range(-90f, 90f) * sc, w, h)
+            };
+            _tasks.Add(t);
+            CmxAudio.Play("fail");
+        }
+
+        private static char[] ScrambledAlphabet()
+        {
+            char[] a = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".ToCharArray();
+            List<int> slots = new List<int>();
+            List<char> vowels = new List<char>();
+            for (int i = 0; i < a.Length; i++) if ("AEIOU".IndexOf(a[i]) >= 0) { slots.Add(i); vowels.Add(a[i]); }
+            for (int tries = 0; tries < 20; tries++)
+            {
+                for (int i = vowels.Count - 1; i > 0; i--) { int j = Random.Range(0, i + 1); char c = vowels[i]; vowels[i] = vowels[j]; vowels[j] = c; }
+                int moved = 0;
+                for (int k = 0; k < slots.Count; k++) if (a[slots[k]] != vowels[k]) moved++;
+                if (moved >= 4) break;
+            }
+            for (int k = 0; k < slots.Count; k++) a[slots[k]] = vowels[k];
+            return a;
         }
 
         private static void Shuffle(Task t, string right, string[] wrong)
@@ -173,7 +393,7 @@ namespace CarMaxSpecialist
             CmxAudio.Play(sound);
         }
 
-        private void HandleInput(Task t, CmxShift shift)
+        private void HandleInput(Task t, CmxShift shift, float dt)
         {
             switch (t.Kind)
             {
@@ -220,23 +440,151 @@ namespace CarMaxSpecialist
                     }
                     break;
                 }
+                case Kind.Ero:
+                    EroInput(t, shift);
+                    break;
+                case Kind.Appt:
+                    ApptInput(t, shift, dt);
+                    break;
+                case Kind.Error:
+                    if (DigitDown() == 0) { _tasks.Remove(t); CmxAudio.Play("typing"); }
+                    break;
             }
         }
 
-        private void Complete(Task t, CmxShift shift)
+        // ERO: 1) pick the complaint, 2) pick the pay type, 3) stamp LARGE COMPLETED.
+        private void EroInput(Task t, CmxShift shift)
+        {
+            int d = DigitDown();
+            if (d < 0) return;
+            if (t.Step == 0)
+            {
+                if (d < 1 || d > 3) return;
+                if (d - 1 == t.Correct) { t.Chosen = t.Options[t.Correct]; t.Step = 1; CmxAudio.Play("typing"); }
+                else Wrong(t);
+            }
+            else if (t.Step == 1)
+            {
+                if (d < 1 || d > 4) return;
+                if (d - 1 == t.NeedPay) { t.Step = 2; CmxAudio.Play("typing"); }
+                else Wrong(t);
+            }
+            else if (d == 0)
+            {
+                CmxAudio.Play("stamp");
+                Complete(t, shift, CmxPlugin.EroRelief.Value);
+            }
+            else Wrong(t);
+        }
+
+        private static int Wrap(int v, int n) { return ((v % n) + n) % n; }
+
+        private void ApptInput(Task t, CmxShift shift, float dt)
+        {
+            int d = DigitDown();
+            switch (t.Step)
+            {
+                case 0:
+                case 1:
+                    if (Input.GetKeyDown(KeyCode.RightArrow)) t.Cursor = Wrap(t.Cursor + 1, 14);
+                    else if (Input.GetKeyDown(KeyCode.LeftArrow)) t.Cursor = Wrap(t.Cursor - 1, 14);
+                    if (d != 0) break;
+                    if (t.Step == 0) { t.Picked = t.Cursor; t.Cursor = Random.Range(0, 14); t.Step = 1; t.Msg = ""; CmxAudio.Play("stamp"); }
+                    else if (t.Cursor == t.Picked) { t.Step = 2; t.Msg = ""; CmxAudio.Play("stamp"); }
+                    else { t.Picked = -1; t.Cursor = 0; t.Step = 0; t.Msg = "DATE MISMATCH. START OVER."; Wrong(t); }
+                    break;
+                case 2:
+                    if (Input.GetKeyDown(KeyCode.UpArrow)) t.AlphaIdx = Wrap(t.AlphaIdx - 1, 26);
+                    else if (Input.GetKeyDown(KeyCode.DownArrow)) t.AlphaIdx = Wrap(t.AlphaIdx + 1, 26);
+                    else if (Input.GetKeyDown(KeyCode.RightArrow)) t.AlphaIdx = Wrap(t.AlphaIdx + 5, 26);
+                    else if (Input.GetKeyDown(KeyCode.LeftArrow)) t.AlphaIdx = Wrap(t.AlphaIdx - 5, 26);
+                    if (d != 0) break;
+                    if (t.Alpha[t.AlphaIdx] == t.TargetName[t.Name.Length])
+                    {
+                        t.Name += t.Alpha[t.AlphaIdx];
+                        t.Msg = "";
+                        CmxAudio.Play("typing");
+                        if (t.Name.Length >= t.TargetName.Length) t.Step = 3;
+                    }
+                    else { t.Name = ""; t.Msg = "WRONG LETTER. START THE NAME OVER."; Wrong(t); }
+                    break;
+                case 3:
+                {
+                    // Very twitchy: the longer you hold, the faster it goes. Overshoot and the scheduler throws an error.
+                    t.ErrCool -= dt;
+                    int dir = Input.GetKey(KeyCode.RightArrow) ? 1 : Input.GetKey(KeyCode.LeftArrow) ? -1 : 0;
+                    if (dir != 0)
+                    {
+                        t.Hold += dt;
+                        float speed = Mathf.Lerp(40f, 420f, Mathf.Clamp01(t.Hold)) * CmxPlugin.SliderSensitivity.Value;
+                        t.Pos = Mathf.Clamp(t.Pos + dir * speed * dt, 420f, 1080f);
+                    }
+                    else t.Hold = 0f;
+
+                    if (t.Pos > t.TargetMin + 20f && t.ErrCool <= 0f)
+                    {
+                        t.ErrCool = 1.5f;
+                        t.Pos = 420f;
+                        t.Hold = 0f;
+                        SpawnError();
+                        return;
+                    }
+                    if (d != 0) break;
+                    int minutes = 5 * Mathf.RoundToInt(t.Pos / 5f);
+                    if (Mathf.Abs(minutes - t.TargetMin) <= Mathf.Max(5f, CmxPlugin.SliderTolerance.Value)) { t.Step = 4; t.Msg = ""; CmxAudio.Play("stamp"); }
+                    else { t.Msg = "NOT ACCEPTABLE. TARGET IS " + FormatTime((int)t.TargetMin) + "."; Wrong(t); }
+                    break;
+                }
+                case 4:
+                {
+                    // 10 seconds to 99%, then it stalls until every compliance box is ticked.
+                    t.ProgT += dt;
+                    float p = Mathf.Clamp01(t.ProgT / 10f);
+                    if (!t.Released)
+                    {
+                        t.Prog = 0.99f * p;
+                        if (p >= 1f)
+                        {
+                            if (d >= 1 && d <= 3) { t.Checks[d - 1] = !t.Checks[d - 1]; CmxAudio.Play("typing"); }
+                            if (t.Checks[0] && t.Checks[1] && t.Checks[2]) t.Released = true;
+                        }
+                    }
+                    else
+                    {
+                        t.Prog = Mathf.MoveTowards(t.Prog, 1f, dt * 1.6f);
+                        if (t.Prog >= 1f) Complete(t, shift, CmxPlugin.ApptRelief.Value);
+                    }
+                    break;
+                }
+            }
+        }
+
+        private static string FormatTime(int minutes)
+        {
+            int h = minutes / 60, m = minutes % 60;
+            int h12 = h % 12 == 0 ? 12 : h % 12;
+            return h12 + ":" + m.ToString("00") + (h >= 12 ? " PM" : " AM");
+        }
+
+        private void Complete(Task t, CmxShift shift, float relief = -1f)
         {
             _tasks.Remove(t);
             CmxAudio.Play("cash");
-            CmxNet.TaskDone(shift);
+            if (_audit) _backlog = Mathf.Max(0, _backlog - 1);
+            CmxNet.TaskDone(shift, relief);
         }
 
         private void Report(CmxShift shift)
         {
             int open = _tasks.Count;
             Open = open;
-            if (open == _sentOpen || !shift) return;
-            _sentOpen = open;
-            CmxNet.TaskOpen(shift, open);
+            if (!shift) return;
+            byte audit = (byte)(_audit ? 1 : _auditEnded ? 2 : 0);
+            int key = open * 4 + audit;
+            if (key == _sentKey) return;
+            _sentKey = key;
+            _auditEnded = false;
+            CmxNet.TaskOpen(shift, open, audit);
         }
 
         // ------------------------------------------------------------ drawing
@@ -251,10 +599,12 @@ namespace CarMaxSpecialist
                 _label = new GUIStyle(GUI.skin.label) { richText = true, wordWrap = true, alignment = TextAnchor.UpperLeft };
                 _center = new GUIStyle(GUI.skin.label) { richText = true, wordWrap = true, alignment = TextAnchor.MiddleCenter };
                 _mono = new GUIStyle(GUI.skin.label) { richText = true, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+                _big = new GUIStyle(GUI.skin.label) { richText = true, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
             }
             _label.fontSize = Mathf.RoundToInt(17f * sc);
             _center.fontSize = Mathf.RoundToInt(17f * sc);
             _mono.fontSize = Mathf.RoundToInt(30f * sc);
+            _big.fontSize = Mathf.RoundToInt(96f * sc);
         }
 
         private void Box(Rect r, Color c)
@@ -267,11 +617,36 @@ namespace CarMaxSpecialist
 
         private void OnGUI()
         {
-            if (_tasks.Count == 0 || Event.current.type != EventType.Repaint) return;
+            if (Event.current.type != EventType.Repaint) return;
+            bool overlay = _audit || _toastT > 0f;
+            if (_tasks.Count == 0 && !overlay) return;
             GUI.depth = -10;
             float sc = Mathf.Max(0.6f, Screen.height / 1080f);
             Styles(sc);
+            if (_audit) DrawAudit(sc);
+            else if (_toastT > 0f)
+            {
+                _big.normal.textColor = new Color(0.45f, 1f, 0.5f);
+                GUI.Label(new Rect(0f, Screen.height * 0.25f, Screen.width, 140f * sc), _toast, _big);
+            }
             for (int i = 0; i < _tasks.Count; i++) DrawTask(_tasks[i], sc, i == _tasks.Count - 1);
+        }
+
+        private void DrawAudit(float sc)
+        {
+            float pulse = 0.6f + 0.1f * Mathf.Sin(Time.unscaledTime * 6f);
+            Box(new Rect(0f, 0f, Screen.width, Screen.height), new Color(0.14f, 0f, 0f, pulse));
+            _big.normal.textColor = new Color(1f, 0.2f, 0.2f);
+            GUI.Label(new Rect(0f, Screen.height * 0.28f, Screen.width, 140f * sc), "MANAGEMENT AUDIT", _big);
+            _center.normal.textColor = Color.white;
+            GUI.Label(new Rect(Screen.width * 0.2f, Screen.height * 0.28f + 130f * sc, Screen.width * 0.6f, 70f * sc),
+                "ALL REPAIR ORDERS MUST BE RECONCILED BEFORE THE SHIFT RESUMES.\nBACKLOG: " + _backlog + " REMAINING", _center);
+        }
+
+        private string HeaderOf(Task t)
+        {
+            if (t.Kind == Kind.Appt) return "STEP " + (t.Step + 1) + " OF 5   -   " + ApptSteps[t.Step];
+            return t.Header;
         }
 
         private void DrawTask(Task t, float sc, bool active)
@@ -299,7 +674,7 @@ namespace CarMaxSpecialist
             float w = inner.width - pad * 2f;
             _label.normal.textColor = new Color(0.1f, 0.12f, 0.18f);
             _center.normal.textColor = new Color(0.1f, 0.12f, 0.18f);
-            GUI.Label(new Rect(inner.x + pad, y, w, 46f * sc), t.Header, _label);
+            GUI.Label(new Rect(inner.x + pad, y, w, 46f * sc), HeaderOf(t), _label);
             y += 44f * sc;
 
             switch (t.Kind)
@@ -347,6 +722,129 @@ namespace CarMaxSpecialist
                     Hint(inner, "Press 1, 2 or 3", sc);
                     break;
                 }
+                case Kind.Ero: DrawEro(t, inner, y, w, pad, sc); break;
+                case Kind.Appt: DrawAppt(t, inner, y, w, pad, sc); break;
+                case Kind.Error:
+                {
+                    Box(new Rect(inner.x + pad, y - 6f * sc, 44f * sc, 44f * sc), new Color(0.8f, 0.1f, 0.1f));
+                    _mono.normal.textColor = Color.white;
+                    GUI.Label(new Rect(inner.x + pad, y - 6f * sc, 44f * sc, 44f * sc), "X", _mono);
+                    GUI.Label(new Rect(inner.x + pad + 60f * sc, y - 6f * sc, w - 60f * sc, 60f * sc), "PROMISE TIME EXCEEDS BAY CAPACITY.\nSELECT AN EARLIER TIME.", _label);
+                    Hint(inner, "Press 0 for OK", sc);
+                    break;
+                }
+            }
+        }
+
+        private void DrawEro(Task t, Rect inner, float y, float w, float pad, float sc)
+        {
+            float lh = 24f * sc, x = inner.x + pad;
+            GUI.Label(new Rect(x, y, w, lh), "<b>BILL TO:</b> " + PayHints[t.NeedPay], _label);
+            y += lh;
+            GUI.Label(new Rect(x, y, w, lh * 2f), t.Says, _label);
+            y += lh * 2f;
+            GUI.Label(new Rect(x, y, w, lh), "<b>CUSTOMER COMPLAINT</b>", _label);
+            y += lh;
+            Box(new Rect(x, y, w, lh + 6f * sc), Color.white);
+            GUI.Label(new Rect(x + 4f * sc, y + 2f * sc, w - 8f * sc, lh + 4f * sc),
+                t.Chosen.Length > 0 ? t.Chosen : "<color=#888888>(press 1-3 to enter the complaint)</color>", _label);
+            y += lh + 14f * sc;
+
+            if (t.Step == 0)
+            {
+                for (int i = 0; i < 3; i++)
+                    GUI.Label(new Rect(x, y + i * lh, w, lh), "<b><color=#003B75>[" + (i + 1) + "]</color></b> " + t.Options[i], _label);
+            }
+            else
+            {
+                string pay = "<b>PAY TYPE:</b>   ";
+                for (int i = 0; i < PayCodes.Length; i++)
+                {
+                    bool chosen = t.Step == 2 && i == t.NeedPay;
+                    pay += (chosen ? "<color=#1A8A2A><b>" : "<color=#003B75>") + "[" + (i + 1) + "] " + PayCodes[i] + (chosen ? "</b></color>" : "</color>") + "    ";
+                }
+                GUI.Label(new Rect(x, y, w, lh), pay, _label);
+            }
+
+            // the big green stamp
+            Rect stamp = new Rect(inner.x + pad + w * 0.5f - 160f * sc, inner.yMax - 26f * sc - 74f * sc, 320f * sc, 66f * sc);
+            bool ready = t.Step == 2;
+            Box(new Rect(stamp.x - 3f * sc, stamp.y - 3f * sc, stamp.width + 6f * sc, stamp.height + 6f * sc), new Color(0.05f, 0.25f, 0.08f));
+            Box(stamp, ready ? new Color(0.1f, 0.65f, 0.2f) : new Color(0.55f, 0.6f, 0.55f));
+            int old = _mono.fontSize;
+            _mono.fontSize = Mathf.RoundToInt(28f * sc);
+            _mono.normal.textColor = Color.white;
+            GUI.Label(stamp, "LARGE COMPLETED", _mono);
+            _mono.fontSize = old;
+            Hint(inner, t.Step == 0 ? "Press 1, 2 or 3" : t.Step == 1 ? "Press 1-4 for the pay type the bill-to calls for" : "Press 0 to stamp it", sc);
+        }
+
+        private void DrawAppt(Task t, Rect inner, float y, float w, float pad, float sc)
+        {
+            float lh = 24f * sc, x = inner.x + pad;
+            switch (t.Step)
+            {
+                case 0:
+                case 1:
+                    GUI.Label(new Rect(x, y, w, lh * 2f), t.Step == 0 ? "Pick the day the customer will bring the vehicle in." : "Policy 7.3.1: enter the date a second time. It must match.", _label);
+                    y += lh * 2f + 8f * sc;
+                    Box(new Rect(x, y, w, 50f * sc), Color.white);
+                    _mono.normal.textColor = new Color(0f, 0.23f, 0.46f);
+                    GUI.Label(new Rect(x, y, w, 50f * sc), "<  " + t.Dates[t.Cursor] + "  >", _mono);
+                    Hint(inner, "Left / Right change the date    0 select", sc);
+                    break;
+                case 2:
+                {
+                    GUI.Label(new Rect(x, y, w, lh), "Type the customer's name: <b>" + t.TargetName + "</b>", _label);
+                    y += lh + 8f * sc;
+                    Box(new Rect(x, y, w, 50f * sc), Color.white);
+                    _mono.normal.textColor = new Color(0.1f, 0.5f, 0.15f);
+                    GUI.Label(new Rect(x, y, w, 50f * sc), t.Name + "<color=#003B75>" + (Blink() ? t.Alpha[t.AlphaIdx].ToString() : "_") + "</color>", _mono);
+                    y += 58f * sc;
+                    char prev = t.Alpha[Wrap(t.AlphaIdx - 1, 26)], next = t.Alpha[Wrap(t.AlphaIdx + 1, 26)];
+                    GUI.Label(new Rect(x, y, w, lh), "<color=#888888>" + prev + "</color>   <b><color=#003B75>" + t.Alpha[t.AlphaIdx] + "</color></b>   <color=#888888>" + next + "</color>   (the vowels have been moved)", _label);
+                    Hint(inner, "Up/Down letter    Left/Right jump 5    0 enter letter", sc);
+                    break;
+                }
+                case 3:
+                {
+                    GUI.Label(new Rect(x, y, w, lh), "Customer needs the vehicle back by  <b>" + FormatTime((int)t.TargetMin) + "</b>", _label);
+                    y += lh + 6f * sc;
+                    _mono.normal.textColor = new Color(0.05f, 0.2f, 0.7f);
+                    GUI.Label(new Rect(x, y, w, 46f * sc), FormatTime(5 * Mathf.RoundToInt(t.Pos / 5f)), _mono);
+                    y += 58f * sc;
+                    float frac = Mathf.Clamp01((t.Pos - 420f) / 660f);
+                    Box(new Rect(x, y, w, 14f * sc), new Color(0.35f, 0.35f, 0.35f));
+                    Box(new Rect(x + w * frac - 9f * sc, y - 12f * sc, 18f * sc, 38f * sc), new Color(0.1f, 0.25f, 0.8f));
+                    Hint(inner, "Hold Left / Right (very sensitive!)    0 set the time", sc);
+                    break;
+                }
+                default:
+                {
+                    GUI.Label(new Rect(x, y, w, lh), "Posting appointment to the dealer management system...", _label);
+                    y += lh + 6f * sc;
+                    Box(new Rect(x, y, w, 30f * sc), new Color(0.45f, 0.45f, 0.45f));
+                    Box(new Rect(x + 2f * sc, y + 2f * sc, (w - 4f * sc) * t.Prog, 26f * sc), new Color(0.1f, 0.6f, 0.2f));
+                    GUI.Label(new Rect(x, y, w, 30f * sc), "<color=white><b>" + Mathf.FloorToInt(t.Prog * 100f) + "%</b></color>", _center);
+                    y += 38f * sc;
+                    float p = t.ProgT / 10f;
+                    if (p < 1f)
+                        GUI.Label(new Rect(x, y, w, lh), p < 0.25f ? "Contacting scheduling server..." : p < 0.5f ? "Validating customer record..." : p < 0.75f ? "Reserving service bay..." : "Finalizing...", _label);
+                    else
+                    {
+                        GUI.Label(new Rect(x, y, w, lh), "<b>COMPLIANCE VERIFICATION REQUIRED</b>", _label);
+                        for (int i = 0; i < 3; i++)
+                            GUI.Label(new Rect(x, y + (i + 1) * lh, w, lh), "<b><color=#003B75>[" + (i + 1) + "]</color></b> [" + (t.Checks[i] ? "X" : " ") + "] " + ApptChecks[i], _label);
+                    }
+                    Hint(inner, p < 1f ? "Please wait..." : "Press 1, 2 and 3 to tick every box", sc);
+                    break;
+                }
+            }
+            if (t.Msg.Length > 0)
+            {
+                _label.normal.textColor = new Color(0.7f, 0.05f, 0.05f);
+                GUI.Label(new Rect(x, inner.yMax - 54f * sc, w, lh), "<b>" + t.Msg + "</b>", _label);
+                _label.normal.textColor = new Color(0.1f, 0.12f, 0.18f);
             }
         }
 
@@ -369,15 +867,17 @@ namespace CarMaxSpecialist
         }
     }
 
-    /// <summary>Specialist → host: a task window was finished, or how many are open.</summary>
+    /// <summary>Specialist → host: a task window was finished (with its stress relief), or how many are open and the audit state.</summary>
     public class CmxTaskMessage : INetMessage
     {
         public NetworkInstanceId Body;
         public bool Done;
         public byte Open;
+        public float Relief = -1f;
+        public byte Audit; // 0 none, 1 audit running, 2 audit just cleared
 
-        public void Serialize(NetworkWriter w) { w.Write(Body); w.Write(Done); w.Write(Open); }
-        public void Deserialize(NetworkReader r) { Body = r.ReadNetworkId(); Done = r.ReadBoolean(); Open = r.ReadByte(); }
+        public void Serialize(NetworkWriter w) { w.Write(Body); w.Write(Done); w.Write(Open); w.Write(Relief); w.Write(Audit); }
+        public void Deserialize(NetworkReader r) { Body = r.ReadNetworkId(); Done = r.ReadBoolean(); Open = r.ReadByte(); Relief = r.ReadSingle(); Audit = r.ReadByte(); }
 
         public void OnReceived()
         {
@@ -385,8 +885,8 @@ namespace CarMaxSpecialist
             GameObject go = Util.FindNetworkObject(Body);
             CmxShift s = go ? go.GetComponent<CmxShift>() : null;
             if (!s) return;
-            if (Done) s.ServerTaskDone();
-            else s.OpenTasks = Open;
+            if (Done) s.ServerTaskDone(Relief);
+            else { s.OpenTasks = Open; s.SetAudit(Audit); }
         }
     }
 }

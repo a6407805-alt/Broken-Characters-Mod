@@ -36,3 +36,10 @@ parts, has lazy coworkers and impossible deadlines. A sister character to the Ce
 - He wears the Audi Technician's model, recolored CarMax blue (needs the AudiTechnician mod; otherwise a blue base body).
 - His sounds play on Windows only. Volume and every number are in `BepInEx/config/com.brokencharacters.carmaxspecialist.cfg`.
 - Built from source in `src/CarMaxSpecialist/` on every push.
+
+## Stress-driven popups & Management Audit
+Task windows now scale with stress: 0-40 rare, 41-74 frequent and overlapping, 75-99 malware-style bursts.
+At 100 stress a **Management Audit** locks the screen and keeps windows coming until the backlog is cleared (no Burnout).
+New windows: **ERO repair order** (RO #29751, -35 stress) and the **appointment scheduler** (-10 stress; date twice,
+scrambled-vowel name, twitchy promise time that throws error popups, fake progress bar that needs the compliance boxes).
+Keyboard only: number keys and arrows. Tunable in the "3. Tasks" config section (`*_v2` keys).
