@@ -1,6 +1,6 @@
 {
   "name": "LocustHorde",
-  "version_number": "1.6.0",
+  "version_number": "1.7.0",
   "website_url": "",
   "description": "Gears of War's Locust Horde as a third faction: an artifact that tears open Emergence Holes pouring out Locust Drones that fight you and the monsters.",
   "dependencies": [

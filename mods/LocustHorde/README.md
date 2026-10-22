@@ -16,7 +16,7 @@ every 20 seconds and make war on everything: you, your allies and the planet's m
 - When one opens, **"The Horde Arrives..."** pops up in the middle of the screen, and **"Destroy E-Hole!"** joins
   your objectives (top right).
 - **Seal it by destroying it.** It's very tough: 6000 health (+1800 per level) and 60 armor. Monsters attack
-  it too, but only chip at it (25% damage) - sealing it is your job: it bursts out **one random legendary item per player**, plus gold. It stays open until
+  it too, but only chip at it (25% damage) - sealing it is your job: it bursts out **one random green (uncommon) item per player**, plus gold. It stays open until
   you destroy it.
 
 ## Locusts
@@ -56,6 +56,9 @@ Host with the artifact on: press **F8** to open an E-Hole near you right away (c
 - Every number is in `BepInEx/config/com.VincentMacaluso.LocustHorde.cfg`.
 
 ## Changes
+
+- 1.7.0: sealing an E-Hole drops green items instead of reds (config "Seal Item Tier": White, Green, Red or Boss;
+  "Seal Items Per Player").
 
 - 1.6.0: Drones tougher (240 HP +72/level, 20 armor) and slightly more accurate (1 degree up close, 8 far); while
   charging they roar the attack line, deal 50% more damage and fire tighter up close (config "Rush ..." in

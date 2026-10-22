@@ -44,9 +44,9 @@ A random-chance survivor. He lives and dies by his **Flat Rate** hours.
 
 | Skill | What it does |
 |---|---|
-| **LOF** (primary) | Pours oil around him and lights it: 300% within 9 m, sets enemies on fire, and the oil keeps burning. +1.5 hours. 2 s cooldown. |
-| **Replace Wiper Blades** (secondary) | Throws 2 wiper blades. Each bounces between enemies up to 15 times (10 m hops) for 220% each. A blade stops when no enemy is close to the last one. +1 hour. |
-| **AWD Fluid Change** (utility) | Hops in a Q3 and drives in circles for 12 s, ramming enemies (300%). A/D picks the direction, W moves the circle. +4 hours. |
+| **LOF** (primary) | Pours oil around him and lights it: 300% within 15 m, sets enemies on fire, and the oil keeps burning in a wide ring for 15 s. +3 hours. 2 s cooldown. |
+| **Replace Wiper Blades** (secondary) | Throws 2 wiper blades. Each bounces between enemies up to 15 times (hops up to 65 m) for 220% each. A blade stops when no enemy is within 65 m of the last one. +2.5 hours. |
+| **AWD Fluid Change** (utility) | Hops in a Q3 and drives in circles for 12 s, ramming enemies (300%). A/D picks the direction, W moves the circle. +8 hours. |
 | **40k or Bust** (special) | Puts an A5 on the lift and services it, hitting everything nearby for 500% every second. Press the 4 W/A/S/D keys shown in time for **+25 hours**. Miss one and the A5 falls off the lift onto his tool chest ("Fuck, not again!"): no more 40k this stage. 18 s cooldown. |
 
 ## Install

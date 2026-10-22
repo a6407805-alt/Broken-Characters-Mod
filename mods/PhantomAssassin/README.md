@@ -19,6 +19,7 @@ Every number is in `BepInEx/config/com.VincentMacaluso.PhantomAssassin.cfg`.
 
 ## Changes
 
+- 1.0.3: melee hits big enemies (golems, bosses): the swing now checks their hitboxes, not just their centre.
 - 1.0.2: Stifling Dagger cooldown 6 s -> 2 s (more answer to flying enemies).
 - 1.0.1: slower, smoother attacks (0.9 s per strike, was 0.6) and calmer run and cast animations; Mercenary's slash trail now shows.
 
