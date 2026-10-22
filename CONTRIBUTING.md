@@ -48,6 +48,17 @@ Tips:
 
 Multiplayer needs everyone on the same build, so tell the group when a merge goes in.
 
+## For friends who don't use git: the launcher's ADD MY MOD button
+
+Open the launcher, press **ADD MY MOD**, type the mod's name, pick files or a folder, press **SEND**.
+- Code (`.cs`, `.csproj`) goes to `src/<Mod>/`; everything else goes to `mods/<Mod>/`.
+- **Easy mode** (default): the launcher copies the files into a Desktop folder and opens GitHub's upload page; the friend
+  drags the folders in and picks "Create a new branch" (never commit straight to `main` from the web page).
+- **One-click mode** (optional): the friend saves a classic GitHub token once (scope `public_repo`, they must be a
+  collaborator). SEND then uploads to a `submit/<Mod>-<time>` branch and opens a pull request. The token is stored in
+  `%APPDATA%\BrokenCharacters\github-token.txt`, never in the repo or the launcher.
+- Either way, an owner reviews the pull request and presses **Squash and merge**; that is what publishes it.
+
 ## Adding a new character (checklist for you and your Claude)
 
 1. **Source:** `src/<Name>/<Name>.csproj` + code. Copy the setup of `src/CarMaxSpecialist/` (NuGet references,
