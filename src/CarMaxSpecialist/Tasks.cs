@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using R2API.Networking;
 using R2API.Networking.Interfaces;
 using RoR2;
@@ -130,7 +131,22 @@ namespace CarMaxSpecialist
         private static readonly string[] ArrowGlyph = { "↑", "→", "↓", "←" };
         private static readonly KeyCode[] ArrowKeys = { KeyCode.UpArrow, KeyCode.RightArrow, KeyCode.DownArrow, KeyCode.LeftArrow };
 
+        private class Hit
+        {
+            public Task Owner;
+            public Rect Rect;
+            public int Digit = -1, Arrow = -1, Hold = -1;
+            public char Letter;
+        }
+
         public static int Open;
+        // mouse mode (toggle key): click the same things the keys press
+        private readonly List<Hit> _hits = new List<Hit>();
+        private bool _mouse, _cursorOpened;
+        private object _eventSystem;
+        private float _sc = 1f;
+        private static int _clickDigit = -1, _clickArrow = -1, _heldArrow = -1;
+        private static char _clickLetter;
         private readonly List<Task> _tasks = new List<Task>();
         private CharacterBody _body;
         private float _nextSpawn = 20f;
@@ -151,12 +167,16 @@ namespace CarMaxSpecialist
             CmxShift shift = me ? me.GetComponent<CmxShift>() : null;
             bool alive = shift && me.healthComponent && me.healthComponent.alive;
             if (me != _body) { _tasks.Clear(); _body = me; _nextSpawn = 20f; _audit = false; _backlog = 0; }
-            if (!alive || !Enabled) { if (_tasks.Count > 0) _tasks.Clear(); _audit = false; Report(shift); return; }
+            if (!alive || !Enabled) { if (_tasks.Count > 0) _tasks.Clear(); _audit = false; SetMouse(false); Report(shift); return; }
             if (Time.timeScale <= 0f) return;
 
             float dt = Time.deltaTime;
             if (_toastT > 0f) _toastT -= dt;
             if (_postAudit > 0f) _postAudit -= dt;
+
+            if (Input.GetKeyDown(CmxPlugin.MouseKey.Value) && (_tasks.Count > 0 || _mouse)) SetMouse(!_mouse);
+            if (_mouse && _tasks.Count == 0) SetMouse(false);
+            if (_mouse) MouseClicks(); else _heldArrow = -1;
 
             // 100 stress = management audit (the host waits a moment for us to report it before it falls back to Burnout).
             if (!_audit && CmxPlugin.AuditLockdown.Value && _postAudit <= 0f && shift.Stress >= 99.5f) StartAudit();
@@ -166,8 +186,67 @@ namespace CarMaxSpecialist
             if (_nextSpawn <= 0f) SpawnTick(shift);
 
             if (_tasks.Count > 0) HandleInput(_tasks[_tasks.Count - 1], shift, dt);
+            _clickDigit = -1; _clickArrow = -1; _clickLetter = '\0';
             Report(shift);
         }
+
+        // ------------------------------------------------------------ mouse mode
+
+        private void OnDisable() { SetMouse(false); }
+
+        private void SetMouse(bool on)
+        {
+            _mouse = on;
+            if (!on) { _hits.Clear(); _heldArrow = -1; }
+            if (on == _cursorOpened) return;
+            try
+            {
+                BindingFlags bf = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                if (_eventSystem == null)
+                {
+                    LocalUser lu = LocalUserManager.GetFirstLocalUser();
+                    if (lu != null)
+                        _eventSystem = lu.GetType().GetProperty("eventSystem", bf)?.GetValue(lu) ?? lu.GetType().GetField("eventSystem", bf)?.GetValue(lu);
+                }
+                if (_eventSystem == null) { _mouse = false; return; }
+                System.Type t = _eventSystem.GetType();
+                PropertyInfo p = t.GetProperty("cursorOpenerCount", bf);
+                FieldInfo fi = p == null ? t.GetField("cursorOpenerCount", bf) : null;
+                int delta = on ? 1 : -1;
+                if (p != null && p.CanWrite) p.SetValue(_eventSystem, Mathf.Max(0, (int)p.GetValue(_eventSystem) + delta));
+                else if (fi != null) fi.SetValue(_eventSystem, Mathf.Max(0, (int)fi.GetValue(_eventSystem) + delta));
+                else { CmxPlugin.Log.LogWarning("cursorOpenerCount not found; mouse mode unavailable, use the keyboard."); _mouse = false; return; }
+                _cursorOpened = on;
+            }
+            catch (System.Exception e)
+            {
+                _mouse = false;
+                CmxPlugin.Log.LogWarning("Cursor toggle failed: " + e.Message);
+            }
+        }
+
+        private void MouseClicks()
+        {
+            Vector2 mp = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
+            bool down = Input.GetMouseButtonDown(0), held = Input.GetMouseButton(0);
+            _heldArrow = -1;
+            for (int i = _hits.Count - 1; i >= 0; i--)
+            {
+                Hit h = _hits[i];
+                if (!h.Rect.Contains(mp)) continue;
+                if (_tasks.Count > 0 && h.Owner != _tasks[_tasks.Count - 1])
+                {
+                    if (down && _tasks.Remove(h.Owner)) _tasks.Add(h.Owner); // click a buried window to bring it up
+                    return;
+                }
+                if (h.Hold >= 0 && held) _heldArrow = h.Hold;
+                if (down) { _clickDigit = h.Digit; _clickArrow = h.Arrow; _clickLetter = h.Letter; }
+                return;
+            }
+        }
+
+        private static bool ArrowPressed(int a) { return Input.GetKeyDown(ArrowKeys[a]) || _clickArrow == a; }
+        private static bool ArrowHeld(int a) { return Input.GetKey(ArrowKeys[a]) || _heldArrow == a; }
 
         // ------------------------------------------------------------ stress tiers + audit
 
@@ -273,6 +352,7 @@ namespace CarMaxSpecialist
             float sc = Mathf.Max(0.6f, Screen.height / 1080f);
             Kind kind = PickKind();
             float w = 460f * sc, h = 270f * sc;
+            if (kind == Kind.PartNumber || kind == Kind.Invoice) h = 310f * sc;
             if (kind == Kind.Ero) { w = 640f * sc; h = 440f * sc; }
             else if (kind == Kind.Appt) { w = 620f * sc; h = 400f * sc; }
 
@@ -382,6 +462,7 @@ namespace CarMaxSpecialist
 
         private static int DigitDown()
         {
+            if (_clickDigit >= 0) { int c = _clickDigit; _clickDigit = -1; return c; }
             for (int i = 0; i <= 9; i++)
                 if (Input.GetKeyDown(KeyCode.Alpha0 + i) || Input.GetKeyDown(KeyCode.Keypad0 + i)) return i;
             return -1;
@@ -402,6 +483,7 @@ namespace CarMaxSpecialist
                 {
                     if (Input.GetKeyDown(KeyCode.Backspace) && t.Typed.Length > 0) t.Typed = t.Typed.Substring(0, t.Typed.Length - 1);
                     int d = DigitDown();
+                    if (d == 10) { if (t.Typed.Length > 0) t.Typed = t.Typed.Substring(0, t.Typed.Length - 1); break; }
                     if (d < 0) break;
                     t.Typed += d.ToString();
                     CmxAudio.Play("typing");
@@ -416,7 +498,7 @@ namespace CarMaxSpecialist
                 case Kind.RepairOrder:
                     for (int a = 0; a < 4; a++)
                     {
-                        if (!Input.GetKeyDown(ArrowKeys[a])) continue;
+                        if (!ArrowPressed(a)) continue;
                         if (a == t.Arrows[t.Step]) { t.Step++; CmxAudio.Play("stamp"); if (t.Step >= t.Arrows.Length) Complete(t, shift); }
                         else { t.Step = 0; Wrong(t); }
                         break;
@@ -486,22 +568,23 @@ namespace CarMaxSpecialist
             {
                 case 0:
                 case 1:
-                    if (Input.GetKeyDown(KeyCode.RightArrow)) t.Cursor = Wrap(t.Cursor + 1, 14);
-                    else if (Input.GetKeyDown(KeyCode.LeftArrow)) t.Cursor = Wrap(t.Cursor - 1, 14);
+                    if (ArrowPressed(1)) t.Cursor = Wrap(t.Cursor + 1, 14);
+                    else if (ArrowPressed(3)) t.Cursor = Wrap(t.Cursor - 1, 14);
                     if (d != 0) break;
                     if (t.Step == 0) { t.Picked = t.Cursor; t.Cursor = Random.Range(0, 14); t.Step = 1; t.Msg = ""; CmxAudio.Play("stamp"); }
                     else if (t.Cursor == t.Picked) { t.Step = 2; t.Msg = ""; CmxAudio.Play("stamp"); }
                     else { t.Picked = -1; t.Cursor = 0; t.Step = 0; t.Msg = "DATE MISMATCH. START OVER."; Wrong(t); }
                     break;
                 case 2:
-                    if (Input.GetKeyDown(KeyCode.UpArrow)) t.AlphaIdx = Wrap(t.AlphaIdx - 1, 26);
-                    else if (Input.GetKeyDown(KeyCode.DownArrow)) t.AlphaIdx = Wrap(t.AlphaIdx + 1, 26);
-                    else if (Input.GetKeyDown(KeyCode.RightArrow)) t.AlphaIdx = Wrap(t.AlphaIdx + 5, 26);
-                    else if (Input.GetKeyDown(KeyCode.LeftArrow)) t.AlphaIdx = Wrap(t.AlphaIdx - 5, 26);
-                    if (d != 0) break;
-                    if (t.Alpha[t.AlphaIdx] == t.TargetName[t.Name.Length])
+                    if (ArrowPressed(0)) t.AlphaIdx = Wrap(t.AlphaIdx - 1, 26);
+                    else if (ArrowPressed(2)) t.AlphaIdx = Wrap(t.AlphaIdx + 1, 26);
+                    else if (ArrowPressed(1)) t.AlphaIdx = Wrap(t.AlphaIdx + 5, 26);
+                    else if (ArrowPressed(3)) t.AlphaIdx = Wrap(t.AlphaIdx - 5, 26);
+                    char typed = _clickLetter != '\0' ? _clickLetter : d == 0 ? t.Alpha[t.AlphaIdx] : '\0';
+                    if (typed == '\0') break;
+                    if (typed == t.TargetName[t.Name.Length])
                     {
-                        t.Name += t.Alpha[t.AlphaIdx];
+                        t.Name += typed;
                         t.Msg = "";
                         CmxAudio.Play("typing");
                         if (t.Name.Length >= t.TargetName.Length) t.Step = 3;
@@ -512,7 +595,7 @@ namespace CarMaxSpecialist
                 {
                     // Very twitchy: the longer you hold, the faster it goes. Overshoot and the scheduler throws an error.
                     t.ErrCool -= dt;
-                    int dir = Input.GetKey(KeyCode.RightArrow) ? 1 : Input.GetKey(KeyCode.LeftArrow) ? -1 : 0;
+                    int dir = ArrowHeld(1) ? 1 : ArrowHeld(3) ? -1 : 0;
                     if (dir != 0)
                     {
                         t.Hold += dt;
@@ -601,6 +684,7 @@ namespace CarMaxSpecialist
                 _mono = new GUIStyle(GUI.skin.label) { richText = true, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
                 _big = new GUIStyle(GUI.skin.label) { richText = true, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
             }
+            _sc = sc;
             _label.fontSize = Mathf.RoundToInt(17f * sc);
             _center.fontSize = Mathf.RoundToInt(17f * sc);
             _mono.fontSize = Mathf.RoundToInt(30f * sc);
@@ -621,6 +705,7 @@ namespace CarMaxSpecialist
             bool overlay = _audit || _toastT > 0f;
             if (_tasks.Count == 0 && !overlay) return;
             GUI.depth = -10;
+            _hits.Clear();
             float sc = Mathf.Max(0.6f, Screen.height / 1080f);
             Styles(sc);
             if (_audit) DrawAudit(sc);
@@ -630,6 +715,66 @@ namespace CarMaxSpecialist
                 GUI.Label(new Rect(0f, Screen.height * 0.25f, Screen.width, 140f * sc), _toast, _big);
             }
             for (int i = 0; i < _tasks.Count; i++) DrawTask(_tasks[i], sc, i == _tasks.Count - 1);
+            if (_tasks.Count > 0) DrawMouseHint(sc);
+        }
+
+        private void DrawMouseHint(float sc)
+        {
+            float w = 300f * sc, h = 28f * sc;
+            Rect r = new Rect(Screen.width * 0.5f - w * 0.5f, Screen.height - h - 10f * sc, w, h);
+            Box(r, new Color(0f, 0f, 0f, 0.75f));
+            _center.normal.textColor = _mouse ? new Color(0.5f, 1f, 0.55f) : Color.white;
+            int old = _center.fontSize;
+            _center.fontSize = Mathf.RoundToInt(15f * sc);
+            GUI.Label(r, "[" + CmxPlugin.MouseKey.Value + "]  MOUSE " + (_mouse ? "ON  (click the windows)" : "OFF"), _center);
+            _center.fontSize = old;
+        }
+
+        private void AddHit(Task t, Rect r, int digit = -1, int arrow = -1, int hold = -1, char letter = '\0')
+        {
+            if (!_mouse) return;
+            _hits.Add(new Hit { Owner = t, Rect = r, Digit = digit, Arrow = arrow, Hold = hold, Letter = letter });
+        }
+
+        private static bool Over(Rect r) { return r.Contains(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y)); }
+
+        /// <summary>A clickable line of text: hover highlight, then the caller draws its label on top.</summary>
+        private void Opt(Task t, Rect r, int digit)
+        {
+            if (!_mouse) return;
+            AddHit(t, r, digit);
+            if (Over(r)) Box(r, new Color(0.65f, 0.82f, 1f, 0.7f));
+        }
+
+        private void Btn(Task t, Rect r, string text, int digit = -1, int arrow = -1, int hold = -1, char letter = '\0')
+        {
+            if (!_mouse) return;
+            AddHit(t, r, digit, arrow, hold, letter);
+            bool over = Over(r);
+            bool press = over && Input.GetMouseButton(0);
+            Box(r, new Color(0.04f, 0.06f, 0.1f));
+            Box(new Rect(r.x + 1.5f * _sc, r.y + 1.5f * _sc, r.width - 3f * _sc, r.height - 3f * _sc),
+                press ? new Color(0.05f, 0.17f, 0.35f) : over ? new Color(0.25f, 0.5f, 0.9f) : new Color(0f, 0.28f, 0.55f));
+            int old = _center.fontSize;
+            _center.fontSize = Mathf.RoundToInt(16f * _sc);
+            _center.normal.textColor = Color.white;
+            GUI.Label(r, "<b>" + text + "</b>", _center);
+            _center.fontSize = old;
+            _center.normal.textColor = new Color(0.1f, 0.12f, 0.18f);
+        }
+
+        private void Numpad(Task t, Rect inner, float sc)
+        {
+            if (!_mouse) return;
+            float gap = 4f * sc, pad = 12f * sc, bh = 26f * sc;
+            float bw = (inner.width - pad * 2f - gap * 5f) / 6f;
+            float y0 = inner.yMax - 26f * sc - 2f * bh - gap - 4f * sc;
+            for (int i = 0; i < 11; i++)
+            {
+                int row = i / 6, col = i % 6;
+                int digit = i < 9 ? i + 1 : i == 9 ? 0 : 10;
+                Btn(t, new Rect(inner.x + pad + col * (bw + gap), y0 + row * (bh + gap), bw, bh), i == 10 ? "<" : digit.ToString(), digit);
+            }
         }
 
         private void DrawAudit(float sc)
@@ -657,6 +802,7 @@ namespace CarMaxSpecialist
             Rect r = t.Rect;
             r = new Rect(r.center.x - r.width * pop / 2f + shake, r.center.y - r.height * pop / 2f, r.width * pop, r.height * pop);
             if (pop < 1f) { Box(r, new Color(0.9f, 0.9f, 0.9f, 0.9f)); return; }
+            AddHit(t, r);
 
             float bar = 30f * sc, pad = 12f * sc;
             Box(new Rect(r.x + 6f * sc, r.y + 6f * sc, r.width, r.height), new Color(0f, 0f, 0f, 0.35f));
@@ -688,6 +834,7 @@ namespace CarMaxSpecialist
                     _mono.normal.textColor = new Color(0.1f, 0.5f, 0.15f);
                     GUI.Label(new Rect(inner.x + pad, y, w, 40f * sc), Group(t.Typed) + (Blink() ? "_" : " "), _mono);
                     y += 48f * sc;
+                    Numpad(t, inner, sc);
                     Hint(inner, "Type the part number with the number keys", sc);
                     break;
                 }
@@ -696,6 +843,7 @@ namespace CarMaxSpecialist
                     Box(new Rect(inner.x + pad, y + 8f * sc, w, 44f * sc), Color.white);
                     _mono.normal.textColor = new Color(0.1f, 0.5f, 0.15f);
                     GUI.Label(new Rect(inner.x + pad, y + 8f * sc, w, 44f * sc), "$ " + t.Typed + (Blink() ? "_" : " "), _mono);
+                    Numpad(t, inner, sc);
                     Hint(inner, "Type the total with the number keys", sc);
                     break;
                 }
@@ -710,6 +858,8 @@ namespace CarMaxSpecialist
                         GUI.Label(new Rect(inner.x + pad, y + i * lh, w * 0.62f, lh), (i + 1) + ". " + line, _label);
                         GUI.Label(new Rect(inner.x + pad + w * 0.6f, y + i * lh, w * 0.4f, lh), mark, _label);
                     }
+                    for (int a = 0; a < 4; a++)
+                        Btn(t, new Rect(inner.x + inner.width * 0.5f - 2f * 74f * sc + a * 74f * sc + 2f * sc, inner.yMax - 26f * sc - 36f * sc, 70f * sc, 32f * sc), ArrowGlyph[a], arrow: a);
                     Hint(inner, "Press the arrow keys in order", sc);
                     break;
                 }
@@ -718,7 +868,11 @@ namespace CarMaxSpecialist
                     GUI.Label(new Rect(inner.x + pad, y - 6f * sc, w, 24f * sc), "<b>" + (t.Step == 0 ? "CAUSE:" : "CORRECTION:") + "</b>", _label);
                     y += 20f * sc;
                     for (int i = 0; i < 3; i++)
-                        GUI.Label(new Rect(inner.x + pad, y + i * 25f * sc, w, 25f * sc), "<b><color=#003B75>[" + (i + 1) + "]</color></b> " + t.Options[i], _label);
+                    {
+                        Rect o = new Rect(inner.x + pad, y + i * 25f * sc, w, 25f * sc);
+                        Opt(t, o, i + 1);
+                        GUI.Label(o, "<b><color=#003B75>[" + (i + 1) + "]</color></b> " + t.Options[i], _label);
+                    }
                     Hint(inner, "Press 1, 2 or 3", sc);
                     break;
                 }
@@ -730,6 +884,7 @@ namespace CarMaxSpecialist
                     _mono.normal.textColor = Color.white;
                     GUI.Label(new Rect(inner.x + pad, y - 6f * sc, 44f * sc, 44f * sc), "X", _mono);
                     GUI.Label(new Rect(inner.x + pad + 60f * sc, y - 6f * sc, w - 60f * sc, 60f * sc), "PROMISE TIME EXCEEDS BAY CAPACITY.\nSELECT AN EARLIER TIME.", _label);
+                    Btn(t, new Rect(inner.center.x - 50f * sc, inner.yMax - 26f * sc - 38f * sc, 100f * sc, 32f * sc), "OK", 0);
                     Hint(inner, "Press 0 for OK", sc);
                     break;
                 }
@@ -753,7 +908,18 @@ namespace CarMaxSpecialist
             if (t.Step == 0)
             {
                 for (int i = 0; i < 3; i++)
-                    GUI.Label(new Rect(x, y + i * lh, w, lh), "<b><color=#003B75>[" + (i + 1) + "]</color></b> " + t.Options[i], _label);
+                {
+                    Rect o = new Rect(x, y + i * lh, w, lh);
+                    Opt(t, o, i + 1);
+                    GUI.Label(o, "<b><color=#003B75>[" + (i + 1) + "]</color></b> " + t.Options[i], _label);
+                }
+            }
+            else if (_mouse)
+            {
+                GUI.Label(new Rect(x, y, w, lh), "<b>PAY TYPE:</b>", _label);
+                float bw = (w - 3f * 6f * sc) / 4f;
+                for (int i = 0; i < PayCodes.Length; i++)
+                    Btn(t, new Rect(x + i * (bw + 6f * sc), y + lh, bw, 30f * sc), (t.Step == 2 && i == t.NeedPay ? "* " : "") + PayCodes[i], i + 1);
             }
             else
             {
@@ -769,6 +935,7 @@ namespace CarMaxSpecialist
             // the big green stamp
             Rect stamp = new Rect(inner.x + pad + w * 0.5f - 160f * sc, inner.yMax - 26f * sc - 74f * sc, 320f * sc, 66f * sc);
             bool ready = t.Step == 2;
+            AddHit(t, stamp, 0);
             Box(new Rect(stamp.x - 3f * sc, stamp.y - 3f * sc, stamp.width + 6f * sc, stamp.height + 6f * sc), new Color(0.05f, 0.25f, 0.08f));
             Box(stamp, ready ? new Color(0.1f, 0.65f, 0.2f) : new Color(0.55f, 0.6f, 0.55f));
             int old = _mono.fontSize;
@@ -791,6 +958,12 @@ namespace CarMaxSpecialist
                     Box(new Rect(x, y, w, 50f * sc), Color.white);
                     _mono.normal.textColor = new Color(0f, 0.23f, 0.46f);
                     GUI.Label(new Rect(x, y, w, 50f * sc), "<  " + t.Dates[t.Cursor] + "  >", _mono);
+                    {
+                        float bw = (w - 12f * sc) / 3f, by = y + 58f * sc;
+                        Btn(t, new Rect(x, by, bw, 34f * sc), "<  PREV", arrow: 3);
+                        Btn(t, new Rect(x + bw + 6f * sc, by, bw, 34f * sc), "SELECT", 0);
+                        Btn(t, new Rect(x + 2f * (bw + 6f * sc), by, bw, 34f * sc), "NEXT  >", arrow: 1);
+                    }
                     Hint(inner, "Left / Right change the date    0 select", sc);
                     break;
                 case 2:
@@ -803,6 +976,12 @@ namespace CarMaxSpecialist
                     y += 58f * sc;
                     char prev = t.Alpha[Wrap(t.AlphaIdx - 1, 26)], next = t.Alpha[Wrap(t.AlphaIdx + 1, 26)];
                     GUI.Label(new Rect(x, y, w, lh), "<color=#888888>" + prev + "</color>   <b><color=#003B75>" + t.Alpha[t.AlphaIdx] + "</color></b>   <color=#888888>" + next + "</color>   (the vowels have been moved)", _label);
+                    if (_mouse)
+                    {
+                        float kg = 4f * sc, kw = (w - kg * 8f) / 9f, kh = 28f * sc, ky = y + lh + 4f * sc;
+                        for (int i = 0; i < 26; i++)
+                            Btn(t, new Rect(x + (i % 9) * (kw + kg), ky + (i / 9) * (kh + kg), kw, kh), t.Alpha[i].ToString(), letter: t.Alpha[i]);
+                    }
                     Hint(inner, "Up/Down letter    Left/Right jump 5    0 enter letter", sc);
                     break;
                 }
@@ -816,6 +995,12 @@ namespace CarMaxSpecialist
                     float frac = Mathf.Clamp01((t.Pos - 420f) / 660f);
                     Box(new Rect(x, y, w, 14f * sc), new Color(0.35f, 0.35f, 0.35f));
                     Box(new Rect(x + w * frac - 9f * sc, y - 12f * sc, 18f * sc, 38f * sc), new Color(0.1f, 0.25f, 0.8f));
+                    {
+                        float bw = (w - 12f * sc) / 3f, by = y + 30f * sc;
+                        Btn(t, new Rect(x, by, bw, 36f * sc), "<  HOLD", hold: 3);
+                        Btn(t, new Rect(x + bw + 6f * sc, by, bw, 36f * sc), "SET TIME", 0);
+                        Btn(t, new Rect(x + 2f * (bw + 6f * sc), by, bw, 36f * sc), "HOLD  >", hold: 1);
+                    }
                     Hint(inner, "Hold Left / Right (very sensitive!)    0 set the time", sc);
                     break;
                 }
@@ -834,7 +1019,11 @@ namespace CarMaxSpecialist
                     {
                         GUI.Label(new Rect(x, y, w, lh), "<b>COMPLIANCE VERIFICATION REQUIRED</b>", _label);
                         for (int i = 0; i < 3; i++)
-                            GUI.Label(new Rect(x, y + (i + 1) * lh, w, lh), "<b><color=#003B75>[" + (i + 1) + "]</color></b> [" + (t.Checks[i] ? "X" : " ") + "] " + ApptChecks[i], _label);
+                        {
+                            Rect o = new Rect(x, y + (i + 1) * lh, w, lh);
+                            Opt(t, o, i + 1);
+                            GUI.Label(o, "<b><color=#003B75>[" + (i + 1) + "]</color></b> [" + (t.Checks[i] ? "X" : " ") + "] " + ApptChecks[i], _label);
+                        }
                     }
                     Hint(inner, p < 1f ? "Please wait..." : "Press 1, 2 and 3 to tick every box", sc);
                     break;

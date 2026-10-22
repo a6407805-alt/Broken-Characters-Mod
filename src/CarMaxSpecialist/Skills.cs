@@ -8,109 +8,221 @@ using Object = UnityEngine.Object;
 
 namespace CarMaxSpecialist
 {
-    // ================================================================ M1: Completed Repair Orders
+    // ================================================================ M1 / M2: the combos
+    //
+    // M1 (light, hold to chain), 4 hits:  paper  ->  office stuff (stapler / phone / keyboard)  ->  the whole computer  ->  filing cabinet.
+    // M2 (heavy, hold to chain), 4 hits:  lug nuts  ->  wrenches and tools  ->  jack and jack stands  ->  the car, then the building.
+    // Stop for a moment and the combo starts over. Every prop is a visual; the damage is a bullet or blast from the owner's client.
 
-    public class CmxEmailState : BaseSkillState
+    public abstract class CmxComboState : BaseSkillState
     {
-        public static float BaseDuration = 0.32f;
+        protected abstract bool Heavy { get; }
+        protected int Step;
         private float _duration;
+        private bool _crit;
+
+        private static readonly float[] LightMult = { 0.6f, 0.8f, 1.2f, 2.4f };
+        private static readonly float[] HeavyMult = { 1f, 1.3f, 1.8f, 2.5f };
 
         public override void OnEnter()
         {
             base.OnEnter();
-            _duration = BaseDuration / attackSpeedStat;
+            CmxShift shift = GetComponent<CmxShift>();
+            if (isAuthority) Step = shift ? shift.NextStep(Heavy) : 0;
+            bool last = Step == 3;
+            float baseDur = Heavy ? (last ? 1.0f : 0.6f) : (last ? 0.62f : 0.32f);
+            _duration = baseDur / Mathf.Max(0.1f, attackSpeedStat);
+
             Ray aim = GetAimRay();
             StartAimMode(aim, 2f, false);
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
+            Util.PlaySound(Heavy ? "Play_commando_shift" : (last ? "Play_mage_m1_shoot" : "Play_huntress_m1_shoot"), gameObject);
+            _crit = isAuthority && RollCrit();
 
-            CmxShift shift = GetComponent<CmxShift>();
-            bool replyAll = false;
-            if (shift)
-            {
-                if (Time.time - shift.LastEmail > 1.5f) shift.EmailCount = 0;
-                shift.LastEmail = Time.time;
-                shift.EmailCount++;
-                replyAll = shift.EmailCount % 3 == 0;
-            }
+            if (Heavy) FireHeavy(aim); else FireLight(aim);
+            characterBody.AddSpreadBloom(0.4f);
+        }
 
-            Util.PlaySound(replyAll ? "Play_mage_m1_shoot" : "Play_huntress_m1_shoot", gameObject);
-            if (isAuthority) CmxAudio.Play(replyAll ? "stamp" : "email");
+        // ---------------------------------------------------------------- light
 
+        private void FireLight(Ray aim)
+        {
             Vector3 from = CmxFx.Hand(characterBody, aim);
-            int count = replyAll ? 3 : 1;
-            bool crit = isAuthority && RollCrit();
-            for (int i = 0; i < count; i++)
+            Vector3 dir = aim.direction;
+            float dmg = damageStat * CmxPlugin.EmailDamage.Value * LightMult[Step];
+            if (isAuthority) CmxAudio.Play(Step == 0 ? "email" : Step == 1 ? "typing" : Step == 2 ? "beep" : "slam");
+
+            switch (Step)
             {
-                Vector3 dir = aim.direction;
-                if (count > 1) dir = Quaternion.AngleAxis((i - 1) * 7f, Vector3.up) * dir;
-                CmxFx.Paper(from, dir, 90f, replyAll);
-                if (isAuthority)
+                case 0:
+                    CmxFx.Paper(from, dir, 90f, false);
+                    Bullet(aim, dir, dmg, 0.6f, 150f, 90f);
+                    break;
+                case 1:
+                    CmxFx.Office(from, dir, 70f);
+                    Bullet(aim, dir, dmg, 0.9f, 350f, 70f);
+                    break;
+                case 2:
+                    CmxFx.Computer(from, dir, 60f);
+                    Bullet(aim, dir, dmg, 1.4f, 700f, 60f);
+                    break;
+                default:
                 {
-                    new BulletAttack
+                    Vector3 at = CmxFx.Target(aim, 32f);
+                    CmxFx.Cabinet(from, at);
+                    if (isAuthority)
                     {
-                        owner = gameObject,
-                        weapon = gameObject,
-                        origin = aim.origin,
-                        aimVector = dir,
-                        minSpread = 0f,
-                        maxSpread = 0f,
-                        damage = damageStat * CmxPlugin.EmailDamage.Value,
-                        force = 150f,
-                        tracerEffectPrefab = null,
-                        hitEffectPrefab = CmxFx.HitSpark,
-                        isCrit = crit,
-                        radius = 0.6f,
-                        smartCollision = true,
-                        maxDistance = 90f,
-                        procCoefficient = 1f,
-                        stopperMask = LayerIndex.world.mask
-                    }.Fire();
+                        CmxHud.Bubble(transform, transform.position, "<color=#FFCA26>FILED.</color>", Style.Small);
+                        Blast(at, 6.5f, dmg, 2500f, 0.1f, 5f, false);
+                    }
+                    break;
                 }
             }
-            if (replyAll && isAuthority) CmxHud.Bubble(transform, transform.position, "<color=#7CFF7C>RO STACK</color>", Style.Small);
-            characterBody.AddSpreadBloom(0.4f);
+        }
+
+        private void Bullet(Ray aim, Vector3 dir, float damage, float radius, float force, float range)
+        {
+            if (!isAuthority) return;
+            new BulletAttack
+            {
+                owner = gameObject,
+                weapon = gameObject,
+                origin = aim.origin,
+                aimVector = dir,
+                minSpread = 0f,
+                maxSpread = 0f,
+                damage = damage,
+                force = force,
+                tracerEffectPrefab = null,
+                hitEffectPrefab = CmxFx.HitSpark,
+                isCrit = _crit,
+                radius = radius,
+                smartCollision = true,
+                maxDistance = range,
+                procCoefficient = 1f,
+                stopperMask = LayerIndex.world.mask
+            }.Fire();
+        }
+
+        // ---------------------------------------------------------------- heavy
+
+        private void FireHeavy(Ray aim)
+        {
+            Vector3 at = CmxFx.Ground(CmxFx.Target(aim, 45f));
+            float dmg = damageStat * CmxPlugin.HeavyDamage.Value * HeavyMult[Step];
+            if (isAuthority) CmxAudio.Play(Step == 0 ? "typing" : Step == 1 ? "stamp" : Step == 2 ? "clock" : "slam");
+            float fall;
+
+            switch (Step)
+            {
+                case 0:
+                    fall = CmxFx.LugNuts(at);
+                    Blast(at, 5f, dmg, 1200f, fall, 4f, false);
+                    break;
+                case 1:
+                    fall = CmxFx.Tools(at);
+                    Blast(at, 6f, dmg, 1600f, fall, 5f, false);
+                    break;
+                case 2:
+                    fall = CmxFx.Jack(at);
+                    Blast(at, 7f, dmg, 2200f, fall, 6f, false);
+                    break;
+                default:
+                {
+                    fall = CmxFx.Car(at);
+                    float building = CmxFx.Building(at + dir2(aim) * 3f, fall + 0.45f);
+                    if (isAuthority)
+                    {
+                        CmxHud.Bubble(transform, transform.position, "<color=#FFCA26>TOTALED.</color>", Style.Small);
+                        Blast(at, 9f, dmg, 3000f, fall, 8f, true);
+                        Blast(at + dir2(aim) * 3f, 15f, damageStat * CmxPlugin.HeavyDamage.Value * 3f, 5000f, building, 10f, true);
+                    }
+                    break;
+                }
+            }
+        }
+
+        private static Vector3 dir2(Ray aim)
+        {
+            Vector3 d = aim.direction;
+            d.y = 0f;
+            return d.sqrMagnitude < 0.01f ? Vector3.forward : d.normalized;
+        }
+
+        // ---------------------------------------------------------------- damage
+
+        private void Blast(Vector3 at, float radius, float damage, float force, float delay, float shake, bool big)
+        {
+            if (!isAuthority) return;
+            GameObject owner = gameObject;
+            TeamIndex team = TeamComponent.GetObjectTeam(owner);
+            bool crit = _crit;
+            CmxDelay.Run(delay, () =>
+            {
+                if (!owner) return;
+                new BlastAttack
+                {
+                    attacker = owner,
+                    inflictor = owner,
+                    baseDamage = damage,
+                    baseForce = force,
+                    position = at,
+                    radius = radius,
+                    falloffModel = BlastAttack.FalloffModel.None,
+                    crit = crit,
+                    procCoefficient = 1f,
+                    teamIndex = team
+                }.Fire();
+                CmxFx.Slam(at, radius * 0.45f, big);
+            });
         }
 
         public override void FixedUpdate()
         {
             base.FixedUpdate();
             if (fixedAge >= _duration && isAuthority) outer.SetNextStateToMain();
+        }
+
+        public override void OnSerialize(NetworkWriter writer)
+        {
+            base.OnSerialize(writer);
+            writer.Write((byte)Step);
+        }
+
+        public override void OnDeserialize(NetworkReader reader)
+        {
+            base.OnDeserialize(reader);
+            Step = reader.ReadByte();
         }
 
         public override InterruptPriority GetMinimumInterruptPriority() => InterruptPriority.Skill;
     }
 
-    // ================================================================ M2: Inventory Audit
+    public class CmxLightState : CmxComboState { protected override bool Heavy => false; }
+    public class CmxHeavyState : CmxComboState { protected override bool Heavy => true; }
 
-    public class CmxAuditState : BaseSkillState
+    /// <summary>Runs an action after a delay (a falling prop's landing).</summary>
+    public class CmxDelay : MonoBehaviour
     {
-        public static float BaseDuration = 0.45f;
-        private float _duration;
+        private float _t;
+        private System.Action _a;
 
-        public override void OnEnter()
+        public static void Run(float delay, System.Action a)
         {
-            base.OnEnter();
-            _duration = BaseDuration / attackSpeedStat;
-            Ray aim = GetAimRay();
-            StartAimMode(aim, 2f, false);
-            PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
-            Util.PlaySound("Play_UI_menuClick", gameObject);
-            if (isAuthority) CmxAudio.Play("beep");
-            CmxFx.Scan(CmxFx.Hand(characterBody, aim), aim.direction, CmxPlugin.AuditRange.Value, 32f);
-            if (NetworkServer.active)
-            {
-                CmxShift shift = GetComponent<CmxShift>();
-                if (shift) shift.ServerAudit(aim);
-            }
+            if (delay <= 0.01f) { a(); return; }
+            GameObject go = new GameObject("CmxDelay");
+            CmxDelay d = go.AddComponent<CmxDelay>();
+            d._t = delay;
+            d._a = a;
         }
 
-        public override void FixedUpdate()
+        private void Update()
         {
-            base.FixedUpdate();
-            if (fixedAge >= _duration && isAuthority) outer.SetNextStateToMain();
+            _t -= Time.deltaTime;
+            if (_t > 0f) return;
+            try { _a?.Invoke(); } catch (System.Exception e) { CmxPlugin.Log.LogWarning("Combo hit failed: " + e.Message); }
+            Destroy(gameObject);
         }
-
-        public override InterruptPriority GetMinimumInterruptPriority() => InterruptPriority.PrioritySkill;
     }
 
     // ================================================================ Shift: Order Your Own Parts
@@ -417,6 +529,253 @@ namespace CarMaxSpecialist
             go.AddComponent<CmxFade>().Life = 0.35f;
         }
 
+        // ---------------------------------------------------------------- combo props
+
+        private static readonly Dictionary<string, Material> MatCache = new Dictionary<string, Material>();
+
+        private static Material M(string key, Color c, float glow = 0f)
+        {
+            if (MatCache.TryGetValue(key, out Material m) && m) return m;
+            m = Lit(c, glow);
+            MatCache[key] = m;
+            return m;
+        }
+
+        private static Material Steel() { return M("steel", new Color(0.72f, 0.74f, 0.78f)); }
+        private static Material Dark() { return M("dark", new Color(0.14f, 0.15f, 0.18f)); }
+
+        /// <summary>Where the aim ray lands (world or characters), or a point range metres out.</summary>
+        public static Vector3 Target(Ray aim, float range)
+        {
+            if (Physics.Raycast(aim.origin, aim.direction, out RaycastHit hit, range, LayerIndex.world.mask | LayerIndex.entityPrecise.mask, QueryTriggerInteraction.Ignore))
+                return hit.point;
+            return aim.origin + aim.direction * range;
+        }
+
+        public static Vector3 Ground(Vector3 p)
+        {
+            if (Physics.Raycast(p + Vector3.up * 3f, Vector3.down, out RaycastHit hit, 120f, LayerIndex.world.mask, QueryTriggerInteraction.Ignore))
+                return hit.point;
+            return p;
+        }
+
+        private static GameObject Prop(string name, Vector3 at)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.position = at;
+            return go;
+        }
+
+        private static void Fly(GameObject go, Vector3 from, Vector3 to, float speed, float spin = 1f)
+        {
+            go.transform.position = from;
+            go.AddComponent<CmxFlyer>().Init(from, to, speed, spin);
+        }
+
+        private static float Fall(GameObject go, Vector3 land, float height, float speed, float spin = 0f)
+        {
+            Vector3 from = land + Vector3.up * height;
+            Fly(go, from, land, speed, spin);
+            return height / speed;
+        }
+
+        private static GameObject Stapler(Transform parent, Vector3 pos, float k)
+        {
+            GameObject g = new GameObject("stapler");
+            g.transform.SetParent(parent, false);
+            g.transform.localPosition = pos;
+            Part(g.transform, PrimitiveType.Cube, Vector3.zero, new Vector3(0.14f, 0.05f, 0.42f) * k, Dark());
+            Part(g.transform, PrimitiveType.Cube, new Vector3(0f, 0.05f, -0.02f) * k, new Vector3(0.15f, 0.05f, 0.38f) * k, M("red", new Color(0.85f, 0.1f, 0.1f)), new Vector3(-6f, 0f, 0f));
+            return g;
+        }
+
+        /// <summary>M1 hit 2: a random piece of office junk (stapler with loose staples, desk phone, or keyboard).</summary>
+        public static void Office(Vector3 from, Vector3 dir, float range)
+        {
+            Mats();
+            GameObject go = Prop("CmxOfficeItem", from);
+            Transform t = go.transform;
+            switch (Random.Range(0, 3))
+            {
+                case 0:
+                    Stapler(t, Vector3.zero, 1.2f);
+                    for (int i = 0; i < 5; i++)
+                        Part(t, PrimitiveType.Cube, new Vector3(Random.Range(-0.3f, 0.3f), Random.Range(-0.15f, 0.15f), Random.Range(-0.35f, 0.35f)), new Vector3(0.12f, 0.015f, 0.03f), Steel(), new Vector3(0f, Random.Range(0f, 180f), 0f));
+                    break;
+                case 1: // desk phone
+                    Part(t, PrimitiveType.Cube, Vector3.zero, new Vector3(0.38f, 0.1f, 0.34f), M("beige", new Color(0.86f, 0.82f, 0.7f)));
+                    Part(t, PrimitiveType.Cube, new Vector3(0f, 0.1f, 0f), new Vector3(0.12f, 0.07f, 0.55f), Dark(), new Vector3(0f, 0f, 0f));
+                    Part(t, PrimitiveType.Cube, new Vector3(0f, 0.1f, 0.25f), new Vector3(0.16f, 0.1f, 0.12f), Dark());
+                    Part(t, PrimitiveType.Cube, new Vector3(0f, 0.1f, -0.25f), new Vector3(0.16f, 0.1f, 0.12f), Dark());
+                    for (int i = 0; i < 6; i++)
+                        Part(t, PrimitiveType.Cube, new Vector3(-0.1f + (i % 3) * 0.1f, 0.06f, 0.02f + (i / 3) * 0.08f), new Vector3(0.06f, 0.03f, 0.05f), M("white", Color.white));
+                    break;
+                default: // keyboard
+                    Part(t, PrimitiveType.Cube, Vector3.zero, new Vector3(0.95f, 0.05f, 0.32f), M("kb", new Color(0.2f, 0.2f, 0.24f)));
+                    for (int r = 0; r < 3; r++)
+                        for (int c = 0; c < 9; c++)
+                            Part(t, PrimitiveType.Cube, new Vector3(-0.4f + c * 0.1f, 0.04f, -0.09f + r * 0.09f), new Vector3(0.075f, 0.03f, 0.07f), M("key", new Color(0.88f, 0.88f, 0.9f)));
+                    break;
+            }
+            float dist = range;
+            if (Physics.Raycast(from, dir, out RaycastHit hit, range, LayerIndex.world.mask, QueryTriggerInteraction.Ignore)) dist = hit.distance;
+            Fly(go, from, from + dir.normalized * dist, 65f);
+        }
+
+        /// <summary>M1 hit 3: the whole computer: monitor, tower, keyboard.</summary>
+        public static void Computer(Vector3 from, Vector3 dir, float range)
+        {
+            Mats();
+            GameObject go = Prop("CmxComputer", from);
+            Transform t = go.transform;
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.35f, 0f), new Vector3(1f, 0.7f, 0.12f), Dark());
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.35f, 0.07f), new Vector3(0.9f, 0.6f, 0.02f), M("screen", new Color(0.2f, 0.45f, 0.95f), 1.2f));
+            Part(t, PrimitiveType.Cube, new Vector3(0f, -0.05f, 0f), new Vector3(0.12f, 0.2f, 0.1f), Dark());
+            Part(t, PrimitiveType.Cube, new Vector3(0f, -0.15f, 0f), new Vector3(0.45f, 0.04f, 0.3f), Dark());
+            Part(t, PrimitiveType.Cube, new Vector3(0.75f, 0.1f, 0f), new Vector3(0.38f, 0.85f, 0.75f), M("beige", new Color(0.86f, 0.82f, 0.7f)));
+            Part(t, PrimitiveType.Cube, new Vector3(0.75f, 0.35f, 0.38f), new Vector3(0.3f, 0.03f, 0.02f), Dark());
+            Part(t, PrimitiveType.Cube, new Vector3(-0.1f, -0.2f, 0.55f), new Vector3(0.8f, 0.04f, 0.28f), M("kb", new Color(0.2f, 0.2f, 0.24f)));
+            float dist = range;
+            if (Physics.Raycast(from, dir, out RaycastHit hit, range, LayerIndex.world.mask, QueryTriggerInteraction.Ignore)) dist = hit.distance;
+            Fly(go, from, from + dir.normalized * dist, 60f);
+        }
+
+        /// <summary>M1 finisher: a filing cabinet, thrown.</summary>
+        public static void Cabinet(Vector3 from, Vector3 at)
+        {
+            Mats();
+            GameObject go = Prop("CmxCabinet", from);
+            Transform t = go.transform;
+            Material grey = M("cabinet", new Color(0.52f, 0.56f, 0.6f));
+            Part(t, PrimitiveType.Cube, Vector3.zero, new Vector3(0.9f, 2f, 0.75f), grey);
+            for (int i = 0; i < 4; i++)
+            {
+                float y = -0.75f + i * 0.5f;
+                Part(t, PrimitiveType.Cube, new Vector3(0f, y, 0.38f), new Vector3(0.82f, 0.42f, 0.03f), M("drawer", new Color(0.62f, 0.66f, 0.7f)));
+                Part(t, PrimitiveType.Cube, new Vector3(0f, y + 0.08f, 0.41f), new Vector3(0.3f, 0.04f, 0.04f), Steel());
+            }
+            Fly(go, from, at, 58f, 0.5f);
+        }
+
+        /// <summary>M2 hit 1: a scatter of lug nuts. Returns the fall time.</summary>
+        public static float LugNuts(Vector3 at)
+        {
+            Mats();
+            float fall = 0.3f;
+            for (int i = 0; i < 8; i++)
+            {
+                GameObject go = Prop("CmxLugNut", at);
+                Part(go.transform, PrimitiveType.Cylinder, Vector3.zero, new Vector3(0.28f, 0.1f, 0.28f), Steel());
+                Part(go.transform, PrimitiveType.Cylinder, new Vector3(0f, 0.1f, 0f), new Vector3(0.14f, 0.02f, 0.14f), Dark());
+                Vector2 o = Random.insideUnitCircle * 3f;
+                fall = Fall(go, at + new Vector3(o.x, 0f, o.y), Random.Range(11f, 15f), 48f, 0.6f);
+            }
+            return 0.3f;
+        }
+
+        /// <summary>M2 hit 2: wrenches, a hammer and a ratchet raining down.</summary>
+        public static float Tools(Vector3 at)
+        {
+            Mats();
+            for (int i = 0; i < 5; i++)
+            {
+                GameObject go = Prop("CmxTool", at);
+                Transform t = go.transform;
+                if (i % 5 == 4)
+                {
+                    Part(t, PrimitiveType.Cube, Vector3.zero, new Vector3(0.1f, 0.1f, 1.2f), M("wood", new Color(0.55f, 0.38f, 0.2f)));
+                    Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, 0.6f), new Vector3(0.22f, 0.22f, 0.5f), Steel(), new Vector3(0f, 0f, 0f));
+                }
+                else
+                {
+                    Part(t, PrimitiveType.Cube, Vector3.zero, new Vector3(0.12f, 0.05f, 1.3f), Steel());
+                    Part(t, PrimitiveType.Cylinder, new Vector3(0f, 0f, 0.65f), new Vector3(0.34f, 0.05f, 0.34f), Steel());
+                    Part(t, PrimitiveType.Cylinder, new Vector3(0f, 0.01f, 0.65f), new Vector3(0.16f, 0.06f, 0.16f), Dark());
+                    Part(t, PrimitiveType.Cylinder, new Vector3(0f, 0f, -0.65f), new Vector3(0.3f, 0.05f, 0.3f), Steel());
+                }
+                t.localScale = Vector3.one * 1.5f;
+                Vector2 o = Random.insideUnitCircle * 3.5f;
+                Fall(go, at + new Vector3(o.x, 0f, o.y), Random.Range(14f, 19f), 50f, 0.5f);
+            }
+            return 0.36f;
+        }
+
+        /// <summary>M2 hit 3: a floor jack and two jack stands.</summary>
+        public static float Jack(Vector3 at)
+        {
+            Mats();
+            Material red = M("jackred", new Color(0.85f, 0.15f, 0.12f));
+            GameObject jack = Prop("CmxJack", at);
+            Transform t = jack.transform;
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.15f, 0f), new Vector3(0.7f, 0.25f, 1.6f), red);
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.45f, -0.5f), new Vector3(0.3f, 0.5f, 0.3f), red);
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.65f, 0.1f), new Vector3(0.12f, 0.12f, 1.3f), Steel(), new Vector3(-18f, 0f, 0f));
+            Part(t, PrimitiveType.Cylinder, new Vector3(0f, 0.9f, 0.7f), new Vector3(0.4f, 0.05f, 0.4f), Dark());
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.2f, 1.25f), new Vector3(0.1f, 0.1f, 1f), Steel(), new Vector3(0f, 0f, 0f));
+            t.localScale = Vector3.one * 2f;
+            Fall(jack, at, 20f, 52f);
+            for (int i = 0; i < 2; i++)
+            {
+                GameObject stand = Prop("CmxJackStand", at);
+                Transform s = stand.transform;
+                Part(s, PrimitiveType.Cube, new Vector3(0f, 0.05f, 0f), new Vector3(0.9f, 0.1f, 0.9f), Dark());
+                Part(s, PrimitiveType.Cube, new Vector3(0f, 0.6f, 0f), new Vector3(0.22f, 1.1f, 0.22f), M("standred", new Color(0.8f, 0.2f, 0.1f)));
+                Part(s, PrimitiveType.Cube, new Vector3(0f, 1.2f, 0f), new Vector3(0.4f, 0.12f, 0.4f), Dark());
+                s.localScale = Vector3.one * 1.6f;
+                Fall(stand, at + new Vector3(i == 0 ? -3f : 3f, 0f, Random.Range(-1.5f, 1.5f)), 24f, 52f, 0.3f);
+            }
+            return 0.4f;
+        }
+
+        /// <summary>M2 hit 4: a whole car. Returns the fall time.</summary>
+        public static float Car(Vector3 at)
+        {
+            Mats();
+            GameObject go = Prop("CmxCar", at);
+            Transform t = go.transform;
+            Material body = M("carbody", new Color(0.12f, 0.3f, 0.75f));
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.55f, 0f), new Vector3(1.8f, 0.7f, 3.9f), body);
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 1.15f, -0.2f), new Vector3(1.55f, 0.55f, 2.0f), M("cabin", new Color(0.55f, 0.75f, 0.95f)));
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 1.18f, -0.2f), new Vector3(1.6f, 0.4f, 1.7f), M("glass", new Color(0.1f, 0.12f, 0.2f)));
+            Part(t, PrimitiveType.Cube, new Vector3(0.6f, 0.62f, 1.97f), new Vector3(0.3f, 0.15f, 0.04f), M("lamp", new Color(1f, 0.95f, 0.7f), 1f));
+            Part(t, PrimitiveType.Cube, new Vector3(-0.6f, 0.62f, 1.97f), new Vector3(0.3f, 0.15f, 0.04f), M("lamp", new Color(1f, 0.95f, 0.7f), 1f));
+            for (int i = 0; i < 4; i++)
+                Part(t, PrimitiveType.Cylinder, new Vector3(i % 2 == 0 ? 0.95f : -0.95f, 0.3f, i < 2 ? 1.25f : -1.25f), new Vector3(0.7f, 0.12f, 0.7f), Dark(), new Vector3(0f, 0f, 90f));
+            t.localScale = Vector3.one * 1.6f;
+            return Fall(go, at, 34f, 62f, 0f);
+        }
+
+        /// <summary>M2 finale: the dealership falls on them. Returns the fall time.</summary>
+        public static float Building(Vector3 at, float delay)
+        {
+            Mats();
+            GameObject go = Prop("CmxBuilding", at);
+            Transform t = go.transform;
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 6f, 0f), new Vector3(10f, 12f, 8f), M("wall", new Color(0.62f, 0.6f, 0.58f)));
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 12.4f, 0f), new Vector3(10.6f, 0.8f, 8.6f), M("roof", new Color(0.15f, 0.3f, 0.7f)));
+            Part(t, PrimitiveType.Cube, new Vector3(0f, 10.8f, 4.1f), new Vector3(6f, 1.4f, 0.2f), M("sign", new Color(0.1f, 0.3f, 0.8f), 1.2f));
+            for (int r = 0; r < 3; r++)
+                for (int c = 0; c < 4; c++)
+                    Part(t, PrimitiveType.Cube, new Vector3(-3.6f + c * 2.4f, 2.2f + r * 2.6f, 4.05f), new Vector3(1.4f, 1.4f, 0.12f), M("win", new Color(1f, 0.9f, 0.5f), 0.8f));
+            // it starts where the car does, a beat later and much higher
+            Vector3 from = at + Vector3.up * 70f;
+            go.transform.position = from;
+            go.SetActive(false);
+            CmxDelay.Run(delay - 70f / 80f > 0f ? delay - 70f / 80f : 0f, () =>
+            {
+                if (!go) return;
+                go.SetActive(true);
+                go.AddComponent<CmxFlyer>().Init(from, at, 80f, 0f);
+            });
+            return 70f / 80f + Mathf.Max(0f, delay - 70f / 80f);
+        }
+
+        public static void Slam(Vector3 at, float scale, bool big)
+        {
+            GameObject fx = Boom(big);
+            if (fx) EffectManager.SpawnEffect(fx, new EffectData { origin = at, scale = Mathf.Max(1f, scale) }, false);
+        }
+
         public static void Slam(Vector3 at)
         {
             GameObject fx = Boom(false);
@@ -471,11 +830,11 @@ namespace CarMaxSpecialist
         private float _t, _len, _speed;
         private Vector3 _spin;
 
-        public void Init(Vector3 a, Vector3 b, float speed)
+        public void Init(Vector3 a, Vector3 b, float speed, float spin = 1f)
         {
             _a = a; _b = b; _speed = speed;
             _len = Mathf.Max(0.1f, Vector3.Distance(a, b));
-            _spin = new Vector3(Random.Range(-900f, 900f), Random.Range(-300f, 300f), Random.Range(-900f, 900f));
+            _spin = new Vector3(Random.Range(-900f, 900f), Random.Range(-300f, 300f), Random.Range(-900f, 900f)) * spin;
         }
 
         private void Update()

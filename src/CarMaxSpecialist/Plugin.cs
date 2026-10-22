@@ -49,7 +49,8 @@ namespace CarMaxSpecialist
         public static ConfigEntry<float> EroRelief, ApptRelief, EroChance, ApptChance, SliderSensitivity, SliderTolerance;
         public static ConfigEntry<float> TaskEveryMin, TaskEveryMax, TaskRelief, TaskNag;
         public static ConfigEntry<float> DeadlineMin, DeadlineMax, DeadlineStressRelief, DeadlineFailStress;
-        public static ConfigEntry<float> EmailDamage, AuditDamage, AuditRange, AuditSeconds, PalletDamage, PalletRadius, BackorderChance;
+        public static ConfigEntry<KeyCode> MouseKey;
+        public static ConfigEntry<float> HeavyDamage, EmailDamage, AuditDamage, AuditRange, AuditSeconds, PalletDamage, PalletRadius, BackorderChance;
         public static ConfigEntry<float> CoworkerSeconds, LazyChance, DiyStress;
         public static ConfigEntry<float> SecondaryCooldown, UtilityCooldown, SpecialCooldown;
         public static ConfigEntry<int> Volume;
@@ -122,7 +123,9 @@ namespace CarMaxSpecialist
             DeadlineMax = Config.Bind("3. Deadlines", "SecondsBetweenMax", 55f, "Longest gap between deadlines.");
             DeadlineStressRelief = Config.Bind("3. Deadlines", "StressRelief", 35f, "Stress removed when a deadline is met.");
             DeadlineFailStress = Config.Bind("3. Deadlines", "FailStress", 25f, "Stress added when a deadline is missed.");
-            EmailDamage = Config.Bind("4. Skills", "EmailDamage", 1.1f, "Completed Repair Orders damage (1.1 = 110%).");
+            EmailDamage = Config.Bind("4. Skills", "EmailDamage", 1.1f, "M1 light combo base damage (1.1 = 110%); the 4 hits are x0.6, x0.8, x1.2, x2.4 of this.");
+            HeavyDamage = Config.Bind("4. Skills", "HeavyDamage_v2", 1.6f, "M2 heavy combo base damage (1.6 = 160%); the 4 hits are x1, x1.3, x1.8, x2.5, and the building adds x3.");
+            MouseKey = Config.Bind("3. Tasks", "MouseToggleKey_v2", KeyCode.F7, "Press to free the mouse so you can click the task windows (press again to go back to aiming).");
             AuditDamage = Config.Bind("4. Skills", "AuditDamage", 1.5f, "Inventory Audit damage to each scanned enemy.");
             AuditRange = Config.Bind("4. Skills", "AuditRange", 40f, "Inventory Audit range.");
             AuditSeconds = Config.Bind("4. Skills", "InventoriedSeconds", 10f, "How long an enemy stays tagged as inventory.");
@@ -165,7 +168,7 @@ namespace CarMaxSpecialist
                 "The Auto Repair Specialist is paid by the hour, not by the job, and there is always more job.<color=#CCD3E0>\r\n\r\n" +
                 "< ! > Your paycheck comes every hour no matter what. After 8 hours it's overtime: more pay, more stress.\r\n\r\n" +
                 "< ! > Stress makes you hit harder, but at 100% you burn out. Clear your task pop-ups (number keys, arrow keys) to calm down.\r\n\r\n" +
-                "< ! > Audit enemies before killing them: tagged units take more damage and sell for gold.\r\n\r\n" +
+                "< ! > M1 and M2 are combos: keep hitting to chain bigger props. Press F7 to free the mouse and click your pop-ups.\r\n\r\n" +
                 "< ! > Your coworkers might help. They might also be on break.</color>");
             LanguageAPI.Add(T + "OUTRO", "..and so he left, still on the clock.");
             LanguageAPI.Add(T + "FAIL", "..and so he vanished, and nobody covered his shift.");
@@ -177,10 +180,10 @@ namespace CarMaxSpecialist
                 " hours: <style=cIsUtility>Overtime</style>, x" + OvertimePay.Value.ToString("0.#") + " pay and +15% attack speed, but stress keeps climbing. " +
                 "<style=cIsDamage>Stress</style> builds when customers yell at you (taking damage), and gives <style=cIsDamage>+" + (StressDamage.Value * 100f).ToString("0.#") + "% damage per point</style>. " +
                 "<style=cDeath>At 100: Burnout.</style> <style=cIsUtility>Busywork</style> pops up on your screen like ads (punch in part numbers, sign off ROs, write the story, total invoices). Open tasks block your view and add stress; finishing one pays a little and <style=cIsHealing>clears your head</style>.");
-            LanguageAPI.Add(T + "PRIMARY_NAME", "Completed Repair Orders");
-            LanguageAPI.Add(T + "PRIMARY_DESC", "Fling a completed repair order that <style=cIsDamage>pierces</style> for <style=cIsDamage>" + (EmailDamage.Value * 100f).ToString("0") + "% damage</style>. Every 3rd is an <style=cIsDamage>RO Stack</style>: three big ones at once.");
-            LanguageAPI.Add(T + "SECONDARY_NAME", "Inventory Audit");
-            LanguageAPI.Add(T + "SECONDARY_DESC", "Scan a cone with the barcode gun for <style=cIsDamage>" + (AuditDamage.Value * 100f).ToString("0") + "% damage</style>. Scanned enemies are <style=cIsUtility>inventory</style> for " + AuditSeconds.Value.ToString("0") + "s: <style=cIsDamage>-30 armor</style>, and killing one <style=cShrine>sells the unit</style> for gold.");
+            LanguageAPI.Add(T + "PRIMARY_NAME", "Paper Trail");
+            LanguageAPI.Add(T + "PRIMARY_DESC", "Hold to chain a <style=cIsDamage>4-hit combo</style> of office supplies: <style=cIsDamage>paper</style>, then <style=cIsDamage>staplers, phones and keyboards</style>, then the <style=cIsDamage>whole computer</style>, then a <style=cIsDamage>filing cabinet</style> slam. Base <style=cIsDamage>" + (EmailDamage.Value * 100f).ToString("0") + "% damage</style>, hits get heavier.");
+            LanguageAPI.Add(T + "SECONDARY_NAME", "Heavy Equipment");
+            LanguageAPI.Add(T + "SECONDARY_DESC", "Hold to chain a slower <style=cIsDamage>4-hit area combo</style> from the shop floor: <style=cIsDamage>lug nuts</style>, <style=cIsDamage>wrenches and tools</style>, a <style=cIsDamage>jack and jack stands</style>, then <style=cIsDamage>the car</style>, and the <style=cIsDamage>building</style> right behind it. Base <style=cIsDamage>" + (HeavyDamage.Value * 100f).ToString("0") + "% damage</style>.");
             LanguageAPI.Add(T + "UTILITY_NAME", "Order Your Own Parts");
             LanguageAPI.Add(T + "UTILITY_DESC", "<style=cIsUtility>Dash</style>. A parts pallet drops where you stood for <style=cIsDamage>" + (PalletDamage.Value * 100f).ToString("0") + "% damage</style>. " + (BackorderChance.Value * 100f).ToString("0") + "% chance it's <style=cIsUtility>backordered</style>: it lands 4 seconds late, but twice as hard.");
             LanguageAPI.Add(T + "SPECIAL_NAME", "Lazy Coworkers");
@@ -360,8 +363,8 @@ namespace CarMaxSpecialist
 
         private void CreateSkills()
         {
-            ContentAddition.AddEntityState<CmxEmailState>(out _);
-            ContentAddition.AddEntityState<CmxAuditState>(out _);
+            ContentAddition.AddEntityState<CmxLightState>(out _);
+            ContentAddition.AddEntityState<CmxHeavyState>(out _);
             ContentAddition.AddEntityState<CmxPartsState>(out _);
             ContentAddition.AddEntityState<CmxCoworkersState>(out _);
             ContentAddition.AddEntityState<CmxBurnoutState>(out _);
@@ -373,8 +376,8 @@ namespace CarMaxSpecialist
             sl.passiveSkill.skillDescriptionToken = T + "PASSIVE_DESC";
             sl.passiveSkill.icon = CmxIcons.Get("passive", null);
 
-            SkillDef primary = MakeSkill<SkillDef>("PRIMARY", typeof(CmxEmailState), "Weapon", 0f, false, true, InterruptPriority.Any, "primary");
-            SkillDef secondary = MakeSkill<SkillDef>("SECONDARY", typeof(CmxAuditState), "Weapon", SecondaryCooldown.Value, true, true, InterruptPriority.Skill, "secondary");
+            SkillDef primary = MakeSkill<SkillDef>("PRIMARY", typeof(CmxLightState), "Weapon", 0f, false, true, InterruptPriority.Any, "primary");
+            SkillDef secondary = MakeSkill<SkillDef>("SECONDARY", typeof(CmxHeavyState), "Weapon", 0f, false, true, InterruptPriority.Skill, "secondary");
             SkillDef utility = MakeSkill<SkillDef>("UTILITY", typeof(CmxPartsState), "Body", UtilityCooldown.Value, true, false, InterruptPriority.PrioritySkill, "utility");
             SkillDef special = MakeSkill<CmxCoworkerSkillDef>("SPECIAL", typeof(CmxCoworkersState), "Weapon", SpecialCooldown.Value, true, true, InterruptPriority.Skill, "special");
             utility.cancelSprintingOnActivation = false;

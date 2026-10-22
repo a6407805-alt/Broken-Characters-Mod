@@ -29,6 +29,20 @@ namespace CarMaxSpecialist
         // local only
         public int EmailCount;
         public float LastEmail;
+        private readonly int[] _step = new int[2];
+        private readonly float[] _stepT = new float[2];
+
+        /// <summary>Which hit of the 4-hit combo is next (light = M1, heavy = M2); starts over after a pause.</summary>
+        public int NextStep(bool heavy)
+        {
+            int h = heavy ? 1 : 0;
+            float now = Time.time;
+            if (now - _stepT[h] > (heavy ? 2.2f : 1.3f)) _step[h] = 0;
+            int s = _step[h];
+            _step[h] = (s + 1) % 4;
+            _stepT[h] = now + (s == 3 ? 0.4f : 0f);
+            return s;
+        }
 
         private CharacterBody _body;
         private int _hoursDone;
