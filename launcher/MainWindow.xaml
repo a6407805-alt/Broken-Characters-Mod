@@ -366,7 +366,7 @@
                             </ToggleButton.Style>
                         </ToggleButton>
                         <!-- Reload the cards and patch notes, check for a newer pack and a newer launcher -->
-                        <Button x:Name="RefreshButton" Content="&#x21BB; REFRESH" Click="Refresh_Click" Height="34" Padding="12,0" Margin="0,0,6,0" Cursor="Hand"
+                        <Button x:Name="RefreshButton" Content="&#x21BB; CHECK FOR UPDATES" Click="Refresh_Click" Height="34" Padding="12,0" Margin="0,0,6,0" Cursor="Hand"
                                 FontSize="12" FontWeight="Bold" BorderThickness="0" Background="Transparent" Foreground="{StaticResource Accent}"
                                 ToolTip="Reload everything and check for updates (pack and launcher).">
                             <Button.Template>
