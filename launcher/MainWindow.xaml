@@ -508,7 +508,7 @@
                     <Border Grid.Column="1" Margin="16,0,16,0" Background="{StaticResource Panel}" BorderBrush="{StaticResource PanelBorder}" BorderThickness="1" CornerRadius="10" Padding="18,12">
                         <StackPanel VerticalAlignment="Center">
                             <DockPanel Margin="0,0,0,10">
-                                <Button DockPanel.Dock="Right" x:Name="RetryButton" Content="Retry" Style="{StaticResource GhostButton}" Visibility="Collapsed" Click="Retry_Click" />
+                                <Button DockPanel.Dock="Right" x:Name="RetryButton" Content="Check for updates" Style="{StaticResource GhostButton}" Visibility="Collapsed" Click="Retry_Click" />
                                 <TextBlock DockPanel.Dock="Right" x:Name="ProgressText" Foreground="{StaticResource TextDim}" FontSize="13" Margin="10,0,10,0" VerticalAlignment="Center" />
                                 <TextBlock x:Name="StatusText" Text="Starting..." Foreground="White" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                             </DockPanel>

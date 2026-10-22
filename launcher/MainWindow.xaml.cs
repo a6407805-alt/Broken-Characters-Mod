@@ -172,7 +172,7 @@ namespace BrokenCharactersLauncher
                         Ready("Can't reach GitHub right now. Playing the version you have.");
                         return;
                     }
-                    Fail("Can't reach GitHub to download the pack. Check your internet and press Retry.", ex);
+                    Fail("Can't reach GitHub to download the pack. Check your internet and press Check for updates.", ex);
                     return;
                 }
 
@@ -898,6 +898,7 @@ namespace BrokenCharactersLauncher
             SetStatus(message);
             SetProgress(100, indeterminate: false);
             ProgressText.Text = "";
+            RetryButton.Visibility = Visibility.Visible; // lets them check for updates again
             PlayButton.IsEnabled = true;  // light it up
             PlayButton.Focus();           // Enter / Space now plays
         }
