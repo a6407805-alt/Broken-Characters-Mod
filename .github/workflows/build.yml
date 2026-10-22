@@ -142,6 +142,11 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Merge the per-mod roster cards (launcher/cards/*.json) into roster.json
+        shell: bash
+        run: |
+          py=$(command -v python3 || command -v python)
+          "$py" release/merge_roster.py
       - name: Build Broken-Characters-Mod.exe
         run: dotnet publish launcher/BrokenCharactersMod.csproj -c Release -o launcher-out -nologo
       - uses: actions/upload-artifact@v4
@@ -156,17 +161,36 @@ jobs:
           $p = Start-Process launcher-out\Broken-Characters-Mod.exe -ArgumentList '--screenshot', "`"$out`"" -PassThru
           if (-not $p.WaitForExit(90000)) { $p.Kill(); throw 'launcher did not exit' }
           if (-not (Test-Path $out)) { throw 'no screenshot' }
+      - name: Screenshot the Creator (publish) window with demo data
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $out = Join-Path $pwd 'publish-preview.png'
+          $p = Start-Process launcher-out\Broken-Characters-Mod.exe -ArgumentList '--screenshot-publish', "`"$out`"" -PassThru
+          if (-not $p.WaitForExit(60000)) { $p.Kill(); throw 'publish window did not exit' }
+          if (-not (Test-Path $out)) { throw 'no publish screenshot' }
       - uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
           name: Launcher-Preview
-          path: launcher-preview.png
+          path: |
+            launcher-preview.png
+            publish-preview.png
 
   publish:
     needs: [test-installer, launcher]
     if: always() && github.event_name != 'pull_request' && needs.test-installer.result == 'success'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            launcher
+            release
+      - name: Merge the roster cards (launchers download roster.json from the release)
+        run: |
+          python3 release/merge_roster.py
+          cp launcher/roster.json roster.json
       - uses: actions/download-artifact@v4
         with:
           name: Broken-Characters-Mod
@@ -188,6 +212,8 @@ jobs:
           files="Broken-Characters-Mod.zip Broken-Characters-Collection.zip"
           [ -f Broken-Characters-Mod.exe ] && files="$files Broken-Characters-Mod.exe"
           [ -f launcher-preview.png ] && files="$files launcher-preview.png"
+          [ -f publish-preview.png ] && files="$files publish-preview.png"
+          [ -f roster.json ] && files="$files roster.json"
           gh release create latest $files \
             --title "Broken Characters Mod (latest build)" \
             --notes "Built automatically from commit ${GITHUB_SHA::7}. Easiest: run Broken-Characters-Mod.exe (the launcher). Or download Broken-Characters-Mod.zip, extract it and run INSTALL.bat. (Broken-Characters-Collection.zip is the same file under its old name, for older updaters.)" \

@@ -609,6 +609,14 @@ namespace BrokenCharactersLauncher
             SteamPlayToggle.IsEnabled = true;
         }
 
+        // ================================================================== creator tools
+
+        /// <summary>Opens the "publish my mod" window (see PublishWindow.xaml.cs / Publisher.cs).</summary>
+        private void Creator_Click(object sender, RoutedEventArgs e)
+        {
+            new PublishWindow { Owner = this }.ShowDialog();
+        }
+
         // ================================================================== extras key
 
         /// <summary>Saves the friends-only extras key where install.ps1 looks for it, then reinstalls to add the extras.</summary>
@@ -664,10 +672,21 @@ namespace BrokenCharactersLauncher
         private async Task RefreshRosterFromGitHubAsync()
         {
             const string rawBase = "https://raw.githubusercontent.com/" + Repo + "/main/launcher/";
+            // The build server merges every creator's card (launcher/cards/<Mod>.json) into one roster.json and attaches
+            // it to the latest release. That merged copy is tried first; the plain file in the repo is the fallback.
+            const string mergedRoster = "https://github.com/" + Repo + "/releases/latest/download/roster.json";
             try
             {
+                string? json = null;
+                try
+                {
+                    using var first = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                    json = await Http.GetStringAsync(mergedRoster, first.Token);
+                }
+                catch (Exception ex) when (IsNetworkError(ex)) { Debug.WriteLine("Merged roster unavailable: " + ex.Message); }
+
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                string json = await Http.GetStringAsync(rawBase + "roster.json", cts.Token);
+                json ??= await Http.GetStringAsync(rawBase + "roster.json", cts.Token);
                 RosterData remote = RosterData.Parse(json, path => new Uri(rawBase + path.TrimStart('/')));
                 if (remote.Characters.Count > 0) ApplyRoster(remote);
             }

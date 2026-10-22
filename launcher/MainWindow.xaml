@@ -365,6 +365,23 @@
                                 </Style>
                             </ToggleButton.Style>
                         </ToggleButton>
+                        <!-- For mod creators: upload your own mod to the pack (asks for a creator key the first time) -->
+                        <Button x:Name="CreatorButton" Content="CREATOR" Click="Creator_Click" Height="34" Padding="12,0" Margin="0,0,6,0" Cursor="Hand"
+                                FontSize="12" FontWeight="Bold" BorderThickness="0" Background="Transparent" Foreground="#9FB3D1"
+                                ToolTip="For mod creators: publish your own mod to the pack.">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="Bg" Background="#30FFFFFF" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter VerticalAlignment="Center" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bg" Property="Background" Value="#50FFFFFF" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
                         <ToggleButton x:Name="PatchNotesToggle" Content="PATCH NOTES" Foreground="{StaticResource Accent}" FontSize="12" FontWeight="Bold"
                                       Background="Transparent" BorderThickness="0" Padding="12,0" Height="34" Cursor="Hand" Margin="0,0,6,0" />
                         <Button Content="&#x2014;" Style="{StaticResource TitleButton}" Click="Minimize_Click" ToolTip="Minimize" />

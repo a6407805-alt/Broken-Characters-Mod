@@ -9,6 +9,11 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - `mods/<Mod>/` what ships for each group mod (dll, Icons/, Sounds/, bundles). CI copies built dlls here.
 - `unity/<Mod>/` Unity sources for asset bundles (not shipped). `launcher/` WPF launcher (`roster.json` = its cards).
 - `release/` installer (`install.ps1`), updater (`update.ps1`), `package.sh`. `.github/workflows/build.yml` does it all.
+- Launcher cards: one file per mod in `launcher/cards/<Mod>.json` (CI merges them into `roster.json` via
+  `release/merge_roster.py` and attaches the result to the release). Never rewrite `launcher/roster.json` wholesale.
+- Creator window (`launcher/Publisher.cs`, `PublishWindow.xaml*`): lets a creator upload only their own mod through the
+  GitHub API; who owns what is `launcher/creators.json`. Don't commit dlls into `mods/<Mod>/` when `src/<Mod>/` exists.
+  Before changing a mod you don't own, check `creators.json` and `git log -- src/<Mod>`.
 
 ## Build & release (nothing builds locally: no dotnet in the sandbox)
 - Every push to main: build Duelist + every `src/*/*.csproj` → package `Broken-Characters-Mod.zip` → Windows installer

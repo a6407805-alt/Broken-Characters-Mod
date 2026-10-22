@@ -48,6 +48,24 @@ Tips:
 
 Multiplayer needs everyone on the same build, so tell the group when a merge goes in.
 
+### Publishing from the launcher (no git needed)
+
+Creators who don't want to deal with git use the launcher's **CREATOR** button (top right). First time: paste the
+creator key the pack owner gave you. Then: choose the folder your mod is in (it has `src` and/or `mods` inside), tick
+your mod, press the big gold button. It uploads only your mod's own files (`src/<Mod>/`, `mods/<Mod>/`,
+`unity/<Mod>/`, `launcher/cards/<Mod>.json`, your portrait and tiles) in one commit on top of the newest `main`, never
+deletes anything, then reports whether the build worked. If it didn't, press "Copy errors for Claude" and paste them
+to your Claude.
+
+- Who may publish which mod is in `launcher/creators.json` (admins can publish anything). A brand-new mod is
+  registered to the person who first publishes it. Mods you don't own are not shown in the window.
+- If someone else changed one of your files online after you, the window warns you first. Ask your Claude to
+  `git pull`, then press Refresh. (Only tick "Publish my copy anyway" if you really mean to replace their change.)
+- A creator key is a GitHub fine-grained token limited to this one repository with **Contents: Read and write**
+  (the pack owner makes it; keep it out of the repo, same as the extras key).
+- Don't commit built dlls for mods that have `src/<Mod>/`: the build server compiles them. A stale dll in
+  `mods/<Mod>/` is exactly how newer versions got overwritten before.
+
 ## Adding a new character (checklist for you and your Claude)
 
 1. **Source:** `src/<Name>/<Name>.csproj` + code. Copy the setup of `src/CarMaxSpecialist/` (NuGet references,
@@ -57,10 +75,13 @@ Multiplayer needs everyone on the same build, so tell the group when a merge goe
    clashes with the other mods.
 3. **Files that ship:** icons in `mods/<Name>/Icons/` (`portrait.png`, `primary.png`, ...), sounds in
    `mods/<Name>/Sounds/`, plus a short `README.md` and `manifest.json`.
-4. **Launcher card:** add an entry at the top of `launcher/roster.json`
-   (`name`, `tagline`, `added` = now in ISO format, `accent` = hex colour, `image` = `Assets/Roster/<Name>.png`) and
-   put a square portrait at `launcher/Assets/Roster/<Name>.png`. The newest `added` date sits on the far left with a
-   NEW badge. Launchers read this file from the repo, so the card shows up without a new launcher.
+4. **Launcher card:** create **your own file** `launcher/cards/<Name>.json` (never edit `launcher/roster.json`, it is
+   shared and edits there get overwritten):
+   `{ "characters": [ { "name", "tagline", "added" (now, ISO format), "accent" (hex), "image": "Assets/Roster/<Name>.png" } ] }`
+   and put a square portrait at `launcher/Assets/Roster/<Name>.png`. A card file may also have `"maps"` and `"modes"`
+   lists (`title`, `subtitle`, `image` = `Assets/Tiles/<Name>.png`, optional `badge`). The build server merges every
+   card file into the roster; an entry with the same name/title as an existing one replaces it. The newest `added`
+   date sits on the far left with a NEW badge, and launchers pick it up without a new exe.
 5. **Copyrighted files** (sounds, models, art from other games or shows) go in the private
    `BrokenCharacters-Extras` repo under `files/<Name>/`, never here.
 6. Push, check the build (`gh run list`), then test in game.
