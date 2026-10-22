@@ -55,4 +55,7 @@ Keyboard only: number keys and arrows. Tunable in the "3. Tasks" config section 
 - **Parts Lookup:** pick the part number that fits the car. Each brand has its own format (Mopar ends in AA/AB, GM is 8 digits, Ford has dashes with a Z, ...), and the window gives you a hint.
 - Invoices are simple addition now (labor + parts).
 - **Mouse wheel** cycles through open windows.
-- **Text to speech** (Windows voice) reads his lines, banners, and each window's prompt. Config: `TextToSpeech_v2`, `TtsRate_v2`, `TtsVolume_v2`.
+- **3D text to speech** (Windows voice, Windows only): his lines, banners and each window's prompt are spoken from whoever said them, so friends nearby hear it (louder when close, panned left/right, a little pitch bend when someone flies past fast). Config section 5: `Enable3DTTS_v3`, `TTSVolume_v3`, `TTSRate_v3`, `TTSMinDistance_v3`, `TTSMaxDistance_v3`, `TTSDopplerLevel_v3`.
+
+## Easier pop-ups (v3 defaults)
+No pop-ups below 50 stress. 50-80: one window every ~28 s. 81-99: up to two, one every ~15 s. At 100 the audit only needs 3 windows. Finishing any window removes 45 stress and gives 3 s of Energized plus a small barrier. Open windows no longer add stress. Getting hit adds 40% less stress. Old `_v2` settings are ignored; delete the config file to reset everything.

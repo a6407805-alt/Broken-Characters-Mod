@@ -54,8 +54,9 @@ namespace CarMaxSpecialist
         public static ConfigEntry<float> CoworkerSeconds, LazyChance, DiyStress;
         public static ConfigEntry<float> SecondaryCooldown, UtilityCooldown, SpecialCooldown;
         public static ConfigEntry<int> Volume;
-        public static ConfigEntry<bool> Bubbles, Props, UseAudiModel, Tts;
-        public static ConfigEntry<int> TtsRate, TtsVolume;
+        public static ConfigEntry<bool> Bubbles, Props, UseAudiModel, Tts, CompletionReward;
+        public static ConfigEntry<int> TtsRate;
+        public static ConfigEntry<float> TtsVolume, TtsMin, TtsMax, TtsDoppler;
         public static ConfigEntry<float> HudX, HudY;
 
         private string Folder(string sub) => System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Info.Location), sub);
@@ -89,38 +90,39 @@ namespace CarMaxSpecialist
             PayPerHour = Config.Bind("1. Hourly", "PayPerHour", 6f, "Gold per hour (scaled by the run's difficulty, like chests).");
             OvertimeAfter = Config.Bind("1. Hourly", "OvertimeAfterHours", 8f, "Hours in a stage before overtime starts.");
             OvertimePay = Config.Bind("1. Hourly", "OvertimePayMultiplier", 1.5f, "Time and a half.");
-            StressPerHit = Config.Bind("2. Stress", "StressPerHit", 1f, "Stress from getting yelled at, multiplier (bigger hits = more stress).");
+            StressPerHit = Config.Bind("2. Stress", "StressPerHit_v3", 0.6f, "Stress from getting yelled at, multiplier (bigger hits = more stress).");
             StressDecay = Config.Bind("2. Stress", "StressDecayPerSecond", 1.5f, "Stress lost per second after 6 s without being hit (not during overtime).");
             StressDamage = Config.Bind("2. Stress", "DamagePerStress", 0.005f, "Extra damage per point of stress (0.005 = +50% at 100).");
             BurnoutSeconds = Config.Bind("2. Stress", "BurnoutSeconds", 3f, "How long a Burnout freezes him.");
             Tasks = Config.Bind("3. Tasks", "TaskPopups", true, "Task windows pop up on your screen (part numbers, ROs, stories, invoices) until you finish them.");
             MaxTasks = Config.Bind("3. Tasks", "MaxOpenTasks", 3, "Most task windows open at once.");
-            LowCap = Config.Bind("3. Tasks", "Calm_MaxOpen_v2", 2, "Stress 0-40: most windows open at once (rare).");
+            LowCap = Config.Bind("3. Tasks", "Calm_MaxOpen_v3", 0, "Below the Busy stress: no pop-ups at all (0).");
             LowEvery = Config.Bind("3. Tasks", "Calm_SecondsBetween_v2", 24f, "Stress 0-40: average gap between windows.");
-            MediumFrom = Config.Bind("3. Tasks", "Busy_FromStress_v2", 41f, "Stress where windows get frequent and start overlapping.");
-            MedCap = Config.Bind("3. Tasks", "Busy_MaxOpen_v2", 5, "Busy: most windows open at once.");
-            MedEveryMin = Config.Bind("3. Tasks", "Busy_SecondsBetweenMin_v2", 6f, "Busy: shortest gap.");
-            MedEveryMax = Config.Bind("3. Tasks", "Busy_SecondsBetweenMax_v2", 12f, "Busy: longest gap.");
-            HighFrom = Config.Bind("3. Tasks", "Overload_FromStress_v2", 75f, "Stress where windows come in malware-style bursts.");
-            HighCap = Config.Bind("3. Tasks", "Overload_MaxOpen_v2", 10, "Overload: most windows open at once.");
-            HighBurst = Config.Bind("3. Tasks", "Overload_BurstSize_v2", 3, "Overload: up to this many windows per burst.");
-            HighEveryMin = Config.Bind("3. Tasks", "Overload_SecondsBetweenMin_v2", 1.5f, "Overload: shortest gap between bursts.");
-            HighEveryMax = Config.Bind("3. Tasks", "Overload_SecondsBetweenMax_v2", 3f, "Overload: longest gap between bursts.");
+            MediumFrom = Config.Bind("3. Tasks", "Busy_FromStress_v3", 50f, "Stress where pop-ups start (below this: none).");
+            MedCap = Config.Bind("3. Tasks", "Busy_MaxOpen_v3", 1, "Busy: most windows open at once.");
+            MedEveryMin = Config.Bind("3. Tasks", "Busy_SecondsBetweenMin_v3", 24f, "Busy: shortest gap.");
+            MedEveryMax = Config.Bind("3. Tasks", "Busy_SecondsBetweenMax_v3", 32f, "Busy: longest gap.");
+            HighFrom = Config.Bind("3. Tasks", "Overload_FromStress_v3", 81f, "Stress where windows come faster.");
+            HighCap = Config.Bind("3. Tasks", "Overload_MaxOpen_v3", 2, "Overload: most windows open at once.");
+            HighBurst = Config.Bind("3. Tasks", "Overload_BurstSize_v3", 1, "Overload: windows per burst.");
+            HighEveryMin = Config.Bind("3. Tasks", "Overload_SecondsBetweenMin_v3", 12f, "Overload: shortest gap.");
+            HighEveryMax = Config.Bind("3. Tasks", "Overload_SecondsBetweenMax_v3", 18f, "Overload: longest gap.");
             AuditLockdown = Config.Bind("3. Tasks", "ManagementAudit_v2", true, "At 100 stress a Management Audit locks the screen and keeps the windows coming until the backlog is cleared (instead of Burnout).");
-            AuditBacklog = Config.Bind("3. Tasks", "AuditBacklog_v2", 8, "Windows to clear to pass the audit.");
-            AuditEvery = Config.Bind("3. Tasks", "AuditSecondsBetween_v2", 0.8f, "Audit: gap between windows.");
+            AuditBacklog = Config.Bind("3. Tasks", "AuditBacklog_v3", 3, "Windows to clear to pass the audit.");
+            AuditEvery = Config.Bind("3. Tasks", "AuditSecondsBetween_v3", 1.5f, "Audit: gap between windows.");
             InvChance = Config.Bind("3. Tasks", "InventoryAuditChance_v2", 0.15f, "Chance a new window is a parts inventory audit (match the shelf count).");
             MatchChance = Config.Bind("3. Tasks", "PartMatchChance_v2", 0.15f, "Chance a new window is a part-number lookup (fit the right part to the car).");
             EroChance = Config.Bind("3. Tasks", "EroChance_v2", 0.2f, "Chance a new window is an ERO repair order.");
             ApptChance = Config.Bind("3. Tasks", "AppointmentChance_v2", 0.15f, "Chance a new window is the appointment scheduler.");
-            EroRelief = Config.Bind("3. Tasks", "EroStressRelief_v2", 35f, "Stress removed by finishing an ERO.");
-            ApptRelief = Config.Bind("3. Tasks", "AppointmentStressRelief_v2", 10f, "Stress removed by finishing an appointment.");
+            EroRelief = Config.Bind("3. Tasks", "EroStressRelief_v3", 45f, "Stress removed by finishing an ERO.");
+            ApptRelief = Config.Bind("3. Tasks", "AppointmentStressRelief_v3", 45f, "Stress removed by finishing an appointment.");
             SliderSensitivity = Config.Bind("3. Tasks", "PromiseTimeSensitivity_v2", 3f, "How twitchy the promise-time slider is.");
             SliderTolerance = Config.Bind("3. Tasks", "PromiseTimeToleranceMinutes_v2", 10f, "How close the promise time must be (minutes).");
             TaskEveryMin = Config.Bind("3. Tasks", "SecondsBetweenAtFullStress", 12f, "Gap between new task windows at 100 stress.");
             TaskEveryMax = Config.Bind("3. Tasks", "SecondsBetweenAtNoStress", 30f, "Gap between new task windows at 0 stress.");
-            TaskRelief = Config.Bind("3. Tasks", "StressReliefPerTask", 12f, "Stress removed per finished task.");
-            TaskNag = Config.Bind("3. Tasks", "StressPerOpenTaskPerSecond", 0.35f, "Stress each open task adds per second.");
+            TaskRelief = Config.Bind("3. Tasks", "StressReliefPerTask_v3", 45f, "Stress removed per finished task.");
+            CompletionReward = Config.Bind("3. Tasks", "CompletionReward_v3", true, "Finishing any window gives 3s of Energized and a small barrier.");
+            TaskNag = Config.Bind("3. Tasks", "StressPerOpenTaskPerSecond_v3", 0f, "Stress each open task adds per second (0 = no snowball).");
             CombatDeadlines = Config.Bind("3. Tasks", "CombatDeadlines", false, "Also give timed combat deadlines (kill N, deal damage, ...) from the first version.");
             DeadlineMin = Config.Bind("3. Deadlines", "SecondsBetweenMin", 40f, "Shortest gap between deadlines.");
             DeadlineMax = Config.Bind("3. Deadlines", "SecondsBetweenMax", 55f, "Longest gap between deadlines.");
@@ -146,9 +148,12 @@ namespace CarMaxSpecialist
             Volume = Config.Bind("5. Look and sound", "Volume", 70, "Sound volume 0-100 (his own sounds, Windows only).");
             Bubbles = Config.Bind("5. Look and sound", "SpeechBubbles", true, "Corporate speech bubbles over heads.");
             UseAudiModel = Config.Bind("5. Look and sound", "UseAudiTechnicianModel", true, "Wear the Audi Technician's model, recolored CarMax blue (needs the AudiTechnician mod).");
-            Tts = Config.Bind("5. Look and sound", "TextToSpeech_v2", true, "Read his lines, pop-ups and mini-game prompts out loud with the Windows voice.");
-            TtsRate = Config.Bind("5. Look and sound", "TtsRate_v2", 1, "Voice speed -5 (slow) to 8 (fast).");
-            TtsVolume = Config.Bind("5. Look and sound", "TtsVolume_v2", 90, "Voice volume 0-100.");
+            Tts = Config.Bind("5. Look and sound", "Enable3DTTS_v3", true, "Spoken lines and pop-up prompts in 3D, heard by everyone nearby (Windows voice, Windows only).");
+            TtsVolume = Config.Bind("5. Look and sound", "TTSVolume_v3", 1f, "Master volume for the voice (0 to 1).");
+            TtsRate = Config.Bind("5. Look and sound", "TTSRate_v3", 2, "Speech speed (-10 to 10).");
+            TtsMin = Config.Bind("5. Look and sound", "TTSMinDistance_v3", 4f, "Metres where the voice is still at full volume.");
+            TtsMax = Config.Bind("5. Look and sound", "TTSMaxDistance_v3", 55f, "Metres where the voice fades out completely.");
+            TtsDoppler = Config.Bind("5. Look and sound", "TTSDopplerLevel_v3", 2.5f, "Pitch bend when someone talks while flying past fast (0 = off, 5 = extreme).");
             Props = Config.Bind("5. Look and sound", "OfficeProps_v2", false, "Tie, lanyard and clipboard on top of the model.");
             HudX = Config.Bind("5. Look and sound", "TimecardX", 0.012f, "Timecard panel position (fraction of the screen).");
             HudY = Config.Bind("5. Look and sound", "TimecardY", 0.26f, "Timecard panel position (fraction of the screen).");
@@ -425,6 +430,7 @@ namespace CarMaxSpecialist
 
         private void Update()
         {
+            CmxTts.Pump();
             if (Input.GetKeyDown(KeyCode.F8))
             {
                 Config.Reload();

@@ -33,7 +33,7 @@ namespace CarMaxSpecialist
         {
             if (string.IsNullOrEmpty(text)) return;
             if (CmxPlugin.Bubbles != null && !CmxPlugin.Bubbles.Value && style != Style.Small) return;
-            if (style != Style.Small) CmxTts.Say(text);
+            if (style != Style.Small) CmxTts.SayFrom(anchor, pos, text);
             if (Bubs.Count > 40) Bubs.RemoveAt(0);
             Bubs.Add(new Bub { Anchor = anchor, Pos = pos, Text = text, Style = style, Born = Time.unscaledTime, Life = style == Style.Small ? 1.8f : 3.2f });
         }

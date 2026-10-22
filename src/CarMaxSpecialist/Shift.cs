@@ -304,6 +304,11 @@ namespace CarMaxSpecialist
         public void ServerTaskDone(float relief = -1f)
         {
             AddStress(-(relief >= 0f ? relief : CmxPlugin.TaskRelief.Value));
+            if (CmxPlugin.CompletionReward.Value)
+            {
+                _body.AddTimedBuff(RoR2Content.Buffs.Energized, 3f);
+                if (_body.healthComponent) _body.healthComponent.AddBarrier(_body.maxHealth * 0.10f);
+            }
             int gold = Scaled(CmxPlugin.PayPerHour.Value * 0.6f);
             Pay(gold);
             CmxNet.Say(_body, gameObject, "<color=#FFC928>Task closed +$" + gold + "</color>", Style.Small, null);
@@ -588,6 +593,7 @@ namespace CarMaxSpecialist
             NetworkingAPI.RegisterMessageType<CmxStateMessage>();
             NetworkingAPI.RegisterMessageType<CmxSayMessage>();
             NetworkingAPI.RegisterMessageType<CmxTaskMessage>();
+            NetworkingAPI.RegisterMessageType<CmxSpeakMessage>();
         }
 
         public static void TaskDone(CmxShift s, float relief = -1f)
