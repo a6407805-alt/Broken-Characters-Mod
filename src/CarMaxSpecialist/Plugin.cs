@@ -96,8 +96,8 @@ namespace CarMaxSpecialist
             BurnoutSeconds = Config.Bind("2. Stress", "BurnoutSeconds", 3f, "How long a Burnout freezes him.");
             Tasks = Config.Bind("3. Tasks", "TaskPopups", true, "Task windows pop up on your screen (part numbers, ROs, stories, invoices) until you finish them.");
             MaxTasks = Config.Bind("3. Tasks", "MaxOpenTasks", 3, "Most task windows open at once.");
-            LowCap = Config.Bind("3. Tasks", "Calm_MaxOpen_v3", 0, "Below the Busy stress: no pop-ups at all (0).");
-            LowEvery = Config.Bind("3. Tasks", "Calm_SecondsBetween_v2", 24f, "Stress 0-40: average gap between windows.");
+            LowCap = Config.Bind("3. Tasks", "Calm_MaxOpen_v4", 1, "Calm (below the Busy stress): most windows open at once.");
+            LowEvery = Config.Bind("3. Tasks", "Calm_SecondsBetween_v4", 22f, "Calm: average gap between windows.");
             MediumFrom = Config.Bind("3. Tasks", "Busy_FromStress_v3", 50f, "Stress where pop-ups start (below this: none).");
             MedCap = Config.Bind("3. Tasks", "Busy_MaxOpen_v3", 1, "Busy: most windows open at once.");
             MedEveryMin = Config.Bind("3. Tasks", "Busy_SecondsBetweenMin_v3", 24f, "Busy: shortest gap.");
@@ -130,7 +130,7 @@ namespace CarMaxSpecialist
             DeadlineFailStress = Config.Bind("3. Deadlines", "FailStress", 25f, "Stress added when a deadline is missed.");
             EmailDamage = Config.Bind("4. Skills", "EmailDamage", 1.1f, "M1 light combo base damage (1.1 = 110%); the 4 hits are x0.6, x0.8, x1.2, x2.4 of this.");
             HeavyDamage = Config.Bind("4. Skills", "HeavyDamage_v3", 1f, "M2 heavy combo base damage (1 = 100%); the 4 hits are x1, x1.2, x1.5, x2, and the building adds x2.");
-            HeavyCooldown = Config.Bind("4. Skills", "HeavyCooldown_v3", 2.5f, "Seconds between M2 hits (press once per hit, no holding).");
+            HeavyCooldown = Config.Bind("4. Skills", "HeavyCooldown_v4", 1.5f, "Seconds between M2 hits (you can hold the button).");
             MouseKey = Config.Bind("3. Tasks", "MouseToggleKey_v2", KeyCode.F7, "Press to free the mouse so you can click the task windows (press again to go back to aiming).");
             AuditDamage = Config.Bind("4. Skills", "AuditDamage", 1.5f, "Inventory Audit damage to each scanned enemy.");
             AuditRange = Config.Bind("4. Skills", "AuditRange", 40f, "Inventory Audit range.");
@@ -197,7 +197,7 @@ namespace CarMaxSpecialist
             LanguageAPI.Add(T + "PRIMARY_NAME", "Paper Trail");
             LanguageAPI.Add(T + "PRIMARY_DESC", "Hold to chain a <style=cIsDamage>4-hit combo</style> of office supplies: <style=cIsDamage>paper</style>, then <style=cIsDamage>staplers, phones and keyboards</style>, then the <style=cIsDamage>whole computer</style>, then a <style=cIsDamage>filing cabinet</style> slam. Base <style=cIsDamage>" + (EmailDamage.Value * 100f).ToString("0") + "% damage</style>, hits get heavier.");
             LanguageAPI.Add(T + "SECONDARY_NAME", "Heavy Equipment");
-            LanguageAPI.Add(T + "SECONDARY_DESC", "Press to chain a slow <style=cIsDamage>4-hit area combo</style> from the shop floor: <style=cIsDamage>lug nuts</style>, <style=cIsDamage>wrenches and tools</style>, a <style=cIsDamage>jack and jack stands</style>, then <style=cIsDamage>the car</style>, and the <style=cIsDamage>building</style> right behind it. Base <style=cIsDamage>" + (HeavyDamage.Value * 100f).ToString("0") + "% damage</style>.");
+            LanguageAPI.Add(T + "SECONDARY_DESC", "Hold to chain a wild <style=cIsDamage>4-hit area combo</style> from the shop floor: <style=cIsDamage>lug nuts</style>, <style=cIsDamage>wrenches and tools</style>, a <style=cIsDamage>jack and jack stands</style>, then <style=cIsDamage>the car</style>, and the <style=cIsDamage>building</style> right behind it. Base <style=cIsDamage>" + (HeavyDamage.Value * 100f).ToString("0") + "% damage</style>.");
             LanguageAPI.Add(T + "UTILITY_NAME", "Order Your Own Parts");
             LanguageAPI.Add(T + "UTILITY_DESC", "<style=cIsUtility>Dash</style>. A parts pallet drops where you stood for <style=cIsDamage>" + (PalletDamage.Value * 100f).ToString("0") + "% damage</style>. " + (BackorderChance.Value * 100f).ToString("0") + "% chance it's <style=cIsUtility>backordered</style>: it lands 4 seconds late, but twice as hard.");
             LanguageAPI.Add(T + "SPECIAL_NAME", "Lazy Coworkers");
@@ -391,7 +391,7 @@ namespace CarMaxSpecialist
             sl.passiveSkill.icon = CmxIcons.Get("passive", null);
 
             SkillDef primary = MakeSkill<SkillDef>("PRIMARY", typeof(CmxLightState), "Weapon", 0f, false, true, InterruptPriority.Any, "primary");
-            SkillDef secondary = MakeSkill<SkillDef>("SECONDARY", typeof(CmxHeavyState), "Weapon", HeavyCooldown.Value, true, true, InterruptPriority.Skill, "secondary");
+            SkillDef secondary = MakeSkill<SkillDef>("SECONDARY", typeof(CmxHeavyState), "Weapon", HeavyCooldown.Value, false, true, InterruptPriority.Skill, "secondary");
             SkillDef utility = MakeSkill<SkillDef>("UTILITY", typeof(CmxPartsState), "Body", UtilityCooldown.Value, true, false, InterruptPriority.PrioritySkill, "utility");
             SkillDef special = MakeSkill<CmxCoworkerSkillDef>("SPECIAL", typeof(CmxCoworkersState), "Weapon", SpecialCooldown.Value, true, true, InterruptPriority.Skill, "special");
             utility.cancelSprintingOnActivation = false;

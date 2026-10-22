@@ -199,7 +199,7 @@ namespace CarMaxSpecialist
         private static char _clickLetter;
         private readonly List<Task> _tasks = new List<Task>();
         private CharacterBody _body;
-        private float _nextSpawn = 20f;
+        private float _nextSpawn = 6f;
         private int _sentKey = -1;
         private bool _audit, _auditEnded;
         private int _backlog;
@@ -216,7 +216,7 @@ namespace CarMaxSpecialist
             try { me = LocalUserManager.GetFirstLocalUser()?.cachedBody; } catch { }
             CmxShift shift = me ? me.GetComponent<CmxShift>() : null;
             bool alive = shift && me.healthComponent && me.healthComponent.alive;
-            if (me != _body) { _tasks.Clear(); _body = me; _nextSpawn = 20f; _audit = false; _backlog = 0; }
+            if (me != _body) { _tasks.Clear(); _body = me; _nextSpawn = 6f; _audit = false; _backlog = 0; }
             if (!alive || !Enabled) { if (_tasks.Count > 0) _tasks.Clear(); _audit = false; SetMouse(false); Report(shift); return; }
             if (Time.timeScale <= 0f) return;
 

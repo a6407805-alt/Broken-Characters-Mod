@@ -30,7 +30,7 @@ namespace CarMaxSpecialist
             CmxShift shift = GetComponent<CmxShift>();
             if (isAuthority) Step = shift ? shift.NextStep(Heavy) : 0;
             bool last = Step == 3;
-            float baseDur = Heavy ? (last ? 1.6f : 0.8f) : (last ? 0.62f : 0.32f);
+            float baseDur = Heavy ? (last ? 1.2f : 0.6f) : (last ? 0.62f : 0.32f);
             _duration = baseDur / Mathf.Clamp(attackSpeedStat, 0.1f, Heavy ? 1.5f : 4f);
 
             Ray aim = GetAimRay();
@@ -176,6 +176,12 @@ namespace CarMaxSpecialist
                     teamIndex = team
                 }.Fire();
                 CmxFx.Slam(at, radius * 0.45f, big);
+                if (radius >= 6f)
+                    for (int i = 0; i < (big ? 6 : 3); i++)
+                    {
+                        Vector2 o = Random.insideUnitCircle * radius * 0.7f;
+                        CmxFx.Slam(at + new Vector3(o.x, 0f, o.y), radius * 0.3f, big);
+                    }
             });
         }
 
@@ -675,12 +681,12 @@ namespace CarMaxSpecialist
         {
             Mats();
             float longest = 0.2f;
-            for (int i = 0; i < 8; i++)
+            for (int i = 0; i < 24; i++)
             {
                 GameObject go = Prop("CmxLugNut", from);
                 Part(go.transform, PrimitiveType.Cylinder, Vector3.zero, new Vector3(0.28f, 0.1f, 0.28f), Steel());
                 Part(go.transform, PrimitiveType.Cylinder, new Vector3(0f, 0.1f, 0f), new Vector3(0.14f, 0.02f, 0.14f), Dark());
-                Vector2 o = Random.insideUnitCircle * 3f;
+                Vector2 o = Random.insideUnitCircle * 5f;
                 longest = Mathf.Max(longest, Throw(go, from, at + new Vector3(o.x, 0f, o.y), 38f, 1.5f, 0.8f));
             }
             return longest;
@@ -691,11 +697,11 @@ namespace CarMaxSpecialist
         {
             Mats();
             float longest = 0.2f;
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 12; i++)
             {
                 GameObject go = Prop("CmxTool", from);
                 Transform t = go.transform;
-                if (i == 4)
+                if (i % 4 == 3)
                 {
                     Part(t, PrimitiveType.Cube, Vector3.zero, new Vector3(0.1f, 0.1f, 1.2f), Navy());
                     Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, 0.6f), new Vector3(0.22f, 0.22f, 0.5f), Steel());
@@ -708,7 +714,7 @@ namespace CarMaxSpecialist
                     Part(t, PrimitiveType.Cylinder, new Vector3(0f, 0f, -0.65f), new Vector3(0.3f, 0.05f, 0.3f), Steel());
                 }
                 t.localScale = Vector3.one * 1.5f;
-                Vector2 o = Random.insideUnitCircle * 3.5f;
+                Vector2 o = Random.insideUnitCircle * 6f;
                 longest = Mathf.Max(longest, Throw(go, from, at + new Vector3(o.x, 0f, o.y), 34f, 2.5f, 1.2f));
             }
             return longest;
@@ -727,7 +733,7 @@ namespace CarMaxSpecialist
             Part(t, PrimitiveType.Cube, new Vector3(0f, 0.2f, 1.25f), new Vector3(0.1f, 0.1f, 1f), Steel());
             t.localScale = Vector3.one * 1.6f;
             float longest = Throw(jack, from, at, 30f, 4f, 0.7f);
-            for (int i = 0; i < 2; i++)
+            for (int i = 0; i < 4; i++)
             {
                 GameObject stand = Prop("CmxJackStand", from);
                 Transform s = stand.transform;
@@ -735,7 +741,7 @@ namespace CarMaxSpecialist
                 Part(s, PrimitiveType.Cube, new Vector3(0f, 0.6f, 0f), new Vector3(0.22f, 1.1f, 0.22f), Navy());
                 Part(s, PrimitiveType.Cube, new Vector3(0f, 1.2f, 0f), new Vector3(0.4f, 0.12f, 0.4f), Gold());
                 s.localScale = Vector3.one * 1.4f;
-                longest = Mathf.Max(longest, Throw(stand, from, at + new Vector3(i == 0 ? -2.5f : 2.5f, 0f, Random.Range(-1.5f, 1.5f)), 30f, 5f, 0.6f));
+                longest = Mathf.Max(longest, Throw(stand, from, at + new Vector3((i % 2 == 0 ? -1f : 1f) * (2.5f + i), 0f, Random.Range(-3f, 3f)), 30f, 5f, 0.6f));
             }
             return longest;
         }
@@ -756,7 +762,17 @@ namespace CarMaxSpecialist
             for (int i = 0; i < 4; i++)
                 Part(t, PrimitiveType.Cylinder, new Vector3(i % 2 == 0 ? 0.95f : -0.95f, 0.3f, i < 2 ? 1.25f : -1.25f), new Vector3(0.7f, 0.12f, 0.7f), Dark(), new Vector3(0f, 0f, 90f));
             t.localScale = Vector3.one * 1.6f;
-            return Throw(go, from, at, 26f, 7f, 0.25f, 0.3f);
+            float t0 = Throw(go, from, at, 26f, 7f, 0.25f, 0.3f);
+            // a few more cars tumble in around it
+            for (int i = 0; i < 3; i++)
+            {
+                GameObject extra = Object.Instantiate(go);
+                extra.SetActive(true);
+                Vector2 o = Random.insideUnitCircle.normalized * Random.Range(5f, 9f);
+                extra.transform.position = from;
+                Throw(extra, from, at + new Vector3(o.x, 0f, o.y), 24f + i * 3f, 8f + i, 0.6f, 0.25f);
+            }
+            return t0;
         }
 
         /// <summary>M2 finale: the whole dealership, thrown a beat after the car. Returns the time until it lands.</summary>
