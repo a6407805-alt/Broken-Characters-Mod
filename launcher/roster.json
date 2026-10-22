@@ -121,12 +121,6 @@
   "modes": [
     {
       "title": "SPECIAL FORCES",
-      "subtitle": "12 players: defend the tower from the storm",
-      "image": "Assets/Tiles/SpecialForces.png",
-      "badge": "NEW"
-    },
-    {
-      "title": "SPECIAL FORCES",
       "subtitle": "12 players. Hold the tower. Kill the Hurricane.",
       "image": "Assets/Tiles/SpecialForces.png"
     },
@@ -134,6 +128,12 @@
       "title": "LOCUST HORDE",
       "subtitle": "Artifact: Emergence Holes open",
       "image": "Assets/Tiles/LocustHorde.png"
+    },
+    {
+      "title": "HARDCORE SURVIVAL",
+      "subtitle": "Placeholder",
+      "image": "Assets/Tiles/HardcoreSurvival.png",
+      "badge": "COMING SOON"
     },
     {
       "title": "BOSS RUSH",
