@@ -132,6 +132,9 @@ namespace BrokenCharactersLauncher
             // The changelog loads on its own; if it fails the launcher still works.
             _ = LoadChangelogAsync();
 
+            // A newer launcher on the release replaces this one and restarts it (also when Steam's Play button opened us).
+            if (await TrySelfUpdateAsync(fromRefresh: false)) return;
+
             await CheckAndUpdateAsync();
             try { await SetUpSteamPlayAsync(); }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.ComponentModel.Win32Exception)
@@ -623,8 +626,8 @@ namespace BrokenCharactersLauncher
         // ================================================================== creator tools
 
         /// <summary>
-        /// REFRESH button: reloads the character/map cards and patch notes, checks GitHub for a newer pack (and installs
-        /// it), and tells the player if this launcher program itself is older than the one on the release.
+        /// REFRESH button: reloads the character/map cards and patch notes, updates this launcher program itself if a
+        /// newer one is on the release (see MainWindow.SelfUpdate.cs), then checks GitHub for a newer pack and installs it.
         /// </summary>
         private async void Refresh_Click(object sender, RoutedEventArgs e)
         {
@@ -634,45 +637,15 @@ namespace BrokenCharactersLauncher
             {
                 Task roster = RefreshRosterFromGitHubAsync();
                 Task changelog = LoadChangelogAsync();
+                if (await TrySelfUpdateAsync(fromRefresh: true)) return; // restarting into the new launcher
                 await CheckAndUpdateAsync();
                 await roster;
                 await changelog;
-                OfferNewLauncher();
             }
             finally
             {
                 RefreshButton.IsEnabled = true;
             }
-        }
-
-        /// <summary>
-        /// The launcher exe does not replace itself, so compare it with the one on the latest release (by size) and, if
-        /// they differ, offer to open the release page where the new Broken-Characters-Mod.exe is.
-        /// </summary>
-        private void OfferNewLauncher()
-        {
-            long mine;
-            try
-            {
-                string? me = Environment.ProcessPath;
-                if (me == null) return;
-                mine = new FileInfo(me).Length;
-            }
-            catch (IOException) { return; }
-            catch (UnauthorizedAccessException) { return; }
-
-            if (_remote == null || _remote.LauncherSize <= 0 || _remote.LauncherSize == mine) return;
-
-            SetStatus("A newer launcher is available. The pack itself is up to date.");
-            MessageBoxResult answer = MessageBox.Show(this,
-                "A newer launcher is available.\n\nOpen the download page? Close this launcher, then replace it with the new Broken-Characters-Mod.exe.",
-                "Broken Characters Mod", MessageBoxButton.YesNo, MessageBoxImage.Information);
-            if (answer != MessageBoxResult.Yes) return;
-            try
-            {
-                Process.Start(new ProcessStartInfo("https://github.com/" + Repo + "/releases/latest") { UseShellExecute = true });
-            }
-            catch (System.ComponentModel.Win32Exception ex) { Debug.WriteLine("Could not open the release page: " + ex.Message); }
         }
 
         /// <summary>Opens the "publish my mod" window (see PublishWindow.xaml.cs / Publisher.cs).</summary>
