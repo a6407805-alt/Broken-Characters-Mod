@@ -231,6 +231,21 @@ namespace BrokenCharactersLauncher
         /// </summary>
         private static async Task<ReleaseInfo> GetLatestReleaseAsync()
         {
+            // A build that is publishing can briefly have no release; wait and ask again instead of failing.
+            for (int attempt = 1; ; attempt++)
+            {
+                try { return await GetLatestReleaseOnceAsync(); }
+                catch (ReleaseMissingException) when (attempt < 4) { await Task.Delay(TimeSpan.FromSeconds(5)); }
+            }
+        }
+
+        private sealed class ReleaseMissingException : InvalidOperationException
+        {
+            public ReleaseMissingException(string message) : base(message) { }
+        }
+
+        private static async Task<ReleaseInfo> GetLatestReleaseOnceAsync()
+        {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Repo}/releases/latest");
             request.Headers.Accept.ParseAdd("application/vnd.github+json");
@@ -239,7 +254,7 @@ namespace BrokenCharactersLauncher
             if (response.StatusCode == HttpStatusCode.Forbidden || (int)response.StatusCode == 429)
                 throw new HttpRequestException("GitHub is rate-limiting this PC (60 checks an hour). Try again in a few minutes.");
             if (response.StatusCode == HttpStatusCode.NotFound)
-                throw new InvalidOperationException("No release found for " + Repo + ".");
+                throw new ReleaseMissingException("No release found for " + Repo + ".");
             response.EnsureSuccessStatusCode();
 
             await using Stream body = await response.Content.ReadAsStreamAsync(cts.Token);
