@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>SpecialForces</AssemblyName>
+    <RootNamespace>SpecialForces</RootNamespace>
+    <Version>1.0.4</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
+    <!-- netstandard version mismatches between game libs are expected and harmless -->
+    <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <!--
+    The pinned GameLibs 1.4.1 set (same as the survivors) plus R2API.Networking 1.0.4. Do not float versions:
+    newer packages need GameLibs 1.5+ and fail restore with NU1605.
+    Sounds, README, manifest and the two asset bundles (sfstormvalley, specialforcesassets) ship from
+    mods/SpecialForces/, next to the built dll.
+  -->
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" />
+    <PackageReference Include="UnityEngine.Modules" Version="2021.3.33" IncludeAssets="compile" />
+    <PackageReference Include="RiskOfRain2.GameLibs" Version="1.4.1-r.0" />
+    <PackageReference Include="RoR2BepInExPack" Version="1.41.0" />
+    <PackageReference Include="R2API.Core" Version="5.3.0" />
+    <PackageReference Include="R2API.ContentManagement" Version="1.0.11" />
+    <PackageReference Include="R2API.Prefab" Version="1.1.1" />
+    <PackageReference Include="R2API.Language" Version="1.1.0" />
+    <PackageReference Include="R2API.Networking" Version="1.0.4" />
+    <PackageReference Include="MMHOOK.RoR2" Version="2025.11.19" />
+  </ItemGroup>
+
+</Project>
