@@ -49,7 +49,11 @@ namespace BrokenCharactersLauncher
             if (PreviewMode || (JustUpdated && !fromRefresh)) return false;
 
             string? me = Environment.ProcessPath;
-            if (me == null || !string.Equals(Path.GetFileName(me), LauncherAssetName, StringComparison.OrdinalIgnoreCase)) return false;
+            // Any "Broken-Characters-*.exe": also "Broken-Characters-Mod (1).exe" from a second download and the old
+            // "Broken-Characters-Launcher.exe". Other names (a developer's own build) are never replaced.
+            string myName = me == null ? "" : Path.GetFileName(me);
+            if (me == null || !myName.StartsWith("Broken-Characters-", StringComparison.OrdinalIgnoreCase)
+                || !myName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return false;
 
             string newPath = me + ".new";
             string oldPath = me + ".old";

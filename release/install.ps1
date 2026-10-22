@@ -392,6 +392,47 @@ if ($Uninstall) {
     if ($SetSteamPlay) { Set-RoR2LaunchOptions "`"$LauncherPath`" %command%" }
 }
 
+# ------------------------------------------------------------------ old launchers -> the new one
+# Launchers from before self-update can't replace themselves, but they run this script on every pack update. So the
+# installer swaps the new launcher in for them: the launcher that started this script (its parent process) and the
+# stable copy Steam's Play button uses. Windows lets a running exe be renamed, so it goes to "<exe>.old" and the new
+# one takes its name; the next start runs the new launcher, which updates itself from then on. Never fails the install.
+function Update-OldLaunchers {
+    try {
+        $targets = @()
+        $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId=$PID" -ErrorAction Stop).ParentProcessId
+        $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$parentId" -ErrorAction SilentlyContinue
+        if ($parent -and $parent.ExecutablePath -and (Split-Path $parent.ExecutablePath -Leaf) -like 'Broken-Characters-*.exe') {
+            $targets += $parent.ExecutablePath
+        }
+        $stable = Join-Path $env:LOCALAPPDATA 'BrokenCharacters\Launcher\Broken-Characters-Mod.exe'
+        if ((Test-Path $stable) -and ($targets -notcontains $stable)) { $targets += $stable }
+        if ($targets.Count -eq 0) { return }
+
+        $rel = Invoke-RestMethod 'https://api.github.com/repos/a6407805-alt/Broken-Characters-Mod/releases/latest' -TimeoutSec 15
+        $asset = $rel.assets | Where-Object { $_.name -eq 'Broken-Characters-Mod.exe' } | Select-Object -First 1
+        if (-not $asset) { return }
+        $stale = @($targets | Where-Object { (Get-Item $_).Length -ne $asset.size })
+        if ($stale.Count -eq 0) { return }
+
+        Say 'Updating the launcher...' 'Cyan'
+        $tmp = Join-Path $env:TEMP 'Broken-Characters-Mod.exe.download'
+        Invoke-WebRequest $asset.browser_download_url -OutFile $tmp -UseBasicParsing -TimeoutSec 600
+        if ((Get-Item $tmp).Length -ne $asset.size) { Remove-Item $tmp -Force; return }
+        foreach ($t in $stale) {
+            try {
+                $old = "$t.old"
+                if (Test-Path $old) { Remove-Item $old -Force -ErrorAction SilentlyContinue }
+                Move-Item $t $old -Force
+                try { Copy-Item $tmp $t -Force } catch { Move-Item $old $t -Force; throw }
+            } catch { Say "  Couldn't update the launcher at $t ($($_.Exception.Message))" 'Yellow' }
+        }
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+        Say '  Launcher updated. Close it and open it again to use the new one.' 'Green'
+    } catch { }
+}
+if (-not $Uninstall -and -not $SteamPlayOnly -and -not $env:GITHUB_ACTIONS) { Update-OldLaunchers }
+
 Say ''
 if ($done -gt 0) {
     if ($Uninstall) { Say 'Done.' 'Green' }
