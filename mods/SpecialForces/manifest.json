@@ -1,0 +1,15 @@
+{
+  "name": "SpecialForces",
+  "version_number": "1.0.4",
+  "website_url": "",
+  "description": "A new game mode for up to 12 players: defend a control tower on a 1 km rainy night map against an endless storm, build defences, raid Storm Nests and kill the Hurricane.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2121",
+    "RiskofThunder-RoR2BepInExPack-1.41.0",
+    "RiskofThunder-R2API_Core-5.3.0",
+    "RiskofThunder-R2API_ContentManagement-1.0.11",
+    "RiskofThunder-R2API_Prefab-1.1.1",
+    "RiskofThunder-R2API_Language-1.1.0",
+    "RiskofThunder-R2API_Networking-1.0.4"
+  ]
+}

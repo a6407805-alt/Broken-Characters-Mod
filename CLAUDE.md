@@ -22,7 +22,7 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - Repo settings/renames can't be done through the API; the user does those in a browser.
 
 ## Deploying to the owner's PC (when the Claude desktop app links it)
-- Game: `D:\SteamLibrary\steamapps\common\Risk of Rain 2`. Mods load from `BepInEx\plugins\<Mod>\`; the Duelist from
+- Game: `F:\SteamLibrary\steamapps\common\Risk of Rain 2`. Mods load from `BepInEx\plugins\<Mod>\`; the Duelist from
   `BepInEx\plugins\Duelist\` (the old dev folder `plugins\DuelistMod` is retired; never re-enable its dll).
 - Procedure: wait for the release, `curl` the zip, unzip only the changed mod
   (`unzip pack.zip 'Mods/<Mod>/*'`), copy files to `/mnt/user-data/outputs/<Mod>/`, then `device_commit_files` with
