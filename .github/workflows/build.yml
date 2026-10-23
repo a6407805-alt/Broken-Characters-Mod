@@ -4,7 +4,9 @@ name: Build Broken Characters Mod
 
 on:
   push:
-    branches: [ main ]
+    # main = the real pack (friends' updaters). dev = work in progress: built fast and published only to the
+    # separate "dev" pre-release, never to "latest", so unfinished mods never reach anyone else.
+    branches: [ main, dev ]
   pull_request:          # pull requests (from branches or forks) are built and tested, never published
   workflow_dispatch:
 
@@ -58,6 +60,7 @@ jobs:
     # Runs INSTALL on a real Windows machine against a dummy game folder, twice (fresh, then re-run),
     # so a broken installer never reaches the release.
     needs: build
+    if: github.ref != 'refs/heads/dev'   # dev builds skip this so they finish in a couple of minutes
     runs-on: windows-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -136,6 +139,7 @@ jobs:
 
   launcher:
     # The Warframe-style launcher (launcher/): a self-contained Windows exe. A failure here never blocks the pack.
+    if: github.ref != 'refs/heads/dev'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -179,7 +183,7 @@ jobs:
 
   publish:
     needs: [test-installer, launcher]
-    if: always() && github.event_name != 'pull_request' && needs.test-installer.result == 'success'
+    if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.test-installer.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -223,4 +227,29 @@ jobs:
           else
             gh release create latest $files --title "Broken Characters Mod (latest build)" --notes "$notes" \
               --target "$GITHUB_SHA" --latest -R "$GITHUB_REPOSITORY"
+          fi
+
+  publish-dev:
+    # dev branch only: publish the pack to the "dev" pre-release. Launchers and updaters only read "latest",
+    # so nothing here ever reaches friends. Claude copies single mods from this zip straight to the tester's PC.
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Broken-Characters-Mod
+      - name: Publish as the dev pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mv Broken-Characters-Mod.zip Broken-Characters-Mod-dev.zip
+          notes="DEV build from commit ${GITHUB_SHA::7} (dev branch). Work in progress, for testing only - not the real pack."
+          if gh release view dev -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload dev Broken-Characters-Mod-dev.zip --clobber -R "$GITHUB_REPOSITORY"
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh release edit dev --target "$GITHUB_SHA" --notes "$notes" --prerelease --latest=false -R "$GITHUB_REPOSITORY"
+          else
+            gh release create dev Broken-Characters-Mod-dev.zip --title "Broken Characters Mod (DEV - testing only)" \
+              --notes "$notes" --target "$GITHUB_SHA" --prerelease --latest=false -R "$GITHUB_REPOSITORY"
           fi

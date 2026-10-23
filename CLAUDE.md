@@ -27,13 +27,22 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - Repo settings/renames can't be done through the API; the user does those in a browser.
 
 ## Deploying to the owner's PC (when the Claude desktop app links it)
-- Game: `F:\SteamLibrary\steamapps\common\Risk of Rain 2`. Mods load from `BepInEx\plugins\<Mod>\`; the Duelist from
+- Game: `D:\SteamLibrary\steamapps\common\Risk of Rain 2`. Mods load from `BepInEx\plugins\<Mod>\`; the Duelist from
   `BepInEx\plugins\Duelist\` (the old dev folder `plugins\DuelistMod` is retired; never re-enable its dll).
 - Procedure: wait for the release, `curl` the zip, unzip only the changed mod
   (`unzip pack.zip 'Mods/<Mod>/*'`), copy files to `/mnt/user-data/outputs/<Mod>/`, then `device_commit_files` with
   `force: true` to `...\plugins\<Mod>\`. Verify with `device_list_dir` (size matches the release).
 - Never run the installer on the owner's PC yourself. Game log for bugs: `BepInEx\LogOutput.log` (stage it, grep for
   the mod's namespace and "Exception").
+
+## Dev branch (work in progress, owner's fast test loop)
+- Unfinished changes go on the `dev` branch, never `main`. A push to `dev` builds only (no installer test, no
+  launcher) and publishes `Broken-Characters-Mod-dev.zip` to the `dev` pre-release. Launchers/updaters read only
+  `latest`, so dev builds never reach friends. Merge `dev` into `main` when a change is finished.
+- Fetch: `https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/dev/Broken-Characters-Mod-dev.zip`.
+- Hot reload: ScriptEngine is installed on the owner's PC (`BepInEx\plugins\ScriptEngine\`). A mod being
+  hot-reloaded lives in `BepInEx\scripts\` (F6 reloads it) and must NOT also be in `plugins\`. Only code reloads;
+  new bodies/skills/tokens registered at startup still need a restart.
 
 ## Working cheaply (the owner asked for fewer tokens)
 - Big files: Duelist `Duel.cs` (3.3k lines), `DuelUI.cs`, `Partners.cs`; `src/WilburMod/WilburPlugin.cs` (7k lines).
