@@ -103,6 +103,13 @@ namespace BrokenCharactersLauncher
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
+            // Dev tools (devtools/BCMDevTools) leave a marker when they load; only then is TEST LEVEL shown.
+            TestLevelButton.Visibility = File.Exists(DevToolsMarkerFile) ? Visibility.Visible : Visibility.Collapsed;
+
+            // The dev tools' RELAUNCH button restarts the game through Steam, which (with Launch Options) opens us
+            // again: go straight back into the game without updating, so the test arena loads as fast as possible.
+            if (!PreviewMode && File.Exists(QuickTestFlagFile) && SteamGameCommand(out _, out _)) { LaunchGame(); return; }
+
             // Offer the extras key box only if the player has never entered one.
             ShowExtrasState(File.Exists(ExtrasKeyFile));
 
@@ -677,6 +684,28 @@ namespace BrokenCharactersLauncher
             {
                 RefreshButton.IsEnabled = true;
             }
+        }
+
+        // Shared with devtools/BCMDevTools (same folder as the extras key): the mod writes the marker when it loads
+        // and reads + deletes the flag at startup to jump straight into the test arena.
+        private static readonly string DevToolsMarkerFile = Path.Combine(ExtrasDir, "devtools-installed.txt");
+        private static readonly string QuickTestFlagFile = Path.Combine(ExtrasDir, "quicktest.flag");
+
+        /// <summary>TEST LEVEL (dev only): ask the dev tools for a quick test, then start the game without updating.</summary>
+        private void TestLevel_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Directory.CreateDirectory(ExtrasDir);
+                File.WriteAllText(QuickTestFlagFile, DateTime.Now.ToString("o"));
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                MessageBox.Show(this, "Couldn't start the test level: " + ex.Message, "Broken Characters Mod",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            LaunchGame();
         }
 
         /// <summary>Opens the "publish my mod" window (see PublishWindow.xaml.cs / Publisher.cs).</summary>
