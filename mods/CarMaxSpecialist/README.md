@@ -47,11 +47,11 @@ Keyboard only: number keys and arrows. Tunable in the "3. Tasks" config section 
 ## Controls update
 - **M2** is thrown from his hand now (lug nuts, tools, jack and stands, then a car that grows as it flies, and the building right behind it).
 - **R** clears every pop-up off the screen (and ends a Management Audit), lays off every enemy within ~45 m (bosses take heavy damage) and calls in the coworkers.
-- **Appointment scheduler** is all number keys: press a number to choose, **NUM ENTER** to confirm. Date picked twice from a list (the order changes), the name one letter at a time (1/2/3), Promise Time with **hold 4 / hold 6** then NUM ENTER, then the compliance boxes (1, 2, 3).
+- **Appointment scheduler** is all number keys: press a number to choose, **NUM +** (the big + on the number pad; Enter opens chat) to confirm. Date picked twice from a list (the order changes), the name one letter at a time (1/2/3), Promise Time with **hold 4 / hold 6** then NUM +, then the compliance boxes (1, 2, 3).
 - He wears the Audi Technician's model again (recolored CarMax blue) when that mod is installed; otherwise Commando's. Blue and gold throughout.
 
 ## New mini-games, speech, scrolling
-- **Parts Inventory Audit:** count the boxes on the shelf, set SYSTEM QTY to match (Up/Down, + / -, or press the number), NUM ENTER. Two parts per window.
+- **Parts Inventory Audit:** count the boxes on the shelf, set SYSTEM QTY to match (Up/Down, + / -, or press the number), NUM +. Two parts per window.
 - **Parts Lookup:** pick the part number that fits the car. Each brand has its own format (Mopar ends in AA/AB, GM is 8 digits, Ford has dashes with a Z, ...), and the window gives you a hint.
 - Invoices are simple addition now (labor + parts).
 - **Mouse wheel** cycles through open windows.
