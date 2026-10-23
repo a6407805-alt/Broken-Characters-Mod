@@ -50,15 +50,19 @@ namespace BrokenCharactersLauncher
         private string? _creatorKey;
         private bool _busy;
 
-        public JukeboxWindow()
+        private readonly string? _screenshotPath;
+
+        public JukeboxWindow(string? screenshotPath = null)
         {
             InitializeComponent();
+            _screenshotPath = screenshotPath;
             SongList.ItemsSource = _rows;
             _player.MediaEnded += (_, _) => StopPreview();
         }
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
+            if (_screenshotPath != null) { await ShowDemoAsync(); return; }
             _creatorKey = Publisher.ReadSavedKey();
             bool canShare = !string.IsNullOrEmpty(_creatorKey);
             ShareBox.IsChecked = canShare;
@@ -211,6 +215,40 @@ namespace BrokenCharactersLauncher
             _player.Close();
             if (_playingRow != null) _playingRow.Playing = false;
             _playingRow = null;
+        }
+
+        // ================================================================== build-server screenshot
+
+        /// <summary>"--screenshot-jukebox &lt;png&gt;": made-up songs, no network, saves a picture and closes.</summary>
+        private async Task ShowDemoAsync()
+        {
+            ShareBox.IsChecked = true;
+            LinkBox.Text = "https://suno.com/s/aB3xYz9QkLmN";
+            var demo = new[]
+            {
+                ("Neon Rain", "Jay", true), ("Last Teleporter", "Jay", true), ("Providence Was Right", "Jay", true),
+                ("Lunar Coins (Remix)", "Jay", false), ("Monsoon Mode", "Vincent", true),
+            };
+            foreach (var (title, artist, group) in demo)
+                _rows.Add(new JukeboxRow { Song = new JukeboxSong { Id = Guid.NewGuid().ToString(), Title = title, Artist = artist }, InGroup = group, CanRemove = true });
+            _rows[0].Playing = true;
+            Status("Added \"Monsoon Mode\" for everyone. Friends get it next time they open the launcher.");
+            await Task.Delay(1500);
+            try
+            {
+                if (Content is FrameworkElement root)
+                {
+                    root.UpdateLayout();
+                    var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(
+                        (int)Math.Ceiling(root.ActualWidth), (int)Math.Ceiling(root.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+                    bmp.Render(root);
+                    var png = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                    png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+                    using FileStream fs = File.Create(_screenshotPath!);
+                    png.Save(fs);
+                }
+            }
+            finally { Application.Current.Shutdown(); }
         }
 
         // ================================================================== buttons
