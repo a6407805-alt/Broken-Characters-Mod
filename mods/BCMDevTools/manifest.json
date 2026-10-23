@@ -1,0 +1,9 @@
+{
+  "name": "BCMDevTools",
+  "version_number": "1.0.0",
+  "website_url": "",
+  "description": "Test bench for modded characters: stats panel, damage log, flat grid world, dummies. Singleplayer only.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2121"
+  ]
+}

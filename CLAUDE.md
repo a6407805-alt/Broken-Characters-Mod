@@ -43,6 +43,9 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - Hot reload: ScriptEngine is installed on the owner's PC (`BepInEx\plugins\ScriptEngine\`). A mod being
   hot-reloaded lives in `BepInEx\scripts\` (F6 reloads it) and must NOT also be in `plugins\`. Only code reloads;
   new bodies/skills/tokens registered at startup still need a restart.
+- Dev kit: `src/BCMDevTools/` ships to everyone but is SINGLEPLAYER ONLY (`Allowed` turns all tools off and hides the
+  panel in any multiplayer lobby/run). Launcher TEST LEVEL button shows once the mod has loaded once (marker
+  `%APPDATA%\BrokenCharacters\devtools-installed.txt`; flag `quicktest.flag`). Keep that guard on every new tool.
 
 ## Working cheaply (the owner asked for fewer tokens)
 - Big files: Duelist `Duel.cs` (3.3k lines), `DuelUI.cs`, `Partners.cs`; `src/WilburMod/WilburPlugin.cs` (7k lines).

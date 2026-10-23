@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Dev-only test tools. Lives in devtools/ (not src/), so the pack build never ships it to friends.
-       Built on every push and published only to the "dev" pre-release as BCMDevTools.dll. -->
+  <!-- Test bench for modded characters (stats panel, flat world, dummies). Ships with the pack;
+       singleplayer only (switches itself off in any multiplayer lobby or run). -->
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>latest</LangVersion>

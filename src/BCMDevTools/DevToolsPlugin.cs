@@ -1,4 +1,5 @@
-// BCM Dev Tools: a test bench for making mods. Dev only (never shipped in the friends' pack).
+// BCM Dev Tools: a test bench for making mods. Ships with the pack for everyone, but SINGLEPLAYER ONLY:
+// in any multiplayer lobby or run (host or client) every tool is off and the panel is hidden.
 //
 //  - QUICK TEST: the launcher's TEST LEVEL button (or RELAUNCH below) writes %APPDATA%\BrokenCharacters\quicktest.flag.
 //    At startup we read + delete it, skip the intro cutscene, start a singleplayer Simulacrum (or Classic) run with the
@@ -96,7 +97,20 @@ namespace BCMDevTools
             if (_flat) Destroy(_flat);
         }
 
-        static bool BlockWave() => !_spawnsOff;   // false = skip the original (no new wave)
+        /// <summary>
+        /// The dev tools only work alone: in the menus, or in a singleplayer run. Hosting or joining a multiplayer
+        /// lobby/run turns everything off (no god mode, no spawning, waves normal, panel hidden).
+        /// </summary>
+        static bool Allowed
+        {
+            get
+            {
+                if (!NetworkServer.active && !NetworkClient.active) return true;   // main menu, nothing online
+                return RoR2Application.isInSinglePlayer && NetworkUser.readOnlyInstancesList.Count <= 1;
+            }
+        }
+
+        static bool BlockWave() => !(_spawnsOff && Allowed);   // false = skip the original (no new wave)
 
         // ================================================================ quick test
         void OnSceneChanged(Scene from, Scene to)
@@ -254,7 +268,7 @@ namespace BCMDevTools
 
         void ApplySpawns()
         {
-            if (!NetworkServer.active) return;
+            if (!NetworkServer.active || !Allowed) return;
             foreach (CombatDirector d in FindObjectsOfType<CombatDirector>()) d.enabled = !_spawnsOff;
         }
 
@@ -264,6 +278,15 @@ namespace BCMDevTools
         void Update()
         {
             QuickTestUpdate();
+
+            if (!Allowed)
+            {
+                // Multiplayer: drop every cheat and ignore the hotkeys.
+                _godMode = false; _spawnsOff = false; _flatPending = false;
+                SetMouseMode(false);
+                if (_flat) { Destroy(_flat); _flatTop = float.NaN; }
+                return;
+            }
 
             if (Input.GetKeyDown(_panelKey.Value)) { _panelOpen = !_panelOpen; if (!_panelOpen) SetMouseMode(false); }
             if (Input.GetKeyDown(KeyCode.F1)) { if (!_panelOpen) _panelOpen = true; SetMouseMode(!_mouseMode); }
@@ -385,7 +408,7 @@ namespace BCMDevTools
 
         void OnGUI()
         {
-            if (!_panelOpen) return;
+            if (!_panelOpen || !Allowed) return;
             if (_label == null) _label = new GUIStyle(GUI.skin.label) { richText = true, fontSize = 13, wordWrap = true };
             _win = GUILayout.Window(0x8CD7, _win, DrawPanel, _mouseMode ? "BCM DEV TOOLS   ·   F1 = back to game" : "BCM DEV TOOLS   ·   F1 = mouse   F2 = hide", GUILayout.Width(420));
         }
