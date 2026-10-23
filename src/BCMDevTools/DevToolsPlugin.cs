@@ -27,7 +27,7 @@ using Path = System.IO.Path;
 namespace BCMDevTools
 {
     [BepInPlugin(Guid, "BCM Dev Tools", "1.0.0")]
-    public class DevToolsPlugin : BaseUnityPlugin
+    public partial class DevToolsPlugin : BaseUnityPlugin
     {
         public const string Guid = "com.a6407805.bcmdevtools";
 
@@ -53,7 +53,7 @@ namespace BCMDevTools
         object _cursorSystem;             // the MPEventSystem we opened the cursor on
         int _spawnPick = 2;
         Harmony _harmony;
-        Rect _win = new Rect(Screen.width - 440, 60, 420, 10);
+        Rect _win = new Rect(Screen.width - 490, 60, 470, 10);
 
         static readonly string[] SpawnNames = { "Beetle", "Lemurian", "Stone Golem", "Elder Lemurian", "Stone Titan" };
         static readonly string[] SpawnMasters = { "BeetleMaster", "LemurianMaster", "GolemMaster", "LemurianBruiserMaster", "TitanMaster" };
@@ -118,7 +118,8 @@ namespace BCMDevTools
         void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             // Skip the intro cutscene the moment it finishes loading, before its first frame plays.
-            if (_quick == Quick.WaitTitle && scene.name == "intro") { Logger.LogInfo("Skipping intro"); SceneManager.LoadScene("title"); }
+            if (_quick != Quick.Off) Logger.LogInfo("Scene loaded: " + scene.name);
+            if (_quick == Quick.WaitTitle && scene.name == "intro") { Logger.LogInfo("Skipping intro"); _introTries = 0; SceneManager.LoadScene("title"); }
         }
 
         void OnSceneChanged(Scene from, Scene to)
@@ -126,6 +127,34 @@ namespace BCMDevTools
             if (_quick == Quick.Off) return;
             if (to.name == "intro") { SceneManager.LoadScene("title"); return; }
             _quickTimer = 0f;
+        }
+
+        int _introTries;
+        readonly HashSet<string> _introLogged = new HashSet<string>();
+
+        /// <summary>
+        /// Still in the intro ship cutscene: do what pressing Space does. Calls any skip method the intro's own scripts
+        /// have, jumps videos to their end, and logs what it found (so it can be pinned down if a patch renames it).
+        /// </summary>
+        void SkipIntroNow()
+        {
+            if (_quick != Quick.WaitTitle || SceneManager.GetActiveScene().name != "intro" || _introTries++ > 300) return;
+            foreach (MonoBehaviour mb in FindObjectsOfType<MonoBehaviour>())
+            {
+                if (!mb) continue;
+                Type t = mb.GetType();
+                if (_introLogged.Add(t.FullName)) Logger.LogInfo("Intro has: " + t.FullName);
+                if (t.Assembly != typeof(RoR2Application).Assembly) continue;
+                foreach (MethodInfo m in t.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                {
+                    if (m.GetParameters().Length != 0 || m.ReturnType != typeof(void)) continue;
+                    if (m.Name.IndexOf("skip", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    try { Logger.LogInfo("Intro skip: " + t.Name + "." + m.Name); m.Invoke(mb, null); }
+                    catch (Exception e) { Logger.LogWarning("Intro skip " + m.Name + ": " + (e.InnerException ?? e).Message); }
+                }
+            }
+            foreach (UnityEngine.Video.VideoPlayer vp in FindObjectsOfType<UnityEngine.Video.VideoPlayer>())
+                if (vp && vp.length > 1) vp.time = vp.length - 0.1;
         }
 
         /// <summary>Quick test only: run the logo screens at 30x speed until the title menu is up.</summary>
@@ -285,6 +314,7 @@ namespace BCMDevTools
         void Update()
         {
             FastBoot();
+            SkipIntroNow();
             QuickTestUpdate();
 
             if (!Allowed)
@@ -440,12 +470,29 @@ namespace BCMDevTools
         {
             if (!_panelOpen || !Allowed) return;
             if (_label == null) _label = new GUIStyle(GUI.skin.label) { richText = true, fontSize = 13, wordWrap = true };
-            _win = GUILayout.Window(0x8CD7, _win, DrawPanel, _mouseMode ? "BCM DEV TOOLS   ·   F1 = back to game" : "BCM DEV TOOLS   ·   F1 = mouse   F2 = hide", GUILayout.Width(420));
+            _win = GUILayout.Window(0x8CD7, _win, DrawPanel, _mouseMode ? "BCM DEV TOOLS   ·   F1 = back to game" : "BCM DEV TOOLS   ·   F1 = mouse   F2 = hide", GUILayout.Width(470));
         }
+
+        int _tab;
+        static readonly string[] Tabs = { "STATS", "ITEMS", "SPAWN", "WORLD" };
 
         void DrawPanel(int id)
         {
             CharacterBody me = Me;
+            _tab = GUILayout.Toolbar(_tab, Tabs, GUILayout.Height(28));
+            GUILayout.Space(4);
+            switch (_tab)
+            {
+                case 1: DrawItems(me); break;
+                case 2: DrawSpawn(me); break;
+                case 3: DrawWorld(me); break;
+                default: DrawStats(me); break;
+            }
+            GUI.DragWindow();
+        }
+
+        void DrawStats(CharacterBody me)
+        {
             var sb = new StringBuilder();
 
             if (!me) sb.Append("<color=#aaaaaa>No character yet. Press TEST LEVEL in the launcher,\nor</color> <b>NEW TEST RUN</b> below.");
@@ -493,16 +540,8 @@ namespace BCMDevTools
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("<", GUILayout.Width(26))) _spawnPick = (_spawnPick + SpawnNames.Length - 1) % SpawnNames.Length;
-            if (GUILayout.Button("Spawn " + SpawnNames[_spawnPick] + " [F5]")) SpawnEnemy();
-            if (GUILayout.Button(">", GUILayout.Width(26))) _spawnPick = (_spawnPick + 1) % SpawnNames.Length;
-            if (GUILayout.Button(_dummyAi ? "AI: on" : "AI: off (dummy)")) _dummyAi = !_dummyAi;
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Kill all [F7]")) KillAll();
             if (GUILayout.Button("Reset cooldowns [F8]")) ResetCooldowns();
-            if (GUILayout.Button("Clear log")) _hits.Clear();
+            if (GUILayout.Button("Clear damage log")) _hits.Clear();
             GUILayout.EndHorizontal();
 
             List<SurvivorDef> list = Survivors();
@@ -519,14 +558,12 @@ namespace BCMDevTools
             }
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Flat world [F10]")) GoFlat();
             if (GUILayout.Button("Use this survivor")) UseThisSurvivor();
             if (GUILayout.Button("NEW TEST RUN")) NewTestRun();
             if (GUILayout.Button("RELAUNCH GAME [F9]")) Relaunch();
             GUILayout.EndHorizontal();
 
             GUILayout.Label($"<color=#aaaaaa>Test survivor: {(string.IsNullOrWhiteSpace(_survivor.Value) ? "last used" : _survivor.Value)} · Mode: {_mode.Value} · F6 = hot reload (scripts\\)</color>", _label);
-            GUI.DragWindow();
         }
 
         static void Skill(StringBuilder sb, string key, GenericSkill s)
