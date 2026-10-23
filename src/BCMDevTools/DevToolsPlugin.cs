@@ -130,6 +130,18 @@ namespace BCMDevTools
         }
 
         int _introTries;
+        bool _introForced;
+
+        static bool LoadFinished()
+        {
+            Traverse t = Traverse.Create(typeof(RoR2Application));
+            foreach (string n in new[] { "loadFinished", "isLoadFinished" })
+            {
+                if (t.Property(n).PropertyExists()) return t.Property(n).GetValue<bool>();
+                if (t.Field(n).FieldExists()) return t.Field(n).GetValue<bool>();
+            }
+            return false;
+        }
         readonly HashSet<string> _introLogged = new HashSet<string>();
 
         /// <summary>
@@ -143,7 +155,6 @@ namespace BCMDevTools
             {
                 if (!mb) continue;
                 Type t = mb.GetType();
-                if (_introLogged.Add(t.FullName)) Logger.LogInfo("Intro has: " + t.FullName);
                 if (t.Assembly != typeof(RoR2Application).Assembly) continue;
                 foreach (MethodInfo m in t.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
                 {
@@ -155,6 +166,14 @@ namespace BCMDevTools
             }
             foreach (UnityEngine.Video.VideoPlayer vp in FindObjectsOfType<UnityEngine.Video.VideoPlayer>())
                 if (vp && vp.length > 1) vp.time = vp.length - 0.1;
+
+            // The intro is also the loading screen: the moment loading is done, go to the title (like pressing Space).
+            if (!_introForced && LoadFinished())
+            {
+                _introForced = true;
+                Logger.LogInfo("Loading done, leaving intro");
+                SceneManager.LoadScene("title");
+            }
         }
 
         /// <summary>Quick test only: run the logo screens at 30x speed until the title menu is up.</summary>
@@ -474,6 +493,7 @@ namespace BCMDevTools
         }
 
         int _tab;
+        string _lastTabError;
         static readonly string[] Tabs = { "STATS", "ITEMS", "SPAWN", "WORLD" };
 
         void DrawPanel(int id)
@@ -481,12 +501,21 @@ namespace BCMDevTools
             CharacterBody me = Me;
             _tab = GUILayout.Toolbar(_tab, Tabs, GUILayout.Height(28));
             GUILayout.Space(4);
-            switch (_tab)
+            try
             {
-                case 1: DrawItems(me); break;
-                case 2: DrawSpawn(me); break;
-                case 3: DrawWorld(me); break;
-                default: DrawStats(me); break;
+                switch (_tab)
+                {
+                    case 1: DrawItems(me); break;
+                    case 2: DrawSpawn(me); break;
+                    case 3: DrawWorld(me); break;
+                    default: DrawStats(me); break;
+                }
+            }
+            catch (Exception e) when (!(e is ExitGUIException))
+            {
+                // Never let one broken tab lock the panel: show the error, the tab buttons above still work.
+                if (_lastTabError != e.Message) { _lastTabError = e.Message; Logger.LogError("Panel tab " + Tabs[_tab] + ": " + e); }
+                GUILayout.Label("<color=#ff7070>This tab hit an error (logged). Pick another tab.</color>", _label);
             }
             GUI.DragWindow();
         }

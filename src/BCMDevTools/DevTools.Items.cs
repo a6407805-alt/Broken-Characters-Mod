@@ -58,8 +58,9 @@ namespace BCMDevTools
             _itemScroll = GUILayout.BeginScrollView(_itemScroll, GUILayout.Height(330));
             if (_tierFilter == 7)
             {
-                foreach (EquipmentDef d in EquipmentCatalog.equipmentDefs)
+                for (int i = 0; i < EquipmentCatalog.equipmentCount; i++)
                 {
+                    EquipmentDef d = EquipmentCatalog.GetEquipmentDef((EquipmentIndex)i);
                     if (!d || string.IsNullOrEmpty(d.nameToken)) continue;
                     string name = Language.GetString(d.nameToken);
                     if (q.Length > 0 && !name.ToLowerInvariant().Contains(q)) continue;
@@ -72,8 +73,9 @@ namespace BCMDevTools
             }
             else
             {
-                foreach (ItemDef d in ItemCatalog.allItemDefs)
+                for (int i = 0; i < ItemCatalog.itemCount; i++)
                 {
+                    ItemDef d = ItemCatalog.GetItemDef((ItemIndex)i);
                     if (!d || d.hidden || !TierMatch(d.tier, _tierFilter)) continue;
                     string name = Language.GetString(d.nameToken);
                     if (q.Length > 0 && !name.ToLowerInvariant().Contains(q)) continue;
@@ -104,8 +106,10 @@ namespace BCMDevTools
         static void ClearItems(Inventory inv)
         {
             if (!NetworkServer.active) return;
-            foreach (ItemDef d in ItemCatalog.allItemDefs.Where(x => x))
+            for (int i = 0; i < ItemCatalog.itemCount; i++)
             {
+                ItemDef d = ItemCatalog.GetItemDef((ItemIndex)i);
+                if (!d) continue;
                 int n = inv.GetItemCount(d.itemIndex);
                 if (n > 0) inv.RemoveItem(d, n);
             }
