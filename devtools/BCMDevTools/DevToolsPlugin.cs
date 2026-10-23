@@ -39,6 +39,7 @@ namespace BCMDevTools
         ConfigEntry<string> _mode;        // Simulacrum or Classic
         ConfigEntry<string> _survivor;    // body name, empty = last used
         ConfigEntry<KeyCode> _panelKey;
+        ConfigEntry<bool> _flatWorld;     // quick test teleports you onto a big flat grid floor
 
         // ---------------------------------------------------------------- state
         enum Quick { Off, WaitTitle, WaitLobby }
@@ -46,7 +47,9 @@ namespace BCMDevTools
         float _quickTimer;
 
         static bool _spawnsOff;           // read by the Harmony patch
-        bool _godMode, _panelOpen = true, _dummyAi;
+        bool _godMode, _panelOpen = true, _dummyAi, _mouseMode, _flatPending;
+        GameObject _flat;                 // the flat test floor (destroyed with the stage)
+        object _cursorSystem;             // the MPEventSystem we opened the cursor on
         int _spawnPick = 2;
         Harmony _harmony;
         Rect _win = new Rect(Screen.width - 440, 60, 420, 10);
@@ -60,7 +63,8 @@ namespace BCMDevTools
         // ================================================================ lifecycle
         void Awake()
         {
-            _mode = Config.Bind("Quick Test", "Mode", "Simulacrum", "Simulacrum (arena, needs Survivors of the Void) or Classic.");
+            _mode = Config.Bind("Quick Test", "Game mode", "Classic", "Classic (normal run, waves off) or Simulacrum (needs Survivors of the Void).");
+            _flatWorld = Config.Bind("Quick Test", "Flat world", true, "Quick test puts you on a big flat grid floor high above the stage.");
             _survivor = Config.Bind("Quick Test", "Survivor", "", "Body name to test with, e.g. CommandoBody. Empty = last used.");
             _panelKey = Config.Bind("Panel", "Toggle key", KeyCode.F2, "Shows/hides the dev panel.");
 
@@ -88,6 +92,8 @@ namespace BCMDevTools
             GlobalEventManager.onServerDamageDealt -= OnDamage;
             Stage.onServerStageBegin -= OnStageBegin;
             _harmony?.UnpatchSelf();
+            SetMouseMode(false);
+            if (_flat) Destroy(_flat);
         }
 
         static bool BlockWave() => !_spawnsOff;   // false = skip the original (no new wave)
@@ -126,6 +132,7 @@ namespace BCMDevTools
                     _quick = Quick.Off;
                     _spawnsOff = true;   // start in a quiet arena
                     _godMode = true;
+                    _flatPending = _flatWorld.Value;
                     StartRunNow();
                 }
             }
@@ -146,7 +153,104 @@ namespace BCMDevTools
             RoR2.Console.instance.SubmitCmd(LocalUserManager.GetFirstLocalUser()?.currentNetworkUser, "pregame_start_run");
         }
 
-        void OnStageBegin(Stage stage) => ApplySpawns();
+        void OnStageBegin(Stage stage)
+        {
+            ApplySpawns();
+            if (_flatPending) { _flatPending = false; StartCoroutine(GoFlatWhenSpawned()); }
+        }
+
+        // ================================================================ flat world
+        System.Collections.IEnumerator GoFlatWhenSpawned()
+        {
+            for (float t = 0; t < 30f && !Me; t += 0.25f) yield return new WaitForSeconds(0.25f);
+            yield return new WaitForSeconds(1f);   // let the drop pod / spawn animation finish
+            GoFlat();
+        }
+
+        /// <summary>Builds a 400 m flat grid floor (10 m squares) high above the stage and puts you on it.</summary>
+        void GoFlat()
+        {
+            CharacterBody me = Me;
+            if (!me) return;
+            try
+            {
+                if (!_flat)
+                {
+                    _flat = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    _flat.name = "BCMDevTools_FlatWorld";
+                    _flat.layer = LayerIndex.world.intVal;
+                    _flat.transform.position = me.footPosition + Vector3.up * 600f;
+                    _flat.transform.localScale = new Vector3(400f, 2f, 400f);
+                    Renderer r = _flat.GetComponent<Renderer>();
+                    Shader sh = Shader.Find("Hopoo Games/Deferred/Standard");
+                    if (!sh) sh = LegacyResourcesAPI.Load<Shader>("Shaders/Deferred/HGStandard");
+                    if (sh)
+                    {
+                        var mat = new Material(sh) { mainTexture = GridTexture() };
+                        mat.mainTextureScale = new Vector2(40f, 40f);   // 400 m / 40 = 10 m squares
+                        mat.color = Color.white;
+                        r.sharedMaterial = mat;
+                    }
+                }
+                Vector3 top = _flat.transform.position + Vector3.up * 1.5f;
+                TeleportHelper.TeleportBody(me, top);
+                _flatTop = top.y;
+                Logger.LogInfo("Flat world ready at " + top);
+            }
+            catch (Exception e) { Logger.LogError("Flat world failed: " + e); }
+        }
+
+        float _flatTop = float.NaN;
+
+        static Texture2D GridTexture()
+        {
+            const int n = 128;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Trilinear };
+            var px = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    bool line = x < 3 || y < 3;
+                    bool half = x == n / 2 || y == n / 2;      // 5 m lines
+                    px[y * n + x] = line ? new Color(0.15f, 0.15f, 0.18f) : half ? new Color(0.45f, 0.45f, 0.5f) : new Color(0.62f, 0.62f, 0.66f);
+                }
+            tex.SetPixels(px);
+            tex.Apply();
+            return tex;
+        }
+
+        void KeepOnFlat()
+        {
+            CharacterBody me = Me;
+            if (!_flat || !me || float.IsNaN(_flatTop)) return;
+            if (me.footPosition.y < _flatTop - 40f) TeleportHelper.TeleportBody(me, _flat.transform.position + Vector3.up * 1.5f);
+        }
+
+        // ================================================================ mouse mode
+        /// <summary>
+        /// Frees the mouse so the panel can be clicked. Does what the game's own menus do (bump the event system's
+        /// cursor-opener count), which shows the cursor and stops the camera and skills from taking the mouse.
+        /// </summary>
+        void SetMouseMode(bool on)
+        {
+            if (on == _mouseMode) return;
+            try
+            {
+                object es = on ? (object)LocalUserManager.GetFirstLocalUser()?.eventSystem : _cursorSystem;
+                if (es != null)
+                {
+                    Traverse tr = Traverse.Create(es);
+                    Traverse count = tr.Property("cursorOpenerCount");
+                    if (!count.PropertyExists()) count = tr.Field("cursorOpenerCount");
+                    if (count.FieldExists() || count.PropertyExists())
+                        count.SetValue(Math.Max(0, count.GetValue<int>() + (on ? 1 : -1)));
+                    else Logger.LogWarning("cursorOpenerCount not found; using the plain Unity cursor");
+                }
+                _cursorSystem = on ? es : null;
+            }
+            catch (Exception e) { Logger.LogWarning("Mouse mode: " + e.Message); }
+            _mouseMode = on;
+        }
 
         void ApplySpawns()
         {
@@ -161,7 +265,10 @@ namespace BCMDevTools
         {
             QuickTestUpdate();
 
-            if (Input.GetKeyDown(_panelKey.Value)) _panelOpen = !_panelOpen;
+            if (Input.GetKeyDown(_panelKey.Value)) { _panelOpen = !_panelOpen; if (!_panelOpen) SetMouseMode(false); }
+            if (Input.GetKeyDown(KeyCode.F1)) { if (!_panelOpen) _panelOpen = true; SetMouseMode(!_mouseMode); }
+            if (Input.GetKeyDown(KeyCode.F10)) GoFlat();
+            KeepOnFlat();
             if (Input.GetKeyDown(KeyCode.F3)) _godMode = !_godMode;
             if (Input.GetKeyDown(KeyCode.F4)) ToggleSpawns();
             if (Input.GetKeyDown(KeyCode.F5)) SpawnEnemy();
@@ -173,6 +280,13 @@ namespace BCMDevTools
             if (me && me.healthComponent && NetworkServer.active) me.healthComponent.godMode = _godMode;
 
             _hits.RemoveAll(h => Time.time - h.time > 30f);
+        }
+
+        void LateUpdate()
+        {
+            if (!_mouseMode) return;
+            Cursor.lockState = CursorLockMode.None;   // backup in case the game re-locks it
+            Cursor.visible = true;
         }
 
         void ToggleSpawns() { _spawnsOff = !_spawnsOff; ApplySpawns(); }
@@ -273,7 +387,7 @@ namespace BCMDevTools
         {
             if (!_panelOpen) return;
             if (_label == null) _label = new GUIStyle(GUI.skin.label) { richText = true, fontSize = 13, wordWrap = true };
-            _win = GUILayout.Window(0x8CD7, _win, DrawPanel, "BCM DEV TOOLS   (F2 hide · Esc to click)", GUILayout.Width(420));
+            _win = GUILayout.Window(0x8CD7, _win, DrawPanel, _mouseMode ? "BCM DEV TOOLS   ·   F1 = back to game" : "BCM DEV TOOLS   ·   F1 = mouse   F2 = hide", GUILayout.Width(420));
         }
 
         void DrawPanel(int id)
@@ -339,6 +453,7 @@ namespace BCMDevTools
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Flat world [F10]")) GoFlat();
             if (GUILayout.Button("Use this survivor")) UseThisSurvivor();
             if (GUILayout.Button("NEW TEST RUN")) NewTestRun();
             if (GUILayout.Button("RELAUNCH GAME [F9]")) Relaunch();
