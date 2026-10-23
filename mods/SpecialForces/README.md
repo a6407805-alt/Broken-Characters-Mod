@@ -44,6 +44,11 @@ storm, sounds). Custom sounds play on Windows only.
 
 ## Changelog
 
+- **1.0.5**
+  - Control tower: a fixed 35,000 health that no longer grows with level, and it heals 3% per second.
+  - The Hurricane's health stops growing once the fight starts.
+  - Defender squads stay within 25 m of the tower.
+  - Each wave sends 3 squads from different gates, plus one more every 4 waves.
 - **1.0.4**
   - Kills give experience and gold again, using the same amounts as the game's own spawns. The "Kill Rewards" config setting multiplies them.
 - **1.0.3**
