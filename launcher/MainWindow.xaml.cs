@@ -117,6 +117,7 @@ namespace BrokenCharactersLauncher
             // from GitHub in the background (new characters show up without a new launcher exe).
             LoadBuiltInRoster();
             Task roster = RefreshRosterFromGitHubAsync();
+            if (!PreviewMode) _ = SyncJukeboxQuietlyAsync();
 
             // Preview mode ("--preview"): show the launcher without checking, downloading or installing anything.
             // Safe to run on a dev PC. "--screenshot <file.png>" (used by the build server) also saves a picture
@@ -712,6 +713,18 @@ namespace BrokenCharactersLauncher
         private void Creator_Click(object sender, RoutedEventArgs e)
         {
             new PublishWindow { Owner = this }.ShowDialog();
+        }
+
+        private void Jukebox_Click(object sender, RoutedEventArgs e)
+        {
+            new JukeboxWindow { Owner = this }.ShowDialog();
+        }
+
+        /// <summary>Downloads any new group songs for the Jukebox mod in the background; never blocks or fails startup.</summary>
+        private static async Task SyncJukeboxQuietlyAsync()
+        {
+            try { await JukeboxLibrary.SyncAsync(); }
+            catch (Exception ex) { Debug.WriteLine("Jukebox sync failed: " + ex.Message); }
         }
 
         // ================================================================== extras key

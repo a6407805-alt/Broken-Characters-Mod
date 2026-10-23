@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <NoWarn>NU1701;CS0618</NoWarn>
+    <AssemblyName>Jukebox</AssemblyName>
+    <RootNamespace>Jukebox</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Plays the friends' Suno songs that the launcher downloads to %APPDATA%\BrokenCharacters\Jukebox\.
+       No audio files ship with the mod. -->
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" />
+    <PackageReference Include="UnityEngine.Modules" Version="2021.3.33" IncludeAssets="compile" />
+    <PackageReference Include="RiskOfRain2.GameLibs" Version="1.4.1-r.0" />
+    <PackageReference Include="R2API.Networking" Version="1.0.4" />
+  </ItemGroup>
+
+</Project>

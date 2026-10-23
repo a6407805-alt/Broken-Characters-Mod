@@ -1,0 +1,11 @@
+{
+  "name": "Jukebox",
+  "version_number": "1.0.0",
+  "website_url": "",
+  "description": "Plays the group's Suno songs in game with a song vote. Songs are added in the launcher's JUKEBOX window. Personal use.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2121",
+    "RiskofThunder-R2API_Core-5.3.0",
+    "RiskofThunder-R2API_Networking-1.0.4"
+  ]
+}

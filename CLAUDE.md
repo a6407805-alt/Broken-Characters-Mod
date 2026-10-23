@@ -36,9 +36,9 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
   the mod's namespace and "Exception").
 
 ## Dev branch (work in progress, owner's fast test loop)
-- Unfinished changes go on the `dev` branch, never `main`. A push to `dev` builds only (no installer test, no
-  launcher) and publishes `Broken-Characters-Mod-dev.zip` to the `dev` pre-release. Launchers/updaters read only
-  `latest`, so dev builds never reach friends. Merge `dev` into `main` when a change is finished.
+- Unfinished changes go on the `dev` branch, never `main`. A push to `dev` builds the mods and the launcher (no
+  installer test) and publishes `Broken-Characters-Mod-dev.zip` to the `dev` pre-release. Launchers/updaters read only
+  `latest`, so dev builds never reach friends. The dev launcher is `Broken-Characters-Mod-dev.exe` on the same pre-release. Merge `dev` into `main` when a change is finished.
 - Fetch: `https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/dev/Broken-Characters-Mod-dev.zip`.
 - Hot reload: ScriptEngine is installed on the owner's PC (`BepInEx\plugins\ScriptEngine\`). A mod being
   hot-reloaded lives in `BepInEx\scripts\` (F6 reloads it) and must NOT also be in `plugins\`. Only code reloads;
@@ -55,3 +55,11 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - Push once per finished change, then one `gh run watch`; don't poll in loops.
 - Keep replies short; the owner is a visual learner and likes concrete steps.
 - Never print or commit the extras key (a `github_pat_...`).
+
+## Jukebox (src/Jukebox + launcher JUKEBOX window)
+- Songs are Suno links in `launcher/jukebox.json` on main (no audio in the repo). The launcher edits it with the
+  creator key (`Publisher.UpdateTextFileAsync`, commits with `[skip ci]`); players without a key get a local list.
+- Launcher downloads `cdn1.suno.ai/<id>.mp3` to `%APPDATA%\BrokenCharacters\Jukebox\` and writes `playlist.json`
+  (`JukeboxLibrary.cs`). The mod plays mp3 directly with winmm `type mpegvideo` (`MciPlayer.cs`), volume via setaudio.
+- Votes: host picks 3, players press 7/8/9, host tallies (R2API.Networking messages in `SongLibrary.cs`), each PC plays
+  its own copy. Game music muted via Wwise RTPC `Volume_MSX` by reflection.

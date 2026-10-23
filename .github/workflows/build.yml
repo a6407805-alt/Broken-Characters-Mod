@@ -139,7 +139,7 @@ jobs:
 
   launcher:
     # The Warframe-style launcher (launcher/): a self-contained Windows exe. A failure here never blocks the pack.
-    if: github.ref != 'refs/heads/dev'
+    # Also built on dev (published only to the dev pre-release as Broken-Characters-Mod-dev.exe).
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -232,19 +232,24 @@ jobs:
   publish-dev:
     # dev branch only: publish the pack to the "dev" pre-release. Launchers and updaters only read "latest",
     # so nothing here ever reaches friends. Claude copies single mods from this zip straight to the tester's PC.
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs: [build, launcher]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/dev' && needs.build.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: Broken-Characters-Mod
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: Launcher
       - name: Publish as the dev pre-release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mv Broken-Characters-Mod.zip Broken-Characters-Mod-dev.zip
           files="Broken-Characters-Mod-dev.zip"
+          if [ -f Broken-Characters-Mod.exe ]; then mv Broken-Characters-Mod.exe Broken-Characters-Mod-dev.exe; files="$files Broken-Characters-Mod-dev.exe"; fi
           notes="DEV build from commit ${GITHUB_SHA::7} (dev branch). Work in progress, for testing only - not the real pack."
           if gh release view dev -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload dev $files --clobber -R "$GITHUB_REPOSITORY"
