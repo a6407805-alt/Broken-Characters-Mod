@@ -73,7 +73,8 @@ namespace BCMDevTools
             {
                 Directory.CreateDirectory(SharedDir);
                 File.WriteAllText(MarkerFile, "BCM Dev Tools " + DateTime.Now.ToString("o"));  // shows TEST LEVEL in the launcher
-                if (File.Exists(FlagFile)) { File.Delete(FlagFile); _quick = Quick.WaitTitle; Logger.LogInfo("Quick test requested"); }
+                if (File.Exists(FlagFile)) { File.Delete(FlagFile); _quick = Quick.WaitTitle; _testSession = true; Logger.LogInfo("Quick test requested"); }
+                else Logger.LogInfo("Normal launch (PLAY): dev tools stay off. Use TEST LEVEL in the launcher.");
             }
             catch (Exception e) { Logger.LogWarning("Shared files: " + e.Message); }
 
@@ -103,10 +104,14 @@ namespace BCMDevTools
         /// The dev tools only work alone: in the menus, or in a singleplayer run. Hosting or joining a multiplayer
         /// lobby/run turns everything off (no god mode, no spawning, waves normal, panel hidden).
         /// </summary>
+        /// <summary>True only when this game was started with TEST LEVEL (or the dev tools' RELAUNCH). PLAY = off.</summary>
+        static bool _testSession;
+
         static bool Allowed
         {
             get
             {
+                if (!_testSession) return false;
                 if (!NetworkServer.active && !NetworkClient.active) return true;   // main menu, nothing online
                 return RoR2Application.isInSinglePlayer && NetworkUser.readOnlyInstancesList.Count <= 1;
             }
