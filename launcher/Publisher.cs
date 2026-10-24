@@ -163,6 +163,46 @@ namespace BrokenCharactersLauncher
             return string.IsNullOrWhiteSpace(text) ? null : JsonNode.Parse(text);
         }
 
+        /// <summary>
+        /// Uploads a file (a jukebox MP3) to the repo's "jukebox" release (made on first use), so it never bloats git.
+        /// Returns the public download address. An existing file with the same name is replaced.
+        /// </summary>
+        public async Task<string> UploadReleaseFileAsync(string tag, string assetName, string localPath, string contentType, CancellationToken ct = default)
+        {
+            JsonNode? release;
+            try { release = await CallAsync(HttpMethod.Get, "/releases/tags/" + tag, null, ct); }
+            catch (GitHubException ex) when (ex.Status == 404)
+            {
+                release = await CallAsync(HttpMethod.Post, "/releases", new JsonObject
+                {
+                    ["tag_name"] = tag,
+                    ["target_commitish"] = Branch,
+                    ["name"] = "Jukebox songs",
+                    ["body"] = "MP3s shared from the launcher's JUKEBOX. Not a game build.",
+                    ["prerelease"] = true,
+                    ["make_latest"] = "false"
+                }, ct);
+            }
+            long id = release!["id"]!.GetValue<long>();
+            foreach (JsonNode? a in release["assets"]?.AsArray() ?? new JsonArray())
+                if (a?["name"]?.GetValue<string>() == assetName)
+                    await CallAsync(HttpMethod.Delete, "/releases/assets/" + a["id"]!.GetValue<long>(), null, ct);
+
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                "https://uploads.github.com/repos/" + Repo + "/releases/" + id + "/assets?name=" + Uri.EscapeDataString(assetName));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+            await using FileStream fs = File.OpenRead(localPath);
+            request.Content = new StreamContent(fs);
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromMinutes(10));
+            using HttpResponseMessage response = await Http.SendAsync(request, cts.Token);
+            string text = await response.Content.ReadAsStringAsync(cts.Token);
+            if (!response.IsSuccessStatusCode) throw new GitHubException((int)response.StatusCode, Friendly((int)response.StatusCode, text));
+            return JsonNode.Parse(text)!["browser_download_url"]!.GetValue<string>();
+        }
+
         private static string Friendly(int status, string text)
         {
             if (status == 401) return "That creator key doesn't work (it may have expired). Ask for a new one.";
