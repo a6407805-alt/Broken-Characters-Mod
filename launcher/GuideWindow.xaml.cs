@@ -19,6 +19,44 @@ namespace BrokenCharactersLauncher
             InitializeComponent();
         }
 
+        // ------------------------------------------------------------------ extras key unlock (KeyVault.cs)
+
+        private async void Unlock_Click(object sender, RoutedEventArgs e) => await UnlockAsync();
+
+        private async void GuidePasswordBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter) await UnlockAsync();
+        }
+
+        private async System.Threading.Tasks.Task UnlockAsync()
+        {
+            string pw = GuidePasswordBox.Password;
+            if (pw.Length == 0) return;
+            UnlockButton.IsEnabled = false;
+            UnlockStatus.Visibility = Visibility.Visible;
+            UnlockStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xC9, 0xD6, 0xEA));
+            UnlockStatus.Text = "Unlocking...";
+            (string? key, string? error) = await KeyVault.UnlockFromRepoAsync(KeyVault.ExtrasPath, pw);
+            UnlockButton.IsEnabled = true;
+            if (key == null)
+            {
+                UnlockStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0x9A, 0x8C));
+                UnlockStatus.Text = error;
+                RevealRow.Visibility = Visibility.Collapsed;
+                return;
+            }
+            RevealBox.Text = key;
+            RevealRow.Visibility = Visibility.Visible;
+            UnlockStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x8F, 0xE3, 0x9A));
+            UnlockStatus.Text = "Unlocked. Press Copy, then paste it into the EXTRAS box (bottom-left of the launcher) and press Save.";
+        }
+
+        private void CopyKey_Click(object sender, RoutedEventArgs e)
+        {
+            try { Clipboard.SetText(RevealBox.Text); CopyKeyButton.Content = "Copied!"; }
+            catch (System.Runtime.InteropServices.COMException) { RevealBox.SelectAll(); RevealBox.Focus(); } // clipboard busy: select it for Ctrl+C
+        }
+
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ButtonState == MouseButtonState.Pressed) DragMove();
