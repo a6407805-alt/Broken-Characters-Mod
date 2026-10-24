@@ -39,6 +39,8 @@ namespace BrokenCharactersLauncher
     public sealed class JukeboxFile
     {
         [JsonPropertyName("songs")] public List<JukeboxSong> Songs { get; set; } = new List<JukeboxSong>();
+        /// <summary>Songs someone pressed Remove on: every PC deletes its copy, and nobody re-shares them.</summary>
+        [JsonPropertyName("removed")] public List<string> Removed { get; set; } = new List<string>();
     }
 
     public static class JukeboxLibrary
@@ -73,6 +75,10 @@ namespace BrokenCharactersLauncher
             while (id.StartsWith("mp3-", StringComparison.Ordinal)) id = id.Substring(4); // already a shared file's id
             return "mp3-" + (id.Length == 0 ? Guid.NewGuid().ToString("N").Substring(0, 8) : id.Length > 60 ? id.Substring(0, 60) : id);
         }
+
+        /// <summary>The jukebox comes with the friends-only extras: only PCs with an extras key download the songs.</summary>
+        public static bool ExtrasEnabled => File.Exists(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BrokenCharacters", "extras-key.txt"));
 
         public static string SongPath(string id) => Path.Combine(Folder, id + ".mp3");
         public static bool IsDownloaded(string id) => File.Exists(SongPath(id));
@@ -198,8 +204,11 @@ namespace BrokenCharactersLauncher
             Directory.CreateDirectory(Folder);
             string dest = SongPath(song.Id), part = dest + ".part";
             var urls = new List<string>();
-            bool fromSuno = !song.Id.StartsWith("mp3-", StringComparison.Ordinal);
-            if (fromSuno) urls.Add("https://cdn1.suno.ai/" + song.Id + ".mp3");
+            // Shared songs live on GitHub (the jukebox release): download from there first, Suno only as a backup.
+            bool onGitHub = song.Audio != null && song.Audio.Contains("github.com/", StringComparison.OrdinalIgnoreCase);
+            if (onGitHub) urls.Add(song.Audio!);
+            bool fromSuno = !song.Id.StartsWith("mp3-", StringComparison.Ordinal) && !onGitHub;
+            if (!song.Id.StartsWith("mp3-", StringComparison.Ordinal)) urls.Add("https://cdn1.suno.ai/" + song.Id + ".mp3");
             if (!string.IsNullOrEmpty(song.Audio) && !urls.Contains(song.Audio)) urls.Add(song.Audio);
             if (fromSuno)
             try
@@ -262,7 +271,17 @@ namespace BrokenCharactersLauncher
             await SyncLock.WaitAsync(ct);
             try
             {
-                List<JukeboxSong> all = Merge(await FetchGroupAsync(ct), LoadLocal());
+                if (!ExtrasEnabled)
+                {
+                    WritePlaylist(Array.Empty<JukeboxSong>());
+                    progress?.Report("The jukebox comes with the extras. Enter the extras key or password in the EXTRAS box (bottom left) first.");
+                    return 0;
+                }
+                JukeboxFile group = await FetchGroupAsync(ct);
+                foreach (string gone in group.Removed) DeleteSongFile(gone); // someone pressed Remove: drop our copy too
+                JukeboxFile mine = LoadLocal();
+                if (mine.Songs.RemoveAll(s => group.Removed.Contains(s.Id)) > 0) SaveLocal(mine);
+                List<JukeboxSong> all = Merge(group, mine).Where(s => !group.Removed.Contains(s.Id)).ToList();
                 List<JukeboxSong> missing = all.Where(s => !IsDownloaded(s.Id)).ToList();
                 int failed = 0;
                 string firstError = "";

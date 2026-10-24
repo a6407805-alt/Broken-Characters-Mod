@@ -67,8 +67,10 @@ namespace BrokenCharactersLauncher
             if (_screenshotPath != null) { await ShowDemoAsync(); return; }
             _creatorKey = Publisher.ReadSavedKey();
             bool canShare = !string.IsNullOrEmpty(_creatorKey);
-            ShareText.Text = canShare
-                ? "Every song you add goes on everyone's jukebox."
+            ShareText.Text = !JukeboxLibrary.ExtrasEnabled
+                ? "The jukebox comes with the extras: enter the extras key or password in the EXTRAS box (bottom left of the launcher) first."
+                : canShare
+                ? "Every song you add goes on everyone's jukebox (it's uploaded to GitHub, then every PC with the extras downloads it)."
                 : "You get everyone's songs automatically. To ADD songs, sign in once in CREATOR (then reopen this).";
             AddButton.IsEnabled = canShare;
 
@@ -86,7 +88,7 @@ namespace BrokenCharactersLauncher
             _rows.Clear();
             foreach (JukeboxSong s in _group.Songs)
                 _rows.Add(new JukeboxRow { Song = s, InGroup = true, CanRemove = canShare });
-            foreach (JukeboxSong s in local.Songs.Where(l => !_group.Songs.Any(g => g.Id == l.Id)))
+            foreach (JukeboxSong s in local.Songs.Where(l => !_group.Songs.Any(g => g.Id == l.Id) && !_group.Removed.Contains(l.Id)))
                 _rows.Add(new JukeboxRow { Song = s, InGroup = false, CanRemove = true });
             foreach (JukeboxSong s in JukeboxLibrary.LooseFiles(_rows.Select(r => r.Song).ToList()))
                 _rows.Add(new JukeboxRow { Song = s, InGroup = false, CanRemove = true });
@@ -131,28 +133,23 @@ namespace BrokenCharactersLauncher
 
                 bool forGroup = !string.IsNullOrEmpty(_creatorKey); // songs are always for everyone
                 if (!forGroup) { Status("To add songs, sign in once in CREATOR, then reopen the jukebox."); return; }
-                if (forGroup)
-                {
-                    Status("Adding \"" + song.Title + "\" for the group...");
-                    var pub = new Publisher(_creatorKey!);
-                    try { song.AddedBy = await pub.SignInAsync(_cts.Token); } catch (GitHubException) { }
-                    await pub.UpdateTextFileAsync(JukeboxLibrary.RepoPath, current =>
-                    {
-                        JukeboxFile f = JukeboxLibrary.Parse(current);
-                        if (!f.Songs.Any(s => s.Id == song.Id)) f.Songs.Add(song);
-                        _group = f;
-                        return JukeboxLibrary.Serialize(f);
-                    }, "Jukebox: add " + song.Title, _cts.Token);
-                }
-                else
-                {
-                    JukeboxFile local = JukeboxLibrary.LoadLocal();
-                    local.Songs.Add(song);
-                    JukeboxLibrary.SaveLocal(local);
-                }
 
-                Status("Downloading \"" + song.Title + "\"...");
+                // 1. get the mp3 from Suno once, 2. put it on GitHub, 3. list it: friends then download from GitHub.
+                Status("Downloading \"" + song.Title + "\" from Suno...");
                 await JukeboxLibrary.DownloadAsync(song, _cts.Token);
+                var pub = new Publisher(_creatorKey!);
+                try { song.AddedBy = await pub.SignInAsync(_cts.Token); } catch (GitHubException) { }
+                Status("Uploading \"" + song.Title + "\" to GitHub for everyone...");
+                song.Audio = await pub.UploadReleaseFileAsync("jukebox", song.Id + ".mp3", JukeboxLibrary.SongPath(song.Id), "audio/mpeg", _cts.Token);
+                await pub.UpdateTextFileAsync(JukeboxLibrary.RepoPath, current =>
+                {
+                    JukeboxFile f = JukeboxLibrary.Parse(current);
+                    f.Removed.Remove(song.Id);
+                    if (!f.Songs.Any(s => s.Id == song.Id)) f.Songs.Add(song);
+                    _group = f;
+                    return JukeboxLibrary.Serialize(f);
+                }, "Jukebox: add " + song.Title, _cts.Token);
+
                 LinkBox.Clear();
                 Rebuild();
                 JukeboxLibrary.WritePlaylist(JukeboxLibrary.Merge(_group, JukeboxLibrary.LoadLocal()));
@@ -174,11 +171,11 @@ namespace BrokenCharactersLauncher
         private async Task ShareMineAsync()
         {
             JukeboxFile local = JukeboxLibrary.LoadLocal();
-            List<JukeboxSong> localOnly = local.Songs.Where(l => !_group.Songs.Any(g => g.Id == l.Id)).ToList();
+            List<JukeboxSong> localOnly = local.Songs.Where(l => !_group.Songs.Any(g => g.Id == l.Id) && !_group.Removed.Contains(l.Id)).ToList();
             List<JukeboxSong> loose = JukeboxLibrary.LooseFiles(_group.Songs.Concat(local.Songs).ToList())
                 .Where(f => f.FilePath!.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase)).ToList();
             if (localOnly.Count + loose.Count == 0 || _busy) return;
-            int shareable = localOnly.Count + loose.Count(f => !_group.Songs.Any(g => g.Id == JukeboxLibrary.FileSongId(f.Id)));
+            int shareable = localOnly.Count + loose.Count(f => !_group.Songs.Any(g => g.Id == JukeboxLibrary.FileSongId(f.Id)) && !_group.Removed.Contains(JukeboxLibrary.FileSongId(f.Id)));
             if (string.IsNullOrEmpty(_creatorKey))
             {
                 if (shareable == 0) return;
@@ -198,6 +195,7 @@ namespace BrokenCharactersLauncher
                 {
                     string id = JukeboxLibrary.FileSongId(f.Id);
                     string target = JukeboxLibrary.SongPath(id);
+                    if (_group.Removed.Contains(id)) { File.Delete(f.FilePath!); continue; } // removed for everyone: don't bring it back
                     if (_group.Songs.Any(g => g.Id == id) || add.Any(a => a.Id == id))
                     {
                         // Already shared (a renamed copy of a group song): just tidy the file, don't upload it again.
@@ -233,7 +231,7 @@ namespace BrokenCharactersLauncher
         private async void Remove_Click(object sender, RoutedEventArgs e)
         {
             if (_busy || (sender as FrameworkElement)?.DataContext is not JukeboxRow row) return;
-            if (MessageBox.Show(this, "Remove \"" + row.Title + "\"" + (row.InGroup ? " for everyone?" : "?"), "Jukebox",
+            if (MessageBox.Show(this, "Remove \"" + row.Title + "\" from everyone's jukebox?", "Jukebox",
                     MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             if (_playingRow == row) StopPreview();
             if (row.Loose)
@@ -253,6 +251,7 @@ namespace BrokenCharactersLauncher
                     {
                         JukeboxFile f = JukeboxLibrary.Parse(current);
                         f.Songs.RemoveAll(s => s.Id == row.Song.Id);
+                        if (!f.Removed.Contains(row.Song.Id)) f.Removed.Add(row.Song.Id); // every PC deletes its copy
                         _group = f;
                         return JukeboxLibrary.Serialize(f);
                     }, "Jukebox: remove " + row.Title, _cts.Token);
