@@ -1,8 +1,8 @@
 {
   "name": "CharacterStatus",
-  "version_number": "1.2.0",
+  "version_number": "1.2.1",
   "website_url": "",
-  "description": "Adds a green / active / yellow / red status line (complete, actively working + version/note, in progress, early) to every survivor's description, and applies unified 3D Risk of Rain 2 cel-shaded portraits. Personal use.",
+  "description": "Adds a green / active / yellow / red status line (complete, actively working + version/note, in progress, early) to every survivor's description. Personal use.",
   "dependencies": [
     "bbepis-BepInExPack-5.4.2121",
     "RiskofThunder-R2API_Core-5.3.0",

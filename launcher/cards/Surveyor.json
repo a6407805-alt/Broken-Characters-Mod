@@ -6,8 +6,8 @@
       "added": "2026-10-24T10:06:00-04:00",
       "accent": "#7AD33A",
       "status": "active",
-      "version": "0.5.0",
-      "note": "Active WIP (v0.5.0): MMB mode wheel/radial dial, 8 hidden LiDAR map upgrades, Proton Tether & Ghost-Trap spirit capture, 3D mesh item/chest outlines, smooth Peek fade",
+      "version": "0.5.3",
+      "note": "Active WIP (v0.5.3): M1 minigun, M2 poltergust vacuum item suction & demon capture, Q-only 4-mode scanner cycle, cyan/orange LiDAR palette",
       "image": "Assets/Roster/Surveyor.png"
     }
   ]

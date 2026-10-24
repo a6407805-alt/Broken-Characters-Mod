@@ -22,7 +22,7 @@ namespace CharacterStatus
     {
         public const string PluginGUID = "com.brokencharacters.characterstatus";
         public const string PluginName = "Character Status";
-        public const string PluginVersion = "1.2.0";
+        public const string PluginVersion = "1.2.1";
         private const string Prefix = "BC_STATUS_DESC_";
 
         [Serializable] private class Entry { public string name; public string status; public string version; public string note; public string[] match; }
@@ -78,8 +78,6 @@ namespace CharacterStatus
                 }
             }
             catch (Exception e) { Logger.LogWarning("status.json could not be read: " + e.Message); }
-
-            LoadPortraits();
 
             RoR2Application.onLoad += Apply;
             Language.onCurrentLanguageChanged += Apply;
@@ -248,25 +246,7 @@ namespace CharacterStatus
                     string key = (sd.bodyPrefab ? sd.bodyPrefab.name : sd.cachedName) ?? "unknown";
                     Entry e = Find(sd);
 
-                    // 1. Apply unified 3D cel-shaded portrait if available
-                    if (sd.bodyPrefab)
-                    {
-                        CharacterBody body = sd.bodyPrefab.GetComponent<CharacterBody>();
-                        if (body != null)
-                        {
-                            Texture2D portrait = FindPortrait(sd, e);
-                            if (portrait != null)
-                            {
-                                body.portraitIcon = portrait;
-                                if (_appliedPortraits.Add(key))
-                                {
-                                    _log.LogInfo("Applied 3D portrait to '" + key + "' (" + portrait.name + ").");
-                                }
-                            }
-                        }
-                    }
-
-                    // 2. Apply status line to description
+                    // Apply status line to description
                     if (_entries != null)
                     {
                         string orig;
