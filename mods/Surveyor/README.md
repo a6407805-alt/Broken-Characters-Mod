@@ -7,12 +7,15 @@ Everything about the LiDAR and the Shimmer Demon happens on the Surveyor's own c
 is nothing to sync, so it works in multiplayer without anyone else needing to do anything. Original art and vanilla
 sound events only (no copyrighted files).
 
-## The suit (3D model, v0.3)
-An original heavy-armour space suit on the Commando skeleton (so every Commando animation works): white NASA-EVA-style plates with blue trim and orange stripes over a pressure suit, a
-life-support backpack with a **spinning LiDAR dome** (faster in Overdrive), a rotary minigun whose **barrels spin with the spool**, and a round bubble helmet with a
-**flip-up visor**. The visor snaps up (springy hinge) whenever you use **Peek**, on everyone's screen, and shows a pale face with milky blind eyes; on the
-character-select screen it flips up and down by itself. Config `UseCustomModel_v1`, `ModelScale_v1`. Source: `src/Surveyor/Model/build_surveyor.py`
-(pure Python, no Blender; run it and `gzip -9` the result into `mods/Surveyor/surveyor_model.bin.gz`).
+## The suit (3D model, v0.4: built in Blender)
+A heavy, armoured NASA-style EVA astronaut (white / orange / blue) with a big two-handed rotary minigun, on the Commando skeleton (every
+Commando animation works). Round bubble helmet with a flip-up visor (Peek), a realistic face inside with heavy-lidded blind eyes and a comm cap,
+a life-support backpack with a spinning LiDAR dome, and minigun barrels that spin with the spool.
+**Weight (v0.4):** the left hand holds the foregrip, the gun lags behind turns, she leans back under the load (more when spooled), hips sway
+and sink with each step, the muzzle kicks and the torso shudders while firing, the camera thuds on steps and landings, and she accelerates
+and turns slower. Config `HeavyMotion_v1`, `StepShake_v1`, `UseCustomModel_v1`, `ModelScale_v1`.
+Source: `src/Surveyor/Model/blender_surveyor.py` (run it in Blender; it writes `Documents/SurveyorModel/surveyor_model.bin` and previews;
+`gzip -9` that into `mods/Surveyor/surveyor_model.bin.gz`).
 
 ## LiDAR Vision (passive)
 - The screen is black (config `DarkWorld`). An always-on scanner paints the world as a decaying cloud of dots:
