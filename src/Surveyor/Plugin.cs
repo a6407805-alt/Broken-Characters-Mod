@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.4.2";
+        public const string PluginVersion = "0.4.3";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -114,9 +114,9 @@ namespace Surveyor
             PulseForce = Config.Bind("4. Acoustic Shockwave", "Force", 2500f, "Knockback on enemies.");
 
             DarkWorld = Config.Bind("5. LiDAR", "DarkWorld", true, "The world is black and you only see the LiDAR dots. Turn off to see the normal game with the dots on top (handy for testing).");
-            MaxDots = Config.Bind("5. LiDAR", "MaxDots_v2", 40000, "Most dots kept at once (the point cloud is packed; lower this on a slow PC).");
-            RaysPerFrame = Config.Bind("5. LiDAR", "ScanRaysPerFrame_v2", 170, "Rays cast per frame by the always-on scanner (they spiral over a wide cone so the cloud fills in evenly).");
-            ScanRange = Config.Bind("5. LiDAR", "ScanRange", 75f, "Scanner range in metres.");
+            MaxDots = Config.Bind("5. LiDAR", "MaxDots_v3", 65000, "Most dots kept at once (the point cloud is packed; lower this on a slow PC).");
+            RaysPerFrame = Config.Bind("5. LiDAR", "ScanRaysPerFrame_v3", 320, "Rays cast per frame by the always-on scanner (they spiral over a wide cone so the cloud fills in evenly).");
+            ScanRange = Config.Bind("5. LiDAR", "ScanRange_v2", 95f, "Scanner range in metres.");
             DotLife = Config.Bind("5. LiDAR", "DotSeconds_v2", 9f, "How long a dot stays before it fades.");
             DotDivider = Config.Bind("5. LiDAR", "DotResolutionDivider_v1", 2, "The cloud is drawn at screen size divided by this (2 = every dot is a 2x2 block at 1080p; 1 = finest, slowest; 3 = chunkier).");
 

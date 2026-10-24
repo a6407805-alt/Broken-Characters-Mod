@@ -464,10 +464,33 @@ namespace Surveyor
 
         // Scan modes, cycled with Q / E. They change the always-on scanner, and the Overdrive skill pushes the current one.
         public static readonly string[] OdNames = { "CONE", "SWEEP", "WIDE", "FOCUS", "ECHO" };
+        public static readonly string[] OdDescs =
+        {
+            "WIDE TACTICAL FLOOD + PROXIMITY SKIRT",
+            "TWIN 360 RADAR WALLS + SONAR FLOOR RINGS",
+            "360 OMNI-DOME + LONG-RANGE LOOT & CHESTS",
+            "LONG-RANGE HIGH-DENSITY SPOTLIGHT + TARGET LOCK",
+            "SEISMIC WALL-SONAR (ENEMIES, BOSSES & DEMON)"
+        };
         private static readonly int[] OdKind = { 1, 0, 1, 2, 3 };    // which overdrive each mode becomes: 0 sweep, 1 burst, 2 focus, 3 echo
         public static int OdMode;
-        private float _scanYaw, _echoPing, _peekReady, _modeFlash;
-        private bool _loggedPeekFx;
+        private float _scanYaw, _sweepRing, _echoPing, _focusLockNext, _peekReady, _modeFlash;
+        private bool _loggedPeekFx, _peekNeedBurst;
+
+        // Tracked stage gameplay objects (chests, shrines, shops, barrels, dropped items, teleporter)
+        private struct Poi
+        {
+            public Transform Tr;
+            public Vector3 Pos;
+            public Vector3 Extents;
+            public Color Col;
+            public string Tag;
+            public int Kind; // 0 = chest/shop, 1 = shrine/drone, 2 = barrel, 3 = item/pickup, 4 = teleporter
+        }
+        private readonly List<Poi> _pois = new List<Poi>(64);
+        private float _nextPoiRefresh, _nextPoiPaint;
+        private static FieldInfo _fiPurchaseAvail, _fiChestOpened, _fiBarrelOpened, _fiShopPurchased;
+        private static bool _fiResolved;
 
         private Dot[] _dots;
         private int _head, _count;
@@ -577,20 +600,202 @@ namespace Surveyor
             if (_count < _dots.Length) _count++;
         }
 
+        private static void EnsureFields()
+        {
+            if (_fiResolved) return;
+            _fiResolved = true;
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            try { _fiPurchaseAvail = typeof(PurchaseInteraction).GetField("available", flags); } catch { }
+            try { _fiChestOpened = typeof(ChestBehavior).GetField("isChestOpened", flags); } catch { }
+            try { _fiBarrelOpened = typeof(BarrelInteraction).GetField("opened", flags); } catch { }
+            try { _fiShopPurchased = typeof(ShopTerminalBehavior).GetField("hasBeenPurchased", flags); } catch { }
+        }
+
+        private static bool IsPurchaseOpen(PurchaseInteraction pi)
+        {
+            if (!pi || !pi.gameObject.activeInHierarchy) return false;
+            EnsureFields();
+            try
+            {
+                if (_fiPurchaseAvail != null && !(bool)_fiPurchaseAvail.GetValue(pi)) return false;
+                ChestBehavior cb = pi.GetComponent<ChestBehavior>();
+                if (cb && _fiChestOpened != null && (bool)_fiChestOpened.GetValue(cb)) return false;
+                ShopTerminalBehavior stb = pi.GetComponent<ShopTerminalBehavior>();
+                if (stb && _fiShopPurchased != null && (bool)_fiShopPurchased.GetValue(stb)) return false;
+            }
+            catch { }
+            return true;
+        }
+
+        private static bool IsBarrelOpen(BarrelInteraction bi)
+        {
+            if (!bi || !bi.gameObject.activeInHierarchy) return false;
+            EnsureFields();
+            try
+            {
+                if (_fiBarrelOpened != null && (bool)_fiBarrelOpened.GetValue(bi)) return false;
+            }
+            catch { }
+            return true;
+        }
+
+        private static void ClassifyInteractable(GameObject go, out string tag, out Color col, out int kind)
+        {
+            string n = (go ? go.name : "").ToLowerInvariant();
+            if (n.Contains("teleporter") || n.Contains(" primordial"))
+            {
+                tag = "TELEPORTER";
+                col = new Color(1f, 0.3f, 0.95f, 1f);
+                kind = 4;
+                return;
+            }
+            if (n.Contains("shrine") || n.Contains("altar") || n.Contains("halcyon"))
+            {
+                tag = n.Contains("newt") ? "NEWT ALTAR" : (n.Contains("blood") ? "BLOOD SHRINE" : (n.Contains("chance") ? "CHANCE SHRINE" : (n.Contains("combat") ? "COMBAT SHRINE" : (n.Contains("boss") ? "MOUNTAIN SHRINE" : "SHRINE"))));
+                col = new Color(0.25f, 0.92f, 1f, 1f);
+                kind = 1;
+                return;
+            }
+            if (n.Contains("drone") || n.Contains("turret") || n.Contains("emergency"))
+            {
+                tag = n.Contains("turret") ? "TURRET" : "DRONE";
+                col = new Color(0.35f, 1f, 0.72f, 1f);
+                kind = 1;
+                return;
+            }
+            if (n.Contains("duplicator") || n.Contains("printer"))
+            {
+                tag = "PRINTER";
+                col = new Color(1f, 0.86f, 0.15f, 1f);
+                kind = 0;
+                return;
+            }
+            if (n.Contains("tripleshop") || n.Contains("multishop") || n.Contains("terminal") || n.Contains("bazaar") || n.Contains("cauldron"))
+            {
+                tag = "SHOP";
+                col = new Color(1f, 0.88f, 0.22f, 1f);
+                kind = 0;
+                return;
+            }
+            if (n.Contains("scrapper"))
+            {
+                tag = "SCRAPPER";
+                col = new Color(0.9f, 0.82f, 0.35f, 1f);
+                kind = 0;
+                return;
+            }
+            if (n.Contains("lunar"))
+            {
+                tag = "LUNAR POD";
+                col = new Color(0.45f, 0.78f, 1f, 1f);
+                kind = 0;
+                return;
+            }
+            if (n.Contains("void"))
+            {
+                tag = "VOID CRADLE";
+                col = new Color(0.88f, 0.38f, 1f, 1f);
+                kind = 0;
+                return;
+            }
+            if (n.Contains("goldchest") || n.Contains("legendary"))
+            {
+                tag = "LEGENDARY CHEST";
+                col = new Color(1f, 0.92f, 0.25f, 1f);
+                kind = 0;
+                return;
+            }
+            if (n.Contains("chest2") || n.Contains("large"))
+            {
+                tag = "LARGE CHEST";
+                col = new Color(1f, 0.88f, 0.18f, 1f);
+                kind = 0;
+                return;
+            }
+            if (n.Contains("equipment"))
+            {
+                tag = "EQUIP BARREL";
+                col = new Color(1f, 0.62f, 0.18f, 1f);
+                kind = 0;
+                return;
+            }
+            if (n.Contains("lockbox"))
+            {
+                tag = "LOCKBOX";
+                col = new Color(1f, 0.82f, 0.28f, 1f);
+                kind = 0;
+                return;
+            }
+            tag = "CHEST";
+            col = new Color(1f, 0.86f, 0.15f, 1f);
+            kind = 0;
+        }
+
         private void Cast(Vector3 origin, Vector3 dir, float range, float life, bool big)
         {
             RaycastHit hit;
-            if (!Physics.Raycast(origin, dir, out hit, range, LayerIndex.world.mask | LayerIndex.entityPrecise.mask, QueryTriggerInteraction.Ignore)) return;
+            int mask = LayerIndex.world.mask | LayerIndex.entityPrecise.mask | LayerIndex.defaultLayer.mask | LayerIndex.pickups.mask;
+            if (!Physics.Raycast(origin, dir, out hit, range, mask, QueryTriggerInteraction.Ignore)) return;
             bool enemy = false;
-            HurtBox hb = hit.collider ? hit.collider.GetComponent<HurtBox>() : null;
+            bool special = false;
+            Color c = default;
+
+            Collider col = hit.collider;
+            HurtBox hb = col ? col.GetComponent<HurtBox>() : null;
             if (hb)
             {
                 if (hb.healthComponent && hb.healthComponent.body == _body) return;
                 CharacterBody other = hb.healthComponent ? hb.healthComponent.body : null;
                 enemy = other && other.teamComponent && _body.teamComponent && other.teamComponent.teamIndex != _body.teamComponent.teamIndex;
             }
-            Color c = enemy ? new Color(1f, 0.2f, 0.12f, 1f) : Depth(hit.distance, range, hit.normal);
-            AddDot(hit.point, c, life, big || enemy);
+            if (enemy)
+            {
+                c = new Color(1f, 0.2f, 0.12f, 1f);
+            }
+            else if (col)
+            {
+                TeleporterInteraction tp = col.GetComponentInParent<TeleporterInteraction>();
+                if (tp)
+                {
+                    c = Random.value < 0.5f ? new Color(1f, 0.28f, 0.95f, 1f) : new Color(0.2f, 0.95f, 1f, 1f);
+                    special = true;
+                }
+                else
+                {
+                    GenericPickupController gpc = col.GetComponentInParent<GenericPickupController>();
+                    PickupPickerController ppc = !gpc ? col.GetComponentInParent<PickupPickerController>() : null;
+                    if ((gpc && gpc.gameObject.activeInHierarchy) || (ppc && ppc.gameObject.activeInHierarchy))
+                    {
+                        c = new Color(0.32f, 1f, 0.94f, 1f);
+                        special = true;
+                    }
+                    else
+                    {
+                        PurchaseInteraction pi = col.GetComponentInParent<PurchaseInteraction>();
+                        if (pi && IsPurchaseOpen(pi))
+                        {
+                            string tag; int kind;
+                            ClassifyInteractable(pi.gameObject, out tag, out c, out kind);
+                            special = true;
+                        }
+                        else
+                        {
+                            BarrelInteraction bi = col.GetComponentInParent<BarrelInteraction>();
+                            if (bi && IsBarrelOpen(bi))
+                            {
+                                c = new Color(1f, 0.72f, 0.2f, 1f);
+                                special = true;
+                            }
+                        }
+                    }
+                }
+                if (!special) c = Depth(hit.distance, range, hit.normal);
+            }
+            else
+            {
+                c = Depth(hit.distance, range, hit.normal);
+            }
+            AddDot(hit.point, c, special ? life * 1.35f : life, big || enemy || special);
         }
 
         // ---------------------------------------------------------------- called by her skills
@@ -671,7 +876,8 @@ namespace Surveyor
         {
             _peekStart = Time.time;
             _peekUntil = Time.time + seconds * Mathf.Max(0.5f, SvrSenses.SightMult);
-            _peekK = Mathf.Max(_peekK, 0.25f);
+            _peekNeedBurst = true;
+            // Do not jump _peekK: let LateUpdate smoothly ramp _peekK from 0 -> 1 so the dots fade out smoothly.
         }
 
         // ---------------------------------------------------------------- per frame
@@ -681,6 +887,22 @@ namespace Surveyor
             Quaternion rot = Quaternion.LookRotation(aim);
             Vector3 d = Quaternion.Euler(-degrees * Mathf.Sin(theta), degrees * Mathf.Cos(theta), 0f) * Vector3.forward;
             return rot * d;
+        }
+
+        private void TriggerModeBurst()
+        {
+            _modeFlash = Time.time;
+            Util.PlaySound("Play_UI_obj_casinoChest_open", gameObject);
+            _nextPoiRefresh = 0f;
+            _nextPoiPaint = 0f;
+            Scan(0.32f);
+            ScanInteractables(true);
+            if (_body)
+            {
+                _pulseAt = _body.corePosition;
+                _pulseRange = SvrPlugin.ScanRange.Value * SvrSenses.SightMult * (OdMode == 2 ? 1.35f : (OdMode == 3 ? 1.8f : 1.15f));
+                _pulseLeft = Mathf.Max(_pulseLeft, Mathf.RoundToInt(950f * SvrSenses.SightMult));
+            }
         }
 
         private void Update()
@@ -695,8 +917,8 @@ namespace Surveyor
 
             KeyCode next, prev, peek;
             int n0 = OdNames.Length;
-            if (TryKey(SvrPlugin.ScanNextKey.Value, out next) && Input.GetKeyDown(next)) { OdMode = (OdMode + 1) % n0; _modeFlash = Time.time; Util.PlaySound("Play_UI_menuClick", gameObject); Scan(0.08f); }
-            if (TryKey(SvrPlugin.ScanPrevKey.Value, out prev) && Input.GetKeyDown(prev)) { OdMode = (OdMode + n0 - 1) % n0; _modeFlash = Time.time; Util.PlaySound("Play_UI_menuClick", gameObject); Scan(0.08f); }
+            if (TryKey(SvrPlugin.ScanNextKey.Value, out next) && Input.GetKeyDown(next)) { OdMode = (OdMode + 1) % n0; TriggerModeBurst(); }
+            if (TryKey(SvrPlugin.ScanPrevKey.Value, out prev) && Input.GetKeyDown(prev)) { OdMode = (OdMode + n0 - 1) % n0; TriggerModeBurst(); }
             // Peek on its own key, whatever is in the utility slot. It runs the Peek state on the Body machine,
             // which is networked, so everyone sees the visor flip.
             if (TryKey(SvrPlugin.PeekKey.Value, out peek) && Input.GetKeyDown(peek) && Time.time >= _peekReady && !Peeking)
@@ -710,23 +932,39 @@ namespace Surveyor
             }
 
             _demon.Tick(dt, _body);
-            Scan(dt);
+
+            // Pause ray scanning while the visor is fully up in Peek mode, then fire a fresh burst as the visor lowers.
+            if (_peekK < 0.65f)
+            {
+                if (!Peeking && _peekNeedBurst)
+                {
+                    _peekNeedBurst = false;
+                    Scan(0.25f);
+                    ScanInteractables(true);
+                }
+                Scan(dt);
+                ScanInteractables(false);
+            }
             OverdriveTick(dt);
 
-            if (_pulseLeft > 0)
+            if (_pulseLeft > 0 && _peekK < 0.65f)
             {
-                int n = Mathf.Min(_pulseLeft, 650);
+                int n = Mathf.Min(_pulseLeft, 850);
                 for (int i = 0; i < n; i++) Cast(_pulseAt + Vector3.up * 0.8f, Random.onUnitSphere, _pulseRange, SvrPlugin.DotLife.Value * 1.6f, true);
                 _pulseLeft -= n;
             }
 
-            int per = (_odActive == 3 && OverdriveOn) ? 9 : 3;
+            int per = (_odActive == 3 && OverdriveOn) ? 12 : (OdMode == 4 ? 7 : 4);
             for (int i = _tracked.Count - 1; i >= 0; i--)
             {
                 HealthComponent hc = _tracked[i];
                 if (!hc || !hc.alive || !hc.body || Time.time > _trackedUntil[i]) { _tracked.RemoveAt(i); _trackedUntil.RemoveAt(i); continue; }
-                for (int k = 0; k < per; k++)
-                    AddDot(hc.body.corePosition + Random.insideUnitSphere * Mathf.Max(0.5f, hc.body.radius), new Color(1f, 0.15f, 0.1f, 1f), 0.4f, true);
+                float rad = Mathf.Max(0.6f, hc.body.radius);
+                bool boss = hc.body.isBoss || hc.body.isChampion;
+                Color ec = boss ? new Color(1f, 0.38f, 0.08f, 1f) : new Color(1f, 0.15f, 0.1f, 1f);
+                int cnt = boss ? per * 2 : per;
+                for (int k = 0; k < cnt; k++)
+                    AddDot(hc.body.corePosition + Random.insideUnitSphere * rad, ec, 0.5f, true);
             }
 
             if (SvrSenses.Hearing && Time.unscaledTime > _nextAudio) { _nextAudio = Time.unscaledTime + 2f; SvrAudio.Muffle(true); }
@@ -739,83 +977,374 @@ namespace Surveyor
             catch { return false; }
         }
 
-        // The always-on scanner. Rays fan out in a spiral over a wide cone, so the cloud fills in evenly and packs tight.
+        // Refresh and paint chests, shrines, shops, barrels, dropped items, and the Teleporter in the point cloud.
+        private void RefreshInteractables()
+        {
+            _pois.Clear();
+            Vector3 me = _body.corePosition;
+            float maxDist = SvrPlugin.ScanRange.Value * SvrSenses.SightMult * (OdMode == 2 || OdMode == 4 ? 2.2f : 1.35f);
+            float maxDistSqr = maxDist * maxDist;
+
+            try
+            {
+                TeleporterInteraction[] tps = FindObjectsOfType<TeleporterInteraction>();
+                for (int i = 0; i < tps.Length; i++)
+                {
+                    TeleporterInteraction tp = tps[i];
+                    if (!tp || !tp.gameObject.activeInHierarchy) continue;
+                    Transform tr = tp.gameObject.transform;
+                    _pois.Add(new Poi
+                    {
+                        Tr = tr,
+                        Pos = tr.position + Vector3.up * 1.2f,
+                        Extents = new Vector3(3.2f, 2.2f, 3.2f),
+                        Col = new Color(1f, 0.28f, 0.95f, 1f),
+                        Tag = "TELEPORTER",
+                        Kind = 4
+                    });
+                }
+            }
+            catch { }
+
+            try
+            {
+                GenericPickupController[] gpcs = FindObjectsOfType<GenericPickupController>();
+                for (int i = 0; i < gpcs.Length; i++)
+                {
+                    GenericPickupController gpc = gpcs[i];
+                    if (!gpc || !gpc.gameObject.activeInHierarchy) continue;
+                    Transform tr = gpc.gameObject.transform;
+                    if ((tr.position - me).sqrMagnitude > maxDistSqr * 1.3f) continue;
+                    _pois.Add(new Poi
+                    {
+                        Tr = tr,
+                        Pos = tr.position + Vector3.up * 0.4f,
+                        Extents = new Vector3(0.65f, 0.65f, 0.65f),
+                        Col = new Color(0.32f, 1f, 0.94f, 1f),
+                        Tag = "ITEM",
+                        Kind = 3
+                    });
+                }
+            }
+            catch { }
+
+            try
+            {
+                PickupPickerController[] ppcs = FindObjectsOfType<PickupPickerController>();
+                for (int i = 0; i < ppcs.Length; i++)
+                {
+                    PickupPickerController ppc = ppcs[i];
+                    if (!ppc || !ppc.gameObject.activeInHierarchy) continue;
+                    Transform tr = ppc.gameObject.transform;
+                    if ((tr.position - me).sqrMagnitude > maxDistSqr * 1.3f) continue;
+                    _pois.Add(new Poi
+                    {
+                        Tr = tr,
+                        Pos = tr.position + Vector3.up * 0.5f,
+                        Extents = new Vector3(0.75f, 0.75f, 0.75f),
+                        Col = new Color(0.35f, 1f, 0.95f, 1f),
+                        Tag = "COMMAND ITEM",
+                        Kind = 3
+                    });
+                }
+            }
+            catch { }
+
+            try
+            {
+                PurchaseInteraction[] pis = FindObjectsOfType<PurchaseInteraction>();
+                for (int i = 0; i < pis.Length; i++)
+                {
+                    PurchaseInteraction pi = pis[i];
+                    if (!IsPurchaseOpen(pi)) continue;
+                    if (pi.GetComponentInParent<TeleporterInteraction>()) continue;
+                    Transform tr = pi.gameObject.transform;
+                    if ((tr.position - me).sqrMagnitude > maxDistSqr) continue;
+                    string tag; Color col; int kind;
+                    ClassifyInteractable(pi.gameObject, out tag, out col, out kind);
+                    Vector3 ext = kind == 1 ? new Vector3(1.1f, 1.8f, 1.1f) : new Vector3(1.1f, 0.95f, 0.85f);
+                    Collider c = pi.GetComponentInChildren<Collider>();
+                    if (c) ext = Vector3.Max(new Vector3(0.55f, 0.55f, 0.55f), Vector3.Min(c.bounds.extents, new Vector3(2.5f, 3.0f, 2.5f)));
+                    _pois.Add(new Poi
+                    {
+                        Tr = tr,
+                        Pos = c ? c.bounds.center : tr.position + Vector3.up * 0.8f,
+                        Extents = ext,
+                        Col = col,
+                        Tag = tag,
+                        Kind = kind
+                    });
+                }
+            }
+            catch { }
+
+            try
+            {
+                BarrelInteraction[] bis = FindObjectsOfType<BarrelInteraction>();
+                for (int i = 0; i < bis.Length; i++)
+                {
+                    BarrelInteraction bi = bis[i];
+                    if (!IsBarrelOpen(bi)) continue;
+                    Transform tr = bi.gameObject.transform;
+                    if ((tr.position - me).sqrMagnitude > maxDistSqr * 0.75f) continue;
+                    _pois.Add(new Poi
+                    {
+                        Tr = tr,
+                        Pos = tr.position + Vector3.up * 0.65f,
+                        Extents = new Vector3(0.6f, 0.75f, 0.6f),
+                        Col = new Color(1f, 0.72f, 0.2f, 1f),
+                        Tag = "BARREL",
+                        Kind = 2
+                    });
+                }
+            }
+            catch { }
+        }
+
+        private void ScanInteractables(bool burst)
+        {
+            float now = Time.time;
+            if (now >= _nextPoiRefresh)
+            {
+                _nextPoiRefresh = now + 0.35f;
+                RefreshInteractables();
+            }
+            if (!burst && now < _nextPoiPaint) return;
+            _nextPoiPaint = now + (OdMode == 2 ? 0.045f : 0.075f);
+
+            Vector3 me = _body.corePosition;
+            float baseRange = SvrPlugin.ScanRange.Value * SvrSenses.SightMult;
+            float maxRange = baseRange * (OdMode == 2 ? 2.0f : (OdMode == 4 ? 1.55f : 1.25f));
+            int mult = (burst ? 3 : 1) * (OdMode == 2 ? 2 : 1);
+            float life = SvrPlugin.DotLife.Value * 0.55f;
+
+            for (int i = 0; i < _pois.Count; i++)
+            {
+                Poi p = _pois[i];
+                if (!p.Tr || !p.Tr.gameObject.activeInHierarchy) continue;
+                Vector3 pos = p.Pos;
+                float dist = Vector3.Distance(me, pos);
+
+                if (p.Kind == 4) // TELEPORTER: always paint out to 240m with base ring + tall vertical beacon spire
+                {
+                    if (dist > 240f) continue;
+                    int ringPts = 14 * mult;
+                    for (int r = 0; r < ringPts; r++)
+                    {
+                        float ang = (r / (float)ringPts) * 6.28318f + now * 1.4f;
+                        float rad = 3.2f + 0.4f * Mathf.Sin(now * 3f + r);
+                        Vector3 rp = p.Tr.position + new Vector3(Mathf.Cos(ang) * rad, 0.25f + Random.value * 0.6f, Mathf.Sin(ang) * rad);
+                        Color tc = (r & 1) == 0 ? new Color(1f, 0.28f, 0.95f, 1f) : new Color(0.2f, 0.95f, 1f, 1f);
+                        AddDot(rp, tc, life * 1.2f, true);
+                    }
+                    int spirePts = 10 * mult;
+                    for (int s = 0; s < spirePts; s++)
+                    {
+                        float h = Random.Range(0.5f, 16f);
+                        Vector3 sp = p.Tr.position + new Vector3(Random.Range(-0.45f, 0.45f), h, Random.Range(-0.45f, 0.45f));
+                        AddDot(sp, new Color(1f, 0.35f, 0.98f, 1f), life, true);
+                    }
+                    continue;
+                }
+
+                if (dist > maxRange) continue;
+
+                // Paint 3D bounding-box wireframe/surface silhouette dots so the chest/item/shrine shape is unmistakable
+                Vector3 e = p.Extents;
+                int boxPts = (p.Kind == 3 ? 8 : (p.Kind == 2 ? 5 : 9)) * mult;
+                for (int b = 0; b < boxPts; b++)
+                {
+                    // Pick points along edges/faces of the bounding box
+                    float sx = Random.value < 0.5f ? -1f : 1f;
+                    float sy = Random.value < 0.5f ? -1f : 1f;
+                    float sz = Random.value < 0.5f ? -1f : 1f;
+                    int axis = b % 3;
+                    Vector3 offset = axis == 0
+                        ? new Vector3(Random.Range(-e.x, e.x), sy * e.y, sz * e.z)
+                        : (axis == 1
+                            ? new Vector3(sx * e.x, Random.Range(-e.y, e.y), sz * e.z)
+                            : new Vector3(sx * e.x, sy * e.y, Random.Range(-e.z, e.z)));
+                    AddDot(pos + offset, p.Col, life, true);
+                }
+
+                // Vertical beacon plume above items and chests so they stand out above ground clutter
+                int plumePts = (p.Kind == 3 ? 6 : 3) * mult;
+                float plumeHeight = p.Kind == 3 ? 4.2f : (p.Kind == 1 ? 3.0f : 2.2f);
+                for (int v = 0; v < plumePts; v++)
+                {
+                    float h = Random.Range(e.y, e.y + plumeHeight);
+                    AddDot(pos + new Vector3(Random.Range(-0.12f, 0.12f), h, Random.Range(-0.12f, 0.12f)), p.Col, life * 0.85f, true);
+                }
+            }
+        }
+
+        // The always-on scanner. Each mode (Q / E) has a distinct, high-impact geometry and range profile.
         private void Scan(float dt)
         {
             if (!_input) return;
             float prox = _demon.Proximity(_body.corePosition);
             if (prox > 0.2f && Random.value < prox * 0.85f) return;      // the suit's scanner stutters and drops frames near it
             float sight = SvrSenses.SightMult;
-            float frames = Mathf.Clamp(dt * 60f, 0.5f, 3f);
-            int rays = Mathf.RoundToInt(SvrPlugin.RaysPerFrame.Value * frames * sight * (1f - 0.5f * prox));
+            float frames = Mathf.Clamp(dt * 60f, 0.5f, 4f);
+            int baseRays = Mathf.RoundToInt(SvrPlugin.RaysPerFrame.Value * frames * sight * (1f - 0.5f * prox));
             float range = SvrPlugin.ScanRange.Value * sight;
             Vector3 o = _input.aimOrigin;
             Vector3 aim = _input.aimDirection;
             float life = SvrPlugin.DotLife.Value * (sight < 1f ? 0.7f : 1f);
             switch (OdMode)
             {
-                case 1:     // SWEEP: a lighthouse beam that circles her, plus a little ahead
-                    _scanYaw += 230f * dt;
+                case 1:     // SWEEP: Twin opposing 360 radar walls + expanding ground sonar ring + forward cone
+                {
+                    int rays = Mathf.RoundToInt(baseRays * 1.55f);
+                    _scanYaw += 310f * dt;
+                    _sweepRing = (_sweepRing + dt * 0.85f) % 1f;
+                    float ringYawBase = Time.time * 90f;
                     for (int i = 0; i < rays; i++)
                     {
                         _spin++;
-                        if (i % 4 == 0) { float f0 = ((_spin % 257) + Random.value) / 257f; Cast(o, Cone(aim, 30f * Mathf.Sqrt(f0), _spin * 2.39996f), range, life, false); continue; }
-                        float yaw = _scanYaw + Random.Range(-2.5f, 2.5f);
-                        float pitch = Mathf.Lerp(-55f, 65f, Random.value);
-                        Cast(o, Quaternion.Euler(-pitch, yaw, 0f) * Vector3.forward, range * 1.1f, life * 1.3f, false);
+                        int mod = i % 5;
+                        if (mod == 0)
+                        {
+                            // Forward awareness cone
+                            float f0 = ((_spin % 257) + Random.value) / 257f;
+                            Cast(o, Cone(aim, 38f * Mathf.Sqrt(f0), _spin * 2.39996f), range * 1.25f, life, false);
+                        }
+                        else if (mod == 1)
+                        {
+                            // Expanding horizontal sonar floor/wall ring sweeping outward
+                            float rYaw = ringYawBase + (i / (float)rays) * 360f + Random.Range(-4f, 4f);
+                            float rPitch = Mathf.Lerp(-48f, 18f, _sweepRing) + Random.Range(-3f, 3f);
+                            Cast(o, Quaternion.Euler(-rPitch, rYaw, 0f) * Vector3.forward, range * 1.45f, life * 1.25f, true);
+                        }
+                        else
+                        {
+                            // Twin opposing vertical radar walls (front wall + rear wall 180 deg apart)
+                            float wallOffset = (i & 1) == 0 ? 0f : 180f;
+                            float yaw = _scanYaw + wallOffset + Random.Range(-3.5f, 3.5f);
+                            float pitch = Mathf.Lerp(-65f, 72f, Random.value);
+                            Cast(o, Quaternion.Euler(-pitch, yaw, 0f) * Vector3.forward, range * 1.5f, life * 1.35f, false);
+                        }
                     }
                     break;
-                case 2:     // WIDE: an even bubble all around her, shorter range
+                }
+                case 2:     // WIDE: Massive 360 omni-dome + concentric latitude bands + long-range loot hunter
+                {
+                    int rays = Mathf.RoundToInt(baseRays * 1.65f);
                     for (int i = 0; i < rays; i++)
                     {
-                        Vector3 d = Random.onUnitSphere;
-                        d.y *= 0.6f;
-                        Cast(o, d.normalized, range * 0.55f, life, false);
+                        _spin++;
+                        if (i % 3 == 0)
+                        {
+                            // Structured 360 horizontal & dome bands so walls and rooms read crisply all around her
+                            float bandYaw = (_spin * 7.13f) % 360f;
+                            float bandPitch = Mathf.Lerp(-50f, 55f, ((_spin / 36) % 12) / 11f) + Random.Range(-3f, 3f);
+                            Cast(o, Quaternion.Euler(-bandPitch, bandYaw, 0f) * Vector3.forward, range * 1.2f, life * 1.15f, false);
+                        }
+                        else
+                        {
+                            Vector3 d = Random.onUnitSphere;
+                            d.y *= 0.72f;
+                            Cast(o, d.normalized, range * 1.15f, life, false);
+                        }
                     }
                     break;
-                case 3:     // FOCUS: a narrow, dense, long beam
+                }
+                case 3:     // FOCUS: Ultra-long high-density spotlight + outer halo + automatic long-range target lock
+                {
+                    int rays = Mathf.RoundToInt(baseRays * 1.75f);
                     for (int i = 0; i < rays; i++)
                     {
                         _spin++;
                         float f1 = ((_spin % 257) + Random.value) / 257f;
-                        Cast(o, Cone(aim, 13f * Mathf.Sqrt(f1), _spin * 2.39996f), range * 1.8f, life * 1.2f, false);
+                        // 70% ultra-tight 14-deg sniper core (2.4x range), 30% 34-deg mid halo (1.5x range)
+                        float spread = (i % 10 < 7) ? 14f * Mathf.Sqrt(f1) : 34f * Mathf.Sqrt(f1);
+                        float r = (i % 10 < 7) ? range * 2.4f : range * 1.5f;
+                        Cast(o, Cone(aim, spread, _spin * 2.39996f), r, life * 1.35f, i % 6 == 0);
                     }
-                    break;
-                case 4:     // ECHO: a shorter cone, and nearby enemies ping through walls every second
-                    for (int i = 0; i < (rays * 3) / 4; i++)
+                    if (Time.time >= _focusLockNext)
                     {
-                        _spin++;
-                        float f2 = ((_spin % 257) + Random.value) / 257f;
-                        Cast(o, Cone(aim, 45f * Mathf.Sqrt(f2), _spin * 2.39996f), range * 0.7f, life, false);
-                    }
-                    if (Time.time >= _echoPing)
-                    {
-                        _echoPing = Time.time + 1.1f;
+                        _focusLockNext = Time.time + 0.35f;
                         try
                         {
-                            SphereSearch s = new SphereSearch { origin = _body.corePosition, radius = 45f * sight, mask = LayerIndex.entityPrecise.mask };
-                            s.RefreshCandidates();
-                            s.FilterCandidatesByHurtBoxTeam(TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex));
-                            s.FilterCandidatesByDistinctHurtBoxEntities();
-                            foreach (HurtBox hb in s.GetHurtBoxes())
-                                if (hb && hb.healthComponent && hb.healthComponent.alive && !_tracked.Contains(hb.healthComponent) && _tracked.Count < 30)
+                            BullseyeSearch bs = new BullseyeSearch
+                            {
+                                searchOrigin = o,
+                                searchDirection = aim,
+                                maxDistanceFilter = range * 2.2f,
+                                maxAngleFilter = 22f,
+                                teamMaskFilter = TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex),
+                                filterByLoS = false,
+                                sortMode = BullseyeSearch.SortMode.Angle
+                            };
+                            bs.RefreshCandidates();
+                            foreach (HurtBox hb in bs.GetResults())
+                                if (hb && hb.healthComponent && hb.healthComponent.alive && !_tracked.Contains(hb.healthComponent) && _tracked.Count < 35)
                                 {
                                     _tracked.Add(hb.healthComponent);
-                                    _trackedUntil.Add(Time.time + 0.45f);
+                                    _trackedUntil.Add(Time.time + 0.65f);
                                 }
                         }
                         catch { }
                     }
                     break;
-                default:    // CONE: the spiral cone ahead, a little all around her
+                }
+                case 4:     // ECHO: Wide cone + seismic ground rings + 110m wall-penetrating enemy/boss/demon sonar
+                {
+                    int rays = Mathf.RoundToInt(baseRays * 1.45f);
                     for (int i = 0; i < rays; i++)
                     {
                         _spin++;
-                        if (Random.value < 0.18f) { Cast(o, Random.onUnitSphere, range * 0.35f, life, false); continue; }
-                        float f = ((_spin % 257) + Random.value) / 257f;
-                        Cast(o, Cone(aim, 52f * Mathf.Sqrt(f), _spin * 2.39996f), range, life, false);
+                        if (i % 4 == 0)
+                        {
+                            // Seismic ground/wall ring
+                            float yaw = (_spin * 9.7f) % 360f;
+                            float pitch = Random.Range(-35f, 25f);
+                            Cast(o, Quaternion.Euler(-pitch, yaw, 0f) * Vector3.forward, range * 1.15f, life, false);
+                            continue;
+                        }
+                        float f2 = ((_spin % 257) + Random.value) / 257f;
+                        Cast(o, Cone(aim, 56f * Mathf.Sqrt(f2), _spin * 2.39996f), range * 1.1f, life, false);
+                    }
+                    if (Time.time >= _echoPing)
+                    {
+                        _echoPing = Time.time + 0.55f;
+                        _revealUntil = Mathf.Max(_revealUntil, Time.time + 0.7f); // ECHO also reveals the Shimmer Demon through walls
+                        try
+                        {
+                            SphereSearch s = new SphereSearch { origin = _body.corePosition, radius = 110f * sight, mask = LayerIndex.entityPrecise.mask };
+                            s.RefreshCandidates();
+                            s.FilterCandidatesByHurtBoxTeam(TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex));
+                            s.FilterCandidatesByDistinctHurtBoxEntities();
+                            foreach (HurtBox hb in s.GetHurtBoxes())
+                                if (hb && hb.healthComponent && hb.healthComponent.alive && !_tracked.Contains(hb.healthComponent) && _tracked.Count < 45)
+                                {
+                                    _tracked.Add(hb.healthComponent);
+                                    _trackedUntil.Add(Time.time + 0.75f);
+                                }
+                        }
+                        catch { }
                     }
                     break;
+                }
+                default:    // CONE: Wide 65-degree high-density tactical flood ahead + 360 proximity skirt
+                {
+                    int rays = Mathf.RoundToInt(baseRays * 1.45f);
+                    for (int i = 0; i < rays; i++)
+                    {
+                        _spin++;
+                        if (i % 4 == 0)
+                        {
+                            // 360 close-range room/foot skirt so walls and ledges beside her are always painted
+                            Vector3 d = Random.onUnitSphere;
+                            d.y *= 0.65f;
+                            Cast(o, d.normalized, range * 0.6f, life, false);
+                            continue;
+                        }
+                        float f = ((_spin % 257) + Random.value) / 257f;
+                        Cast(o, Cone(aim, 65f * Mathf.Sqrt(f), _spin * 2.39996f), range * 1.25f, life, false);
+                    }
+                    break;
+                }
             }
         }
 
@@ -837,33 +1366,33 @@ namespace Surveyor
                     for (int s = 0; s < slices; s++)
                     {
                         _sweepYaw += step / slices;
-                        for (int i = 0; i < 52; i++)
+                        for (int i = 0; i < 64; i++)
                         {
-                            float pitch = Mathf.Lerp(-60f, 70f, (i + Random.value) / 52f);
-                            Cast(o, Quaternion.Euler(-pitch, _sweepYaw, 0f) * Vector3.forward, 100f * sight, life, false);
+                            float pitch = Mathf.Lerp(-65f, 72f, (i + Random.value) / 64f);
+                            Cast(o, Quaternion.Euler(-pitch, _sweepYaw, 0f) * Vector3.forward, 130f * sight, life, false);
                         }
                     }
                     break;
                 }
                 case 2:
                 {
-                    int n = Mathf.RoundToInt(520f * Mathf.Clamp(dt * 60f, 0.5f, 3f) * sight);
+                    int n = Mathf.RoundToInt(680f * Mathf.Clamp(dt * 60f, 0.5f, 3f) * sight);
                     for (int i = 0; i < n; i++)
-                        Cast(o, Cone(aim, 6.5f * Mathf.Sqrt(Random.value), Random.value * 6.283f), 170f * sight, life * 1.2f, false);
+                        Cast(o, Cone(aim, 8.5f * Mathf.Sqrt(Random.value), Random.value * 6.283f), 220f * sight, life * 1.3f, true);
                     break;
                 }
                 case 3:
                 {
                     if (Time.time < _echoNext) break;
-                    _echoNext = Time.time + 0.4f;
+                    _echoNext = Time.time + 0.35f;
                     try
                     {
-                        SphereSearch s = new SphereSearch { origin = _body.corePosition, radius = 85f, mask = LayerIndex.entityPrecise.mask };
+                        SphereSearch s = new SphereSearch { origin = _body.corePosition, radius = 140f, mask = LayerIndex.entityPrecise.mask };
                         s.RefreshCandidates();
                         s.FilterCandidatesByHurtBoxTeam(TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex));
                         s.FilterCandidatesByDistinctHurtBoxEntities();
                         foreach (HurtBox hb in s.GetHurtBoxes())
-                            if (hb && hb.healthComponent && hb.healthComponent.alive && !_tracked.Contains(hb.healthComponent) && _tracked.Count < 40)
+                            if (hb && hb.healthComponent && hb.healthComponent.alive && !_tracked.Contains(hb.healthComponent) && _tracked.Count < 50)
                             {
                                 _tracked.Add(hb.healthComponent);
                                 _trackedUntil.Add(_odUntil);
@@ -882,22 +1411,27 @@ namespace Surveyor
             if (!_local || !_body) return;
             if (!Alive) { RestoreCamera(); DropPeekFx(); _peekK = 0f; return; }
 
-            // Peek intensity: snaps on, holds, then fades back to the dark over the last second.
+            // Peek intensity (_peekK): smoothly ramps 0 -> 1 over ~0.35s as the visor lifts, holds at 1 while peeking,
+            // and smoothly ramps 1 -> 0 over ~0.4s as the visor comes back down.
             float now = Time.time;
             float target = 0f;
-            if (Peeking) target = Mathf.Clamp01(0.25f + (now - _peekStart) / 0.18f) * Mathf.Clamp01((_peekUntil - now) / 0.9f + 0.25f);
-            else if (now < _peekUntil + 0.8f) target = 0f;
-            _peekK = Mathf.MoveTowards(_peekK, target, Time.deltaTime * 6f);
+            if (Peeking)
+            {
+                float rem = _peekUntil - now;
+                target = rem > 0.35f ? 1f : Mathf.Clamp01(rem / 0.35f);
+            }
+            float speed = Peeking ? 2.85f : 2.5f;
+            _peekK = Mathf.MoveTowards(_peekK, target, Time.deltaTime * speed);
 
             Camera cam = Cam();
             if (!cam) return;
             _peekCam = cam;
 
-            if (Peeking || _peekK > 0.01f)
+            if (Peeking || _peekK > 0.02f)
             {
-                if (Peeking) RestoreCamera();             // the real world is back
+                RestoreCamera();                          // keep the real world visible throughout the entire transition
                 ApplyPeekFx(cam, _peekK);
-                if (Peeking) return;
+                return;
             }
             else
             {
@@ -1105,15 +1639,21 @@ namespace Surveyor
             if (!cam) return;
             float scale = Screen.height / 1080f;
             Color old = GUI.color;
-            DrawDots(cam, scale);
-            DrawDemon(cam, scale);
+            // Smoothly fade all LiDAR dots, demon points, and world tags from 100% -> 0% as Peek lifts the visor,
+            // and smoothly fade them back from 0% -> 100% as the visor lowers.
+            float dotAlpha = Mathf.SmoothStep(1f, 0f, Mathf.Clamp01(_peekK * 1.15f));
+            DrawDots(cam, scale, dotAlpha);
+            DrawInteractables(cam, scale, dotAlpha);
+            DrawDemon(cam, scale, dotAlpha);
             DrawPeekWash(scale);
             DrawHud(scale);
             GUI.color = old;
         }
 
-        private void DrawDots(Camera cam, float scale)
+        private void DrawDots(Camera cam, float scale, float dotAlpha)
         {
+            if (dotAlpha <= 0.005f) return;
+
             int div = Mathf.Clamp(SvrPlugin.DotDivider.Value, 1, 4);
             int W = Mathf.Max(64, Screen.width / div), H = Mathf.Max(64, Screen.height / div);
             if (_buf == null || _bufW != W || _bufH != H)
@@ -1145,7 +1685,7 @@ namespace Surveyor
                 if (nx < -1f || nx > 1f || ny < -1f || ny > 1f) continue;
                 if (voidOn && _demon.InVoid(p, 2.2f)) continue;
                 float fade = 1f - age / d.Life;
-                float a = d.C.a * fade;
+                float a = d.C.a * fade * dotAlpha;
                 Color32 c = new Color32((byte)(d.C.r * 255f), (byte)(d.C.g * 255f), (byte)(d.C.b * 255f), (byte)(Mathf.Clamp01(a) * 255f));
                 int ix = (int)((nx * 0.5f + 0.5f) * W), iy = (int)((ny * 0.5f + 0.5f) * H);
                 int sz = (d.Big || w < 9f) ? 2 : 1;
@@ -1163,16 +1703,80 @@ namespace Surveyor
             }
             _buf.SetPixels32(_pix);
             _buf.Apply(false);
-            GUI.color = new Color(1f, 1f, 1f, Mathf.Lerp(1f, 0.3f, _peekK));
+            GUI.color = new Color(1f, 1f, 1f, dotAlpha);
             GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _buf, ScaleMode.StretchToFill, true);
         }
 
-        private void DrawDemon(Camera cam, float scale)
+        private void DrawInteractables(Camera cam, float scale, float dotAlpha)
         {
-            if (!_demon.Active) return;
+            if (dotAlpha <= 0.005f || _pois.Count == 0) return;
+            if (_label == null)
+            {
+                _label = new GUIStyle(GUI.skin.label);
+                _label.fontStyle = FontStyle.Bold;
+                _label.alignment = TextAnchor.MiddleLeft;
+            }
+            int origFs = _label.fontSize;
+            _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(12.5f * scale));
+            Texture2D white = Texture2D.whiteTexture;
+
+            Vector3 me = _body.corePosition;
+            float baseRange = SvrPlugin.ScanRange.Value * SvrSenses.SightMult;
+            float tagRange = baseRange * (OdMode == 2 ? 1.85f : (OdMode == 4 ? 1.4f : 1.05f));
+            int drawn = 0;
+
+            for (int i = 0; i < _pois.Count; i++)
+            {
+                Poi p = _pois[i];
+                if (!p.Tr || !p.Tr.gameObject.activeInHierarchy) continue;
+                float dist = Vector3.Distance(me, p.Pos);
+                float maxD = p.Kind == 4 ? 220f : (p.Kind == 2 ? tagRange * 0.65f : tagRange);
+                if (dist > maxD) continue;
+                if (p.Kind != 4 && drawn >= 18) continue;
+
+                Vector3 sp = cam.WorldToScreenPoint(p.Pos + Vector3.up * (p.Extents.y + 0.35f));
+                if (sp.z <= 0.5f) continue;
+                float sx = sp.x;
+                float sy = Screen.height - sp.y;
+                if (sx < 20f || sx > Screen.width - 20f || sy < 20f || sy > Screen.height - 20f) continue;
+
+                float distFade = p.Kind == 4 ? 0.95f : Mathf.Clamp01(1.15f - dist / maxD);
+                float a = distFade * dotAlpha * (p.Kind == 4 ? 0.95f : 0.85f);
+                if (a <= 0.04f) continue;
+
+                drawn++;
+                float bSize = (p.Kind == 4 ? 14f : (p.Kind == 3 ? 9f : 11f)) * scale;
+                float thick = Mathf.Max(1.5f, 2f * scale);
+                Color bc = new Color(p.Col.r, p.Col.g, p.Col.b, a);
+                GUI.color = bc;
+
+                // Corner brackets around the interactable/item
+                GUI.DrawTexture(new Rect(sx - bSize, sy - bSize, bSize * 0.45f, thick), white);
+                GUI.DrawTexture(new Rect(sx - bSize, sy - bSize, thick, bSize * 0.45f), white);
+                GUI.DrawTexture(new Rect(sx + bSize * 0.55f, sy - bSize, bSize * 0.45f, thick), white);
+                GUI.DrawTexture(new Rect(sx + bSize - thick, sy - bSize, thick, bSize * 0.45f), white);
+                GUI.DrawTexture(new Rect(sx - bSize, sy + bSize - thick, bSize * 0.45f, thick), white);
+                GUI.DrawTexture(new Rect(sx - bSize, sy + bSize * 0.55f, thick, bSize * 0.45f), white);
+                GUI.DrawTexture(new Rect(sx + bSize * 0.55f, sy + bSize - thick, bSize * 0.45f, thick), white);
+                GUI.DrawTexture(new Rect(sx + bSize - thick, sy + bSize * 0.55f, thick, bSize * 0.45f), white);
+
+                string txt = p.Tag + " " + Mathf.RoundToInt(dist) + "m";
+                float tw = (txt.Length * 7.8f + 10f) * scale;
+                float th = 18f * scale;
+                GUI.color = new Color(0f, 0f, 0f, a * 0.65f);
+                GUI.DrawTexture(new Rect(sx + bSize + 4f * scale, sy - th * 0.5f, tw, th), white);
+                GUI.color = bc;
+                GUI.Label(new Rect(sx + bSize + 8f * scale, sy - th * 0.5f, tw, th), txt, _label);
+            }
+            _label.fontSize = origFs;
+        }
+
+        private void DrawDemon(Camera cam, float scale, float dotAlpha)
+        {
+            if (!_demon.Active || dotAlpha <= 0.005f) return;
             bool revealed = Time.time < _revealUntil;
             bool blocked = !revealed && Physics.Linecast(cam.transform.position, _demon.Center, LayerIndex.world.mask, QueryTriggerInteraction.Ignore);
-            float vis = blocked ? 0.18f : 0.95f;
+            float vis = (blocked ? 0.18f : 0.95f) * dotAlpha;
             _demon.FillWorld(_demonPoints, Time.time);
 
             // afterimages: where it was a moment ago, so its movement smears
@@ -1218,16 +1822,25 @@ namespace Surveyor
             }
         }
 
-        // Blown-out visor-off look: white wash, light bleeding in from the edges, streaks, and a burn-in after it ends.
+        // Blown-out visor-off look: white wash, light bleeding in from the edges, streaks, and a smooth dark fade when closing.
         private void DrawPeekWash(float scale)
         {
             float now = Time.time;
             float k = _peekK;
-            float after = (!Peeking && now < _peekUntil + 0.8f) ? 1f - (now - _peekUntil) / 0.8f : 0f;
-            if (k < 0.02f && after <= 0f) return;
+            if (k < 0.01f) return;
             Texture2D white = Texture2D.whiteTexture;
+
+            // While the visor is closing back down (!Peeking && k > 0), smoothly darken the screen to black
+            // as the LiDAR dots smoothly fade back in, so there is never a hard cut.
+            if (!Peeking && SvrPlugin.DarkWorld.Value)
+            {
+                float darkCurtain = Mathf.SmoothStep(0f, 0.95f, 1f - k);
+                GUI.color = new Color(0f, 0f, 0f, darkCurtain);
+                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), white);
+            }
+
             float flick = 0.88f + 0.12f * Mathf.Sin(now * 23f) + (Random.value < 0.04f ? 0.25f : 0f);
-            float wash = (0.22f * k + 0.45f * after) * flick;
+            float wash = 0.26f * k * flick;
             GUI.color = new Color(1f, 0.97f, 0.9f, Mathf.Clamp01(wash));
             GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), white);
             for (int i = 0; i < 7; i++)
@@ -1295,20 +1908,39 @@ namespace Surveyor
             SkillLocator skl = _body.skillLocator;
             bool hasOd = skl && skl.special && skl.special.skillDef && skl.special.skillDef.skillName == SvrPlugin.T + "OVERDRIVE";
             {
-                // scan mode readout (always): name, five pips, the keys; flashes when changed
-                bool flash = Time.time - _modeFlash < 0.6f;
-                float sx = Screen.width * 0.03f, sy = Screen.height * 0.712f;
+                // scan mode readout (always): name, subtitle, five pips, the keys; flashes when changed
+                int mIdx = OdMode % OdNames.Length;
+                float sinceSwitch = Time.time - _modeFlash;
+                bool flash = sinceSwitch < 0.75f;
+                float sx = Screen.width * 0.03f, sy = Screen.height * 0.692f;
                 GUI.color = flash ? new Color(1f, 1f, 1f, 1f) : (OverdriveOn ? new Color(1f, 0.9f, 0.3f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.95f));
                 string keys = "[" + SvrPlugin.ScanPrevKey.Value.ToUpperInvariant() + "/" + SvrPlugin.ScanNextKey.Value.ToUpperInvariant() + "]";
-                GUI.Label(new Rect(sx, sy, 420f * scale, 24f * scale), "SCAN: " + OdNames[OdMode % OdNames.Length] + "  " + keys + (hasOd ? "   R = OVERDRIVE" : ""), _label);
+                GUI.Label(new Rect(sx, sy, 480f * scale, 24f * scale), "SCAN: " + OdNames[mIdx] + "  " + keys + (hasOd ? "   R = OVERDRIVE" : ""), _label);
+                GUI.color = new Color(0.75f, 0.98f, 0.85f, 0.85f);
+                GUI.Label(new Rect(sx, sy + 18f * scale, 520f * scale, 22f * scale), OdDescs[mIdx], _label);
                 for (int i = 0; i < OdNames.Length; i++)
                 {
-                    GUI.color = i == OdMode ? new Color(0.6f, 1f, 0.4f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.25f);
-                    GUI.DrawTexture(new Rect(sx + i * 16f * scale, sy - 8f * scale, 12f * scale, 5f * scale), white);
+                    GUI.color = i == mIdx ? new Color(0.6f, 1f, 0.4f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.25f);
+                    GUI.DrawTexture(new Rect(sx + i * 18f * scale, sy - 8f * scale, 14f * scale, 5f * scale), white);
                 }
                 float pr = _peekReady - Time.time;
                 GUI.color = new Color(0.9f, 0.95f, 1f, 0.85f);
-                GUI.Label(new Rect(sx, sy + 20f * scale, 420f * scale, 24f * scale), "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "]" + (pr > 0f ? "  " + pr.ToString("0") + "s" : "  ready"), _label);
+                GUI.Label(new Rect(sx, sy + 36f * scale, 420f * scale, 24f * scale), "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "]" + (pr > 0f ? "  " + pr.ToString("0") + "s" : "  ready"), _label);
+
+                // Top-center banner when Q / E switches scanner mode
+                if (sinceSwitch < 1.35f)
+                {
+                    float bAlpha = Mathf.Clamp01(1.35f - sinceSwitch);
+                    float bw = 460f * scale, bh = 46f * scale;
+                    float bx = Screen.width * 0.5f - bw * 0.5f, by = Screen.height * 0.16f;
+                    GUI.color = new Color(0f, 0f, 0f, 0.7f * bAlpha);
+                    GUI.DrawTexture(new Rect(bx, by, bw, bh), white);
+                    GUI.color = new Color(0.6f, 1f, 0.4f, 0.95f * bAlpha);
+                    GUI.DrawTexture(new Rect(bx, by, bw, 2.5f * scale), white);
+                    GUI.Label(new Rect(bx + 14f * scale, by + 4f * scale, bw - 20f * scale, 22f * scale), "SCANNER MODE: " + OdNames[mIdx], _label);
+                    GUI.color = new Color(0.85f, 1f, 0.9f, 0.9f * bAlpha);
+                    GUI.Label(new Rect(bx + 14f * scale, by + 22f * scale, bw - 20f * scale, 22f * scale), OdDescs[mIdx], _label);
+                }
             }
             if (Peeking)
             {

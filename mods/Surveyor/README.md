@@ -24,9 +24,9 @@ Source: `src/Surveyor/Model/blender_surveyor.py` (run it in Blender; it writes `
 - v0.2: the cloud is **packed tight** (up to 40000 dots, drawn as a pixel buffer, rays spiral over a wide cone so it fills in evenly) and dots last 9 s. Config `DotResolutionDivider_v1` = chunkiness (1 finest, slowest).
 - Bottom-left: four status boxes (SEE, HEAR, TOUCH, BAL). Middle of the screen: a SPOOL bar while the barrels turn.
 
-## Keys (v0.4.2)
-- **Q / E**: switch scan mode at any time: CONE (spiral ahead), SWEEP (lighthouse beam around you), WIDE (bubble all around, short range), FOCUS (narrow long dense beam), ECHO (short cone + enemies within 45 m ping through walls). The Overdrive skill pushes the current mode. Config `ScanPrevKey_v1` / `ScanNextKey_v1` (Q and E are also the game's equipment and interact keys).
-- **F**: Peek (visor off), whatever is in the utility slot. Config `PeekKey_v1`.
+## Keys (v0.4.3)
+- **Q / E**: switch scan mode at any time (with an immediate burst scan): CONE (wide tactical flood + 360 proximity skirt), SWEEP (twin 360 radar walls + expanding floor sonar rings), WIDE (360 omni-dome + long-range loot/chest hunter), FOCUS (ultra-long high-density spotlight + auto target lock), ECHO (seismic wall-sonar for enemies, bosses & the Shimmer Demon). Chests, shrines, shops, barrels, dropped items, and the Teleporter are painted in distinct colours with HUD brackets.
+- **F**: Peek (visor off), whatever is in the utility slot. Smoothly fades LiDAR dots to 0% as the visor flips up and fades them back in when it closes. Config `PeekKey_v1`.
 
 ## Skills
 | Slot | Skill | What it does |
