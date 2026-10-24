@@ -233,6 +233,8 @@ namespace Surveyor
             BoneInfo oHips = null;
             bool haveHips = game.TryGetValue("hips", out gHips) && Bones.TryGetValue("hips", out oHips);
 
+            GameObject handGo = null;
+            Vector3 handOrigin = Vector3.zero;
             foreach (PartData part in _parts)
             {
                 string boneName = part.Bone, tag = null;
@@ -294,8 +296,20 @@ namespace Surveyor
                 go.transform.localRotation = local.rotation;
                 go.transform.localScale = local.lossyScale;
                 AddMesh(go, part, origin, 0f, mat, ShadowCastingMode.On, false, stretchDir, stretch);
+                if (part.Bone == "hand.R") { handGo = go; handOrigin = origin; }
                 if (tag != null) go.AddComponent<SvrRigPart>().Setup(tag, pivotAxis);
             }
+
+            // the foregrip the left hand reaches for, and the heavy-gunner motion layered on the animations
+            Transform grip = null;
+            if (handGo && Bones.TryGetValue("foregrip", out BoneInfo fg))
+            {
+                GameObject g = new GameObject("SvrForegrip");
+                g.transform.SetParent(handGo.transform, false);
+                g.transform.localPosition = fg.Head - handOrigin;
+                grip = g.transform;
+            }
+            model.gameObject.AddComponent<SvrHeavy>().Setup(game, grip);
 
             foreach (Renderer r in originals)       // hide Commando (item displays added later still show)
                 if (r) r.forceRenderingOff = true;

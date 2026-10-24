@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.3.0";
+        public const string PluginVersion = "0.4.0";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -48,7 +48,8 @@ namespace Surveyor
         public static ConfigEntry<float> PeekSeconds, PeekCooldown, OverdriveCooldown, SweepSeconds, FocusSeconds, EchoSeconds;
         public static ConfigEntry<string> ModeKey;
         public static ConfigEntry<bool> UseCustomModel;
-        public static ConfigEntry<float> ModelScale;
+        public static ConfigEntry<float> ModelScale, HeavyStepShake;
+        public static ConfigEntry<bool> HeavyMotion;
         public static ConfigEntry<bool> DemonEnabled;
         public static ConfigEntry<float> DemonFirstSpawn, DemonProwlSpeed, DemonHuntSpeed, DemonRespawn, DemonContactRange;
         public static ConfigEntry<float> MinigunPushSpool, LanceStagger, PulseStagger, MinigunStagger;
@@ -127,6 +128,8 @@ namespace Surveyor
             EchoSeconds = Config.Bind("8. Peek and Overdrive", "EchoSeconds_v1", 8f, "ECHO mode: seconds enemies (and the Shimmer Demon) are lit through walls.");
             UseCustomModel = Config.Bind("9. Model", "UseCustomModel_v1", true, "Use the Surveyor's own 3D model (surveyor_model.bin.gz next to the dll). Off = Commando with a green tint.");
             ModelScale = Config.Bind("9. Model", "ModelScale_v1", 1.08f, "Size of the armoured suit on the Commando skeleton (1 = fitted to the skeleton).");
+            HeavyMotion = Config.Bind("9. Model", "HeavyMotion_v1", true, "Heavy-gunner body language: both hands on the gun, gun lag, lean, sway, recoil.");
+            HeavyStepShake = Config.Bind("9. Model", "StepShake_v1", 1f, "Camera thud on each heavy step and landing (0 = off).");
             ModeKey = Config.Bind("8. Peek and Overdrive", "ModeKey", "V", "Key that cycles the Overdrive mode: SWEEP, BURST, FOCUS, ECHO.");
 
             DemonEnabled = Config.Bind("6. Shimmer Demon", "Enabled", true, "The Shimmer Demon stalks the Surveyor (only she can see it).");
@@ -227,6 +230,8 @@ namespace Surveyor
             body.levelDamage = 2.4f;
             body.baseArmor = 20f;
             body.baseMoveSpeed = 6.8f;
+            body.baseAcceleration = 48f;           // heavy: slower to get going and to stop (Commando 80)
+            body.baseJumpPower = 13.5f;
             Texture portrait = SvrIcons.Texture("portrait");
             if (portrait) body.portraitIcon = portrait;
 
