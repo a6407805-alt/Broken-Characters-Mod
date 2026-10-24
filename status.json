@@ -1,0 +1,130 @@
+{
+  "characters": [
+    {
+      "name": "CARMAX SPECIALIST",
+      "status": "yellow",
+      "match": [
+        "carmax"
+      ],
+      "version": "1.0.0"
+    },
+    {
+      "name": "AUDI TECHNICIAN",
+      "status": "yellow",
+      "match": [
+        "auditechnician",
+        "auditech"
+      ],
+      "version": "1.0.1"
+    },
+    {
+      "name": "BILLY BIGSUITS",
+      "status": "green",
+      "match": [
+        "billybigsuits",
+        "billy"
+      ],
+      "version": "1.0.2"
+    },
+    {
+      "name": "WILBUR",
+      "status": "yellow",
+      "match": [
+        "wilbur"
+      ],
+      "version": "1.0.0"
+    },
+    {
+      "name": "BROTHER",
+      "status": "green",
+      "match": [
+        "oatsbrother",
+        "brother"
+      ],
+      "version": "1.0.2"
+    },
+    {
+      "name": "ASHWING DRAKE",
+      "status": "yellow",
+      "match": [
+        "ashwing"
+      ],
+      "version": "1.8.4"
+    },
+    {
+      "name": "NIDUS",
+      "status": "yellow",
+      "match": [
+        "nidus"
+      ],
+      "version": "1.0.9"
+    },
+    {
+      "name": "PHANTOM ASSASSIN",
+      "status": "yellow",
+      "match": [
+        "phantomassassin",
+        "phantom"
+      ],
+      "version": "1.0.3"
+    },
+    {
+      "name": "INFESTED GENERAL",
+      "status": "yellow",
+      "match": [
+        "infestedgeneral"
+      ],
+      "version": "1.1.11"
+    },
+    {
+      "name": "GRAVITOS",
+      "status": "yellow",
+      "match": [
+        "gravitos"
+      ],
+      "version": "1.2.0"
+    },
+    {
+      "name": "CLAY REBEL",
+      "status": "green",
+      "match": [
+        "clayrebel",
+        "rebel"
+      ],
+      "version": "1.0.1"
+    },
+    {
+      "name": "EMBERWARDEN",
+      "status": "yellow",
+      "match": [
+        "emberwarden"
+      ],
+      "version": "1.0.0"
+    },
+    {
+      "name": "REAPER",
+      "status": "green",
+      "match": [
+        "reaper"
+      ],
+      "version": "1.0.0"
+    },
+    {
+      "name": "THE DUELIST",
+      "status": "yellow",
+      "match": [
+        "duelist"
+      ],
+      "version": "1.0.0"
+    },
+    {
+      "name": "THE SURVEYOR",
+      "status": "active",
+      "match": [
+        "surveyor"
+      ],
+      "version": "0.5.3",
+      "note": "Active WIP (v0.5.3): Full UI visibility restored (cullingMask UI, darkCurtain removed), blue ping circles removed, 3D chest/item/enemy wireframe holograms rendered cleanly"
+    }
+  ]
+}

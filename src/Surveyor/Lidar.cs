@@ -1602,18 +1602,6 @@ namespace Surveyor
         private string _upgradeToast = "";
         private float _upgradeToastUntil = -10f;
 
-        // Expanding LiDAR Pulse Waves (triggers the Hologram Discovery Loop & Skeletal Rig Sweep as the wave washes over targets)
-        private struct LidarWave
-        {
-            public Vector3 Origin;
-            public float Radius;
-            public float MaxRadius;
-            public float Speed;
-            public Color Col;
-        }
-        private readonly List<LidarWave> _waves = new List<LidarWave>(8);
-        private float _nextAutoWave;
-
         // Real-time Animated Skeletal & Skinned-Mesh Rigs for characters, players, monsters, and bosses
         private readonly Dictionary<int, SvrSkeletalRig> _skeletalRigs = new Dictionary<int, SvrSkeletalRig>(64);
         private Mesh _sharedBakeMesh;
@@ -2296,19 +2284,6 @@ namespace Surveyor
             return t;
         }
 
-        private void SpawnPulseWave(Vector3 origin, float maxRadius, float speed, Color col)
-        {
-            if (_waves.Count >= 6) _waves.RemoveAt(0);
-            _waves.Add(new LidarWave
-            {
-                Origin = origin,
-                Radius = 1.2f,
-                MaxRadius = maxRadius,
-                Speed = speed,
-                Col = col
-            });
-        }
-
         private SvrSkeletalRig GetOrBuildSkeletalRig(CharacterBody b)
         {
             if (!b) return null;
@@ -2523,7 +2498,6 @@ namespace Surveyor
             _pulseLeft = Mathf.RoundToInt(1500f * SvrSenses.SightMult);
             _demon.Pulse(at, radius);
             SuppressStageFogAndColorGrading(true);
-            SpawnPulseWave(at, radius * 1.35f, Mathf.Max(36f, radius * 1.6f), new Color(0.22f, 0.96f, 1f, 1f));
             try
             {
                 SphereSearch s = new SphereSearch { origin = at, radius = radius, mask = LayerIndex.entityPrecise.mask };
@@ -2548,7 +2522,6 @@ namespace Surveyor
             _odStart = Time.time;
             Vector3 at = _body.corePosition + Vector3.up * 0.8f;
             SuppressStageFogAndColorGrading(true);
-            SpawnPulseWave(at, 95f * SvrSenses.SightMult, 65f, mode == 1 ? new Color(1f, 0.45f, 0.16f, 1f) : new Color(0.22f, 0.95f, 1f, 1f));
             switch (kind)
             {
                 case 0:     // SWEEP: a tall scan line spins all the way around her
@@ -2606,8 +2579,6 @@ namespace Surveyor
                 _pulseAt = _body.corePosition;
                 _pulseRange = SvrPlugin.ScanRange.Value * SvrSenses.SightMult * (OdMode == 2 ? 1.45f : (OdMode == 3 ? 1.8f : 1.2f));
                 _pulseLeft = Mathf.Max(_pulseLeft, Mathf.RoundToInt(950f * SvrSenses.SightMult));
-                Color waveCol = OdMode == 1 ? new Color(1f, 0.45f, 0.16f, 1f) : new Color(0.22f, 0.96f, 1f, 1f);
-                SpawnPulseWave(_body.corePosition, _pulseRange * 1.15f, 52f, waveCol);
             }
         }
 
@@ -2748,68 +2719,9 @@ namespace Surveyor
         {
             float now = Time.time;
             float sight = SvrSenses.SightMult;
-            // Periodic expanding LiDAR discovery pulse wave so nearby chests, shrines, hidden caches, and moving enemies materialize when the wave washes over them
-            if (now >= _nextAutoWave && _peekK < 0.65f)
-            {
-                float interval = OdMode == 1 ? 1.8f : (OdMode == 2 ? 2.4f : (OdMode == 3 ? 2.2f : 3.0f));
-                _nextAutoWave = now + interval;
-                float maxR = SvrPlugin.ScanRange.Value * sight * (OdMode == 2 ? 1.65f : (OdMode == 1 ? 1.45f : 1.2f));
-                Color wc = OdMode == 1 ? new Color(1f, 0.45f, 0.16f, 1f) : new Color(0.22f, 0.96f, 1f, 1f);
-                SpawnPulseWave(_body.corePosition, maxR, Mathf.Max(34f, maxR * 0.85f), wc);
-            }
-
             Vector3 aimOrigin = _input ? _input.aimOrigin : _body.corePosition;
             Vector3 aimDir = _input ? _input.aimDirection : transform.forward;
             float baseRange = SvrPlugin.ScanRange.Value * sight;
-
-            // Advance active expanding waves and wash over SvrLiDARScanTarget holograms + CharacterBody skeletal rigs
-            for (int w = _waves.Count - 1; w >= 0; w--)
-            {
-                LidarWave lw = _waves[w];
-                float prevR = lw.Radius;
-                lw.Radius += lw.Speed * dt;
-                _waves[w] = lw;
-
-                float bandMin = prevR - 2.5f;
-                float bandMax = lw.Radius + 2.5f;
-
-                // Wash over stage interactables (chests, shrines, shops, items, teleporter)
-                for (int i = 0; i < _pois.Count; i++)
-                {
-                    Poi p = _pois[i];
-                    if (!p.Target || !p.Tr) continue;
-                    float d = Vector3.Distance(lw.Origin, p.Pos);
-                    if (d >= bandMin && d <= bandMax)
-                        p.Target.OnWaveWash(5.2f, 1f);
-                }
-
-                // Wash over hidden LiDAR tech caches
-                for (int cIdx = 0; cIdx < _techCaches.Count; cIdx++)
-                {
-                    FieldTechCache fc = _techCaches[cIdx];
-                    if (fc.Collected || !fc.Target) continue;
-                    float d = Vector3.Distance(lw.Origin, fc.Pos);
-                    if (d >= bandMin && d <= bandMax)
-                        fc.Target.OnWaveWash(5.8f, 1f);
-                }
-
-                // Wash over active characters, players, allies, monsters, and bosses
-                try
-                {
-                    var bodies = CharacterBody.readOnlyInstancesList;
-                    for (int bIdx = 0; bIdx < bodies.Count; bIdx++)
-                    {
-                        CharacterBody cb = bodies[bIdx];
-                        if (!cb || cb == _body || !cb.healthComponent || !cb.healthComponent.alive) continue;
-                        float d = Vector3.Distance(lw.Origin, cb.corePosition);
-                        if (d >= bandMin && d <= bandMax)
-                            SweepBody(cb, 2.8f, 18);
-                    }
-                }
-                catch { }
-
-                if (lw.Radius >= lw.MaxRadius) _waves.RemoveAt(w);
-            }
 
             // Also continuously sweep any character/enemy/player inside the active scanner cone/dome so their animations update at 60 FPS with zero delay
             try
@@ -3237,10 +3149,10 @@ namespace Surveyor
             {
                 Poi p = _pois[i];
                 if (!p.Tr || !p.Tr.gameObject.activeInHierarchy) continue;
-                if (burst && p.Target) p.Target.OnWaveWash(5.0f, 1f);
-
                 Vector3 pos = p.Pos;
                 float dist = Vector3.Distance(me, pos);
+                if (p.Target && (burst || OdMode == 2 || dist < 50f))
+                    p.Target.OnWaveWash(burst ? 5.0f : 2.5f, 1f);
 
                 if (p.Kind == 4) // TELEPORTER: always paint out to 240m with base ring + actual 3D teleporter prongs + tall vertical beacon spire
                 {
@@ -3267,14 +3179,7 @@ namespace Surveyor
 
                 if (dist > maxRange) continue;
 
-                // Hologram Discovery Loop: only materialize the 3D wireframe hologram once a LiDAR pulse wave or scan beam has washed over it!
-                if (p.Target && !p.Target.IsRevealed)
-                {
-                    p.Target.ApplyHologramMaterial(false);
-                    continue;
-                }
-
-                int sampleBudget = (p.Kind == 3 ? 16 : (p.Kind == 2 ? 9 : 14)) * mult;
+                int sampleBudget = (p.Kind == 3 ? 18 : (p.Kind == 2 ? 10 : 16)) * mult;
                 if (p.Target && p.Target.Parts.Count > 0)
                 {
                     PaintTargetWireframe(p.Target, sampleBudget, life);
@@ -3624,10 +3529,13 @@ namespace Surveyor
 
                 _dimmed = true;
             }
-            cam.cullingMask = 0;
+            int uiLayer = LayerMask.NameToLayer("UI");
+            int uiMask = uiLayer >= 0 ? (1 << uiLayer) : (1 << 5);
+            int uiObj = LayerMask.NameToLayer("UIObject");
+            if (uiObj >= 0) uiMask |= (1 << uiObj);
+            cam.cullingMask = uiMask;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = Color.black;
-            if (_dimPpLayer && _dimPpLayer.enabled) _dimPpLayer.enabled = false;
             if (_dimSkyboxCam && _dimSkyboxCam.enabled) _dimSkyboxCam.enabled = false;
         }
 
@@ -3712,7 +3620,7 @@ namespace Surveyor
                 _tWeather = FindTypeByName("RoR2.SceneWeatherController");
                 _tHookLighting = FindTypeByName("RoR2.HookLightingIntoPostProcessVolume");
             }
-            SuppressAllOfType(_tPpVolume, true);
+            // Keep PostProcessVolumes active so camera pipeline and UI passes function cleanly
             SuppressAllOfType(_tWeather, false);
             SuppressAllOfType(_tHookLighting, false);
         }
@@ -3980,7 +3888,8 @@ namespace Surveyor
             // and smoothly fade them back from 0% -> 100% as the visor lowers.
             float dotAlpha = Mathf.SmoothStep(1f, 0f, Mathf.Clamp01(_peekK * 1.15f));
             DrawDots(cam, scale, dotAlpha);
-            DrawPulseWaves(cam, scale, dotAlpha);
+            DrawHologramTargets(cam, scale, dotAlpha);
+            DrawAnimatedSkeletons(cam, scale, dotAlpha);
             DrawDemon(cam, scale, dotAlpha);
             DrawPeekWash(scale);
             DrawHud(scale);
@@ -4071,32 +3980,6 @@ namespace Surveyor
             DrawScreenLine(a, b, thick, tex);
         }
 
-        // Draws the expanding 3D LiDAR discovery pulse waves sweeping across the terrain
-        private void DrawPulseWaves(Camera cam, float scale, float dotAlpha)
-        {
-            if (dotAlpha <= 0.005f || _waves.Count == 0) return;
-            Texture2D white = Texture2D.whiteTexture;
-            const int segs = 36;
-            for (int w = 0; w < _waves.Count; w++)
-            {
-                LidarWave lw = _waves[w];
-                float u = Mathf.Clamp01(lw.Radius / Mathf.Max(1f, lw.MaxRadius));
-                float a = (1f - u * u) * 0.78f * dotAlpha;
-                if (a <= 0.02f) continue;
-
-                GUI.color = new Color(lw.Col.r, lw.Col.g, lw.Col.b, a);
-                float thick = Mathf.Lerp(2.6f, 1.2f, u) * scale;
-                Vector3 prev = Vector3.zero;
-                for (int i = 0; i <= segs; i++)
-                {
-                    float ang = (i % segs) * (6.2831853f / segs);
-                    Vector3 cur = lw.Origin + new Vector3(Mathf.Cos(ang) * lw.Radius, 0.15f, Mathf.Sin(ang) * lw.Radius);
-                    if (i > 0) DrawWorldEdge(cam, prev, cur, thick, white);
-                    prev = cur;
-                }
-            }
-        }
-
         // ================================================================ 2. THE HOLOGRAM DISCOVERY LOOP RENDERER
         // Renders each SvrLiDARScanTarget that has been washed by a LiDAR pulse wave as a glowing 3D wireframe hologram
         // of its exact shape (small chest, large chest, blood shrine, chance shrine, mountain shrine, 3D printer, multishop,
@@ -4127,13 +4010,14 @@ namespace Surveyor
                 float dist = Vector3.Distance(me, p.Pos);
                 float maxD = p.Kind == 4 ? 220f : (p.Kind == 2 ? maxDrawRange * 0.7f : maxDrawRange);
                 if (dist > maxD) continue;
-                if (p.Kind != 4 && !p.Target.IsRevealed) continue;
-                if (p.Kind != 4 && drawn >= 22) continue;
+                if (p.Kind != 4 && !p.Target.IsRevealed && OdMode != 2 && dist > 50f) continue;
+                if (p.Kind != 4 && drawn >= 64) continue;
 
                 Vector3 sp = cam.WorldToScreenPoint(p.Pos);
                 if (sp.z <= 0.4f) continue;
 
-                float holoAlpha = (p.Kind == 4 ? 0.92f : p.Target.CurrentAlpha(now)) * Mathf.Clamp01(1.18f - dist / maxD) * dotAlpha;
+                float baseHolo = (p.Kind == 4 || OdMode == 2 || dist < 50f) ? 0.95f : p.Target.CurrentAlpha(now);
+                float holoAlpha = baseHolo * Mathf.Clamp01(1.18f - dist / maxD) * dotAlpha;
                 if (holoAlpha <= 0.03f) continue;
 
                 drawn++;
@@ -4557,15 +4441,6 @@ namespace Surveyor
             float k = _peekK;
             if (k < 0.01f) return;
             Texture2D white = Texture2D.whiteTexture;
-
-            // While the visor is closing back down (!Peeking && k > 0), smoothly darken the screen to black
-            // as the LiDAR dots smoothly fade back in, so there is never a hard cut.
-            if (!Peeking && SvrPlugin.DarkWorld.Value)
-            {
-                float darkCurtain = Mathf.SmoothStep(0f, 0.95f, 1f - k);
-                GUI.color = new Color(0f, 0f, 0f, darkCurtain);
-                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), white);
-            }
 
             float flick = 0.88f + 0.12f * Mathf.Sin(now * 23f) + (Random.value < 0.04f ? 0.25f : 0f);
             float wash = 0.26f * k * flick;
