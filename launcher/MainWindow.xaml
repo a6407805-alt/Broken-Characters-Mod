@@ -542,7 +542,7 @@
                         <Grid>
                             <StackPanel x:Name="ExtrasPanel" VerticalAlignment="Center">
                                 <TextBlock Text="EXTRAS" Foreground="{StaticResource Accent}" FontSize="12" FontWeight="Black" />
-                                <TextBlock Text="Got an extras key? Paste it here once (Ctrl+V)." Foreground="{StaticResource TextDim}" FontSize="11" Margin="0,2,0,6" />
+                                <TextBlock Text="Got the extras key or password? Enter it here once." Foreground="{StaticResource TextDim}" FontSize="11" Margin="0,2,0,6" />
                                 <DockPanel>
                                     <Button DockPanel.Dock="Right" x:Name="SaveKeyButton" Content="Save" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="SaveKey_Click" />
                                     <PasswordBox x:Name="ExtrasKeyBox" Height="30" VerticalContentAlignment="Center" Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" />

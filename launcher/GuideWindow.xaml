@@ -110,7 +110,7 @@
                     <TextBlock Style="{StaticResource StepTitle}" Text="3. Let it install" />
                     <TextBlock Style="{StaticResource StepBody}" Text="It finds Risk of Rain 2 on its own. If it can't, pick your Risk of Rain 2 folder when asked. First install takes a few minutes." />
                     <TextBlock Style="{StaticResource StepTitle}" Text="4. Got an extras key?" />
-                    <TextBlock Style="{StaticResource StepBody}" Text="Paste it into the EXTRAS box bottom-left and press Save. One-time step; skip it if you weren't given a key." />
+                    <TextBlock Style="{StaticResource StepBody}" Text="Type the extras password (or paste the extras key) into the EXTRAS box bottom-left and press Save. One-time step; skip it if you weren't given one." />
                     <TextBlock Style="{StaticResource StepTitle}" Text="5. Press PLAY" />
                     <TextBlock Style="{StaticResource StepBody}" Text="It updates anything that needs it, then starts the game." />
 
@@ -129,13 +129,13 @@
                     </TextBlock>
 
                     <TextBlock Style="{StaticResource SectionHeader}" Text="The extras (optional)" />
-                    <TextBlock Style="{StaticResource StepBody}" Text="Some copyrighted content is friends-only and needs an extras key from the pack owner. Ask them for yours — it isn't printed in this window. Paste it into the EXTRAS box and press Save, once." />
+                    <TextBlock Style="{StaticResource StepBody}" Text="Some copyrighted content is friends-only. Ask the pack owner for the extras password (it isn't printed here). Type it into the EXTRAS box and press Save, once." />
 
                     <TextBlock Style="{StaticResource SectionHeader}" Text="Part 2: Publishing your mod" />
                     <TextBlock Style="{StaticResource StepTitle}" Text="1. Open CREATOR" />
                     <TextBlock Style="{StaticResource StepBody}" Text="Click CREATOR at the top of the launcher." />
                     <TextBlock Style="{StaticResource StepTitle}" Text="2. Paste your creator key" />
-                    <TextBlock Style="{StaticResource StepBody}" Text="The first time, paste the creator key you generated (see below) and press Save. It's remembered after that." />
+                    <TextBlock Style="{StaticResource StepBody}" Text="The first time, paste the creator key you generated (see below), or type your GitHub name and your key password, and press Save. It's remembered after that." />
                     <TextBlock Style="{StaticResource StepTitle}" Text="3. Pick your mod's folder and publish" />
                     <TextBlock Style="{StaticResource StepBody}" Text="Choose the folder your mod lives in (it needs a src/&lt;YourMod&gt; or mods/&lt;YourMod&gt; subfolder) and press PUBLISH. It only touches the mod you own." />
                     <TextBlock Style="{StaticResource StepTitle}" Text="Quick upload (a .zip or .dll from MEGA, Discord...)" />
@@ -148,6 +148,8 @@
                         <Run Text="public_repo" FontFamily="Consolas" Foreground="White" />
                         <Run Text=", then paste the token into the CREATOR window's key box. The pack owner adds your name to the allow-list before your key will work." />
                     </TextBlock>
+                    <TextBlock Style="{StaticResource StepTitle}" Text="Use a password instead of the long key" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="In CREATOR, press Key passwords... and lock your key with a password. On any other PC you then just type your GitHub name and that password. The owner can lock the extras key the same way, so friends only need the extras password." />
 
                     <TextBlock Style="{StaticResource SectionHeader}" Text="Troubleshooting" />
                     <TextBlock Style="{StaticResource StepBody}" Text="Can't reach GitHub / no internet: if the pack is already installed, PLAY still works offline — you just won't get the newest update until you're back online." />
