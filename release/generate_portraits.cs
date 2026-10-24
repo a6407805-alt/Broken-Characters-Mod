@@ -375,32 +375,39 @@ namespace BrokenCharacters.Tools
         public static List<Tri> BuildGravitos()
         {
             List<Tri> list = new List<Tri>();
-            Color suitGrey = Color.FromArgb(255, 48, 52, 60);
-            Color suitViolet = Color.FromArgb(255, 80, 45, 120);
-            Color visorDome = Color.FromArgb(255, 20, 15, 38);
-            Color hudCyan = Color.FromArgb(255, 0, 225, 255);
-            Color corePurple = Color.FromArgb(255, 185, 55, 255);
-            Color podMetal = Color.FromArgb(255, 72, 78, 90);
+            Color suitDark = Color.FromArgb(255, 65, 68, 78);
+            Color suitViolet = Color.FromArgb(255, 145, 75, 220);
+            Color visorDome = Color.FromArgb(255, 30, 24, 52);
+            Color hudCyan = Color.FromArgb(255, 0, 245, 255);
+            Color corePurple = Color.FromArgb(255, 220, 85, 255);
+            Color podMetal = Color.FromArgb(255, 125, 130, 145);
 
-            // Torso
-            AddBox(list, new V3(0, 1.15f, 0), new V3(0.58f, 0.38f, 0.36f), suitGrey, 0f);
-            AddBox(list, new V3(0, 1.18f, 0.12f), new V3(0.40f, 0.28f, 0.18f), suitViolet, 0f);
+            // Torso (layered Engineer armored chassis)
+            AddBox(list, new V3(0, 1.15f, 0), new V3(0.64f, 0.42f, 0.40f), suitDark, 0f);
+            AddBox(list, new V3(0, 1.18f, 0.14f), new V3(0.46f, 0.32f, 0.20f), suitViolet, 0f);
+            AddBox(list, new V3(0, 0.98f, 0.08f), new V3(0.50f, 0.12f, 0.30f), suitDark, 0f);
 
-            // Chest singularity core
-            AddSphere(list, new V3(0.04f, 1.18f, 0.22f), 0.09f, corePurple, 2.5f, 12);
-            AddTorus(list, new V3(0.04f, 1.18f, 0.22f), 0.13f, 0.02f, hudCyan, 12, 1.5f);
+            // Singularity Core Reactor in chest
+            AddSphere(list, new V3(0.04f, 1.18f, 0.24f), 0.10f, corePurple, 3.0f, 16);
+            AddTorus(list, new V3(0.04f, 1.18f, 0.24f), 0.14f, 0.022f, hudCyan, 16, 2.0f);
+            AddTorus(list, new V3(0.04f, 1.18f, 0.24f), 0.18f, 0.015f, suitViolet, 14, 0.5f);
 
-            // Dome helmet
-            AddSphere(list, new V3(0, 1.52f, 0), 0.26f, visorDome, 0f, 16);
-            AddTorus(list, new V3(0.04f, 1.52f, 0.11f), 0.18f, 0.025f, hudCyan, 14, 2.2f);
+            // Dome helmet (Engineer EVA dome)
+            AddSphere(list, new V3(0, 1.54f, 0), 0.27f, visorDome, 0f, 18);
+            AddTorus(list, new V3(0.04f, 1.54f, 0.12f), 0.20f, 0.028f, hudCyan, 16, 2.5f);
+            AddBox(list, new V3(0.04f, 1.44f, 0.22f), new V3(0.18f, 0.07f, 0.08f), podMetal, 0f);
 
-            // Twin shoulder graviton projector pods
-            V3 podL = new V3(-0.42f, 1.42f, -0.04f);
-            V3 podR = new V3(0.42f, 1.42f, -0.04f);
-            AddCylinder(list, podL, 0.10f, 0.12f, 0.32f, podMetal, 12);
-            AddCylinder(list, podR, 0.10f, 0.12f, 0.32f, podMetal, 12);
-            AddSphere(list, podL + new V3(0, 0, 0.18f), 0.08f, corePurple, 2.0f, 10);
-            AddSphere(list, podR + new V3(0, 0, 0.18f), 0.08f, corePurple, 2.0f, 10);
+            // Dual massive shoulder graviton cannons
+            V3 podL = new V3(-0.46f, 1.44f, -0.05f);
+            V3 podR = new V3(0.46f, 1.44f, -0.05f);
+            AddCylinder(list, podL, 0.11f, 0.13f, 0.38f, podMetal, 12);
+            AddCylinder(list, podR, 0.11f, 0.13f, 0.38f, podMetal, 12);
+            AddSphere(list, podL + new V3(0, 0, 0.22f), 0.09f, corePurple, 2.8f, 12);
+            AddSphere(list, podR + new V3(0, 0, 0.22f), 0.09f, corePurple, 2.8f, 12);
+
+            // Biceps / Arms
+            AddBox(list, new V3(-0.44f, 1.12f, 0), new V3(0.20f, 0.30f, 0.22f), suitViolet, 0f);
+            AddBox(list, new V3(0.44f, 1.12f, 0), new V3(0.20f, 0.30f, 0.22f), suitViolet, 0f);
 
             return list;
         }
@@ -408,29 +415,36 @@ namespace BrokenCharacters.Tools
         public static List<Tri> BuildEmberwarden()
         {
             List<Tri> list = new List<Tri>();
-            Color solarOrange = Color.FromArgb(255, 238, 110, 15);
-            Color magmaDark = Color.FromArgb(255, 45, 25, 22);
-            Color goldVisor = Color.FromArgb(255, 255, 195, 30);
+            Color solarOrange = Color.FromArgb(255, 255, 120, 18);
+            Color magmaDark = Color.FromArgb(255, 55, 34, 32);
+            Color goldVisor = Color.FromArgb(255, 255, 215, 40);
             Color moltenGlow = Color.FromArgb(255, 255, 95, 10);
-            Color gunMetal = Color.FromArgb(255, 52, 54, 58);
+            Color gunMetal = Color.FromArgb(255, 82, 85, 92);
+            Color flameCrest = Color.FromArgb(255, 255, 160, 25);
 
-            // Hornet Helmet
-            AddBox(list, new V3(0, 1.52f, 0), new V3(0.36f, 0.32f, 0.36f), magmaDark, 0f);
-            AddBox(list, new V3(0.04f, 1.53f, 0.19f), new V3(0.26f, 0.07f, 0.05f), goldVisor, 2.8f);
-            AddBox(list, new V3(0.04f, 1.60f, 0.17f), new V3(0.22f, 0.05f, 0.05f), solarOrange, 0f);
+            // Hornet Helmet & Molten Visor
+            AddBox(list, new V3(0, 1.54f, 0), new V3(0.38f, 0.34f, 0.38f), magmaDark, 0f);
+            AddBox(list, new V3(0.04f, 1.54f, 0.20f), new V3(0.30f, 0.08f, 0.06f), goldVisor, 3.2f);
+            AddBox(list, new V3(0.04f, 1.63f, 0.16f), new V3(0.24f, 0.06f, 0.12f), flameCrest, 1.5f);
+            AddBox(list, new V3(0.04f, 1.45f, 0.18f), new V3(0.20f, 0.08f, 0.08f), gunMetal, 0f);
 
-            // Torso
-            AddBox(list, new V3(0, 1.16f, 0), new V3(0.58f, 0.40f, 0.34f), solarOrange, 0f);
-            AddBox(list, new V3(0.02f, 1.16f, 0.17f), new V3(0.32f, 0.22f, 0.06f), magmaDark, 0f);
-            AddBox(list, new V3(0.02f, 1.22f, 0.20f), new V3(0.20f, 0.04f, 0.04f), moltenGlow, 2.5f);
-            AddBox(list, new V3(0.02f, 1.14f, 0.20f), new V3(0.20f, 0.04f, 0.04f), moltenGlow, 2.5f);
-            AddBox(list, new V3(0.02f, 1.06f, 0.20f), new V3(0.20f, 0.04f, 0.04f), moltenGlow, 2.5f);
+            // Torso (Heavy Magma Armor)
+            AddBox(list, new V3(0, 1.16f, 0), new V3(0.65f, 0.44f, 0.38f), solarOrange, 0f);
+            AddBox(list, new V3(0.02f, 1.16f, 0.18f), new V3(0.42f, 0.28f, 0.08f), magmaDark, 0f);
+            // Three glowing horizontal chest thermal vents
+            AddBox(list, new V3(0.04f, 1.24f, 0.22f), new V3(0.26f, 0.04f, 0.04f), moltenGlow, 3.0f);
+            AddBox(list, new V3(0.04f, 1.16f, 0.22f), new V3(0.26f, 0.04f, 0.04f), moltenGlow, 3.0f);
+            AddBox(list, new V3(0.04f, 1.08f, 0.22f), new V3(0.26f, 0.04f, 0.04f), moltenGlow, 3.0f);
 
-            // Shoulder pauldrons
-            AddBox(list, new V3(-0.40f, 1.28f, 0.02f), new V3(0.25f, 0.20f, 0.30f), solarOrange, 0f);
-            AddBox(list, new V3(0.40f, 1.28f, 0.02f), new V3(0.25f, 0.20f, 0.30f), solarOrange, 0f);
-            AddCylinder(list, new V3(-0.40f, 1.39f, -0.06f), 0.045f, 0.045f, 0.13f, gunMetal, 8);
-            AddCylinder(list, new V3(0.40f, 1.39f, -0.06f), 0.045f, 0.045f, 0.13f, gunMetal, 8);
+            // Heavy angular flame pauldrons on shoulders
+            AddBox(list, new V3(-0.46f, 1.32f, 0.02f), new V3(0.28f, 0.24f, 0.34f), solarOrange, 0f);
+            AddBox(list, new V3(0.46f, 1.32f, 0.02f), new V3(0.28f, 0.24f, 0.34f), solarOrange, 0f);
+            AddCylinder(list, new V3(-0.46f, 1.44f, -0.06f), 0.055f, 0.055f, 0.16f, gunMetal, 8);
+            AddCylinder(list, new V3(0.46f, 1.44f, -0.06f), 0.055f, 0.055f, 0.16f, gunMetal, 8);
+
+            // Biceps / Gauntlets
+            AddBox(list, new V3(-0.46f, 1.08f, 0.02f), new V3(0.22f, 0.26f, 0.22f), magmaDark, 0f);
+            AddBox(list, new V3(0.46f, 1.08f, 0.02f), new V3(0.22f, 0.26f, 0.22f), magmaDark, 0f);
 
             return list;
         }
@@ -904,13 +918,13 @@ namespace BrokenCharacters.Tools
             Console.WriteLine("-> Rendering 3D Duelist...");
             string duelPath = Path.Combine(repoRoot, "src", "Duelist", "duelist_model.bin");
             HashSet<string> duelBones = new HashSet<string> {
-                "head", "neck", "chest", "upper_arm.R", "upper_arm.L", "spine"
+                "head", "neck", "chest", "spine", "hips", "upper_arm.R", "upper_arm.L", "forearm.R", "forearm.L", "hand.R", "hand.L"
             };
             List<Tri> duelTris = ModelLoader.LoadDuelModel(duelPath, duelBones);
             ZRasterizer duelZ = new ZRasterizer(renderRes, renderRes);
-            V3 duelTarget = new V3(0.0f, 1.54f, 0.04f);
-            V3 duelCam = duelTarget + new V3(-0.75f, 0.15f, 1.55f);
-            duelZ.DrawMesh(duelTris, duelCam, duelTarget, 28f, lightDir, ambient);
+            V3 duelTarget = new V3(0.0f, 1.35f, -0.05f);
+            V3 duelCam = duelTarget + new V3(-0.52f, 0.10f, 1.05f);
+            duelZ.DrawMesh(duelTris, duelCam, duelTarget, 30f, lightDir, ambient);
             using (Bitmap raw = duelZ.ToBitmap())
             {
                 transparentPortraits["Duelist"] = RoR2PortraitProcessor.Resize(RoR2PortraitProcessor.AddRoR2Outline(raw, outlineRadius, false), finalRes, finalRes);
@@ -922,9 +936,9 @@ namespace BrokenCharacters.Tools
             string wilburPath = Path.Combine(repoRoot, "src", "WilburMod", "wilbur_model.bin");
             List<Tri> wilburTris = ModelLoader.LoadWilburModel(wilburPath);
             ZRasterizer wilburZ = new ZRasterizer(renderRes, renderRes);
-            V3 wilburTarget = new V3(0.0f, 0.82f, 0.52f);
-            V3 wilburCam = wilburTarget + new V3(-0.85f, 0.22f, 1.65f);
-            wilburZ.DrawMesh(wilburTris, wilburCam, wilburTarget, 30f, lightDir, ambient);
+            V3 wilburTarget = new V3(0.0f, 0.42f, 0.12f);
+            V3 wilburCam = wilburTarget + new V3(-0.55f, 0.12f, 1.05f);
+            wilburZ.DrawMesh(wilburTris, wilburCam, wilburTarget, 32f, lightDir, ambient);
             using (Bitmap raw = wilburZ.ToBitmap())
             {
                 transparentPortraits["WilburMod"] = RoR2PortraitProcessor.Resize(RoR2PortraitProcessor.AddRoR2Outline(raw, outlineRadius, false), finalRes, finalRes);
@@ -948,9 +962,9 @@ namespace BrokenCharacters.Tools
             Console.WriteLine("-> Rendering 3D Gravitos...");
             List<Tri> gravTris = MeshBuilder.BuildGravitos();
             ZRasterizer gravZ = new ZRasterizer(renderRes, renderRes);
-            V3 gravTarget = new V3(0.01f, 1.38f, 0.05f);
-            V3 gravCam = gravTarget + new V3(-0.80f, 0.16f, 1.65f);
-            gravZ.DrawMesh(gravTris, gravCam, gravTarget, 30f, lightDir, ambient);
+            V3 gravTarget = new V3(0.0f, 1.38f, 0.05f);
+            V3 gravCam = gravTarget + new V3(-0.52f, 0.12f, 1.10f);
+            gravZ.DrawMesh(gravTris, gravCam, gravTarget, 28f, lightDir, ambient);
             using (Bitmap raw = gravZ.ToBitmap())
             {
                 transparentPortraits["Gravitos"] = RoR2PortraitProcessor.Resize(RoR2PortraitProcessor.AddRoR2Outline(raw, outlineRadius, false), finalRes, finalRes);
@@ -961,9 +975,9 @@ namespace BrokenCharacters.Tools
             Console.WriteLine("-> Rendering 3D Emberwarden...");
             List<Tri> emberTris = MeshBuilder.BuildEmberwarden();
             ZRasterizer emberZ = new ZRasterizer(renderRes, renderRes);
-            V3 emberTarget = new V3(0.01f, 1.38f, 0.05f);
-            V3 emberCam = emberTarget + new V3(-0.80f, 0.16f, 1.65f);
-            emberZ.DrawMesh(emberTris, emberCam, emberTarget, 30f, lightDir, ambient);
+            V3 emberTarget = new V3(0.0f, 1.36f, 0.05f);
+            V3 emberCam = emberTarget + new V3(-0.52f, 0.12f, 1.10f);
+            emberZ.DrawMesh(emberTris, emberCam, emberTarget, 28f, lightDir, ambient);
             using (Bitmap raw = emberZ.ToBitmap())
             {
                 transparentPortraits["Emberwarden"] = RoR2PortraitProcessor.Resize(RoR2PortraitProcessor.AddRoR2Outline(raw, outlineRadius, false), finalRes, finalRes);
@@ -1076,10 +1090,9 @@ namespace BrokenCharacters.Tools
             using (Bitmap src = new Bitmap(reaperSrcPath))
             using (Bitmap seg = RoR2PortraitProcessor.SegmentChroma(src, c =>
             {
-                // Background is teal gradient (B > R && G > R && R < 60)
-                bool isTeal = (c.B > c.R * 1.35f && c.G > c.R * 1.15f && c.R < 65 && c.G < 125 && c.B < 135);
-                bool isCorner = (c.R < 20 && c.G < 35 && c.B < 45);
-                return isTeal || isCorner;
+                // Background is teal gradient (keep character dark cloak, only segment teal)
+                bool isTeal = (c.B > c.R * 1.32f && c.G > c.R * 1.15f && c.B > 42);
+                return isTeal;
             }, true, 1.05f, 0f, 0f))
             {
                 transparentPortraits["Reaper"] = RoR2PortraitProcessor.Resize(RoR2PortraitProcessor.AddRoR2Outline(seg, 5.5f, false), finalRes, finalRes);
@@ -1098,7 +1111,7 @@ namespace BrokenCharacters.Tools
                 Console.WriteLine("Saved: " + csPath);
 
                 string launcherPath = Path.Combine(repoRoot, "launcher", "Assets", "Roster", key + ".png");
-                styled.Save(launcherPath, ImageFormat.Png);
+                trans.Save(launcherPath, ImageFormat.Png);
 
                 string modDir = Path.Combine(repoRoot, "mods", key);
                 if (Directory.Exists(modDir))
