@@ -99,12 +99,13 @@ HC = np.array([0.0, 1.76, 0.0])           # helmet centre = visor hinge
 
 def build(visor_deg=0.0, spin_deg=0.0, barrel_deg=0.0):
     m = Model()
-    ARMOR = m.color((0.30, 0.36, 0.25)); ARMOR_DK = m.color((0.19, 0.22, 0.17)); SUIT = m.color((0.78, 0.79, 0.76))
-    SUIT_DK = m.color((0.50, 0.52, 0.50)); RUBBER = m.color((0.08, 0.09, 0.09)); METAL = m.color((0.52, 0.55, 0.58))
-    ORANGE = m.color((0.95, 0.50, 0.08)); GLASS = m.color((0.03, 0.08, 0.07)); GREEN = m.color((0.35, 1.0, 0.25), 2.6)
-    AMBER = m.color((1.0, 0.72, 0.15), 2.2); RED = m.color((1.0, 0.15, 0.1), 2.2)
+    # NASA EVA palette: white shell and plates, NASA-blue trim panels, safety-orange stripes
+    ARMOR = m.color((0.95, 0.96, 0.97)); ARMOR_DK = m.color((0.08, 0.26, 0.60)); SUIT = m.color((0.80, 0.82, 0.87))
+    SUIT_DK = m.color((0.58, 0.62, 0.72)); RUBBER = m.color((0.10, 0.11, 0.14)); METAL = m.color((0.62, 0.65, 0.70))
+    ORANGE = m.color((1.0, 0.42, 0.04)); GLASS = m.color((0.03, 0.06, 0.15)); GREEN = m.color((0.35, 0.75, 1.0), 2.6)   # GREEN = the cyan-blue glow
+    AMBER = m.color((1.0, 0.55, 0.10), 2.2); RED = m.color((1.0, 0.20, 0.08), 2.2)
     SKIN = m.color((0.80, 0.63, 0.53)); EYE = m.color((0.88, 0.94, 0.98), 0.9); DARKSKIN = m.color((0.35, 0.18, 0.16))
-    GUNM = m.color((0.24, 0.26, 0.28))
+    GUNM = m.color((0.22, 0.25, 0.32))
 
     # ---------------- hips: pelvis block, belt, pouches, skirt plates
     m.add("hips", rbox(0.34, 0.20, 0.24, 0.3, (0, 0.98, 0)), SUIT)
@@ -170,6 +171,7 @@ def build(visor_deg=0.0, spin_deg=0.0, barrel_deg=0.0):
     m.add("head", ell((0.19, 0.03, 0.085), (0, HC[1] + 0.14, 0.14), 0.6, 0.6, rot=(-14, 0, 0)), ARMOR_DK)
     m.add("head", rbox(0.06, 0.04, 0.26, 0.3, (0, HC[1] + 0.235, -0.02)), ARMOR_DK)
     m.add("head", rbox(0.03, 0.02, 0.05, 0.3, (0, HC[1] + 0.26, 0.08)), AMBER)
+    m.add("head", rbox(0.09, 0.012, 0.26, 0.3, (0, HC[1] + 0.228, -0.02)), ORANGE)
     m.add("head", ell((0.13, 0.045, 0.07), (0, HC[1] - 0.15, 0.17), 0.5, 0.5, rot=(25, 0, 0)), ARMOR_DK)
     for i in range(4):
         m.add("head", rbox(0.16, 0.015, 0.03, 0.3, (0, HC[1] - 0.05 + 0.04 * i, -0.225)), RUBBER)
@@ -236,12 +238,15 @@ def build(visor_deg=0.0, spin_deg=0.0, barrel_deg=0.0):
         sh = np.array([SH[0] * sgn, SH[1], SH[2]]); el = np.array([EL[0] * sgn, EL[1], EL[2]]); wr = np.array([WR[0] * sgn, WR[1], WR[2]])
         suf = ".R" if sgn > 0 else ".L"
         m.add("upper_arm" + suf, limb(sh, el, 0.085, 0.072, 14), SUIT)
+        m.add("upper_arm" + suf, place(cylinder(0.099, 0.097, 0.05, 20), sh + (el - sh) * 0.52, el - sh, (0, 1, 0)), ORANGE)
+        m.add("upper_arm" + suf, place(cylinder(0.098, 0.096, 0.02, 20), sh + (el - sh) * 0.66, el - sh, (0, 1, 0)), ARMOR_DK)
         m.add("upper_arm" + suf, ell((0.16, 0.115, 0.16), (sh[0] + 0.07 * sgn, sh[1] + 0.045, sh[2]), 0.55, 0.55, rot=(0, 0, -22 * sgn)), ARMOR)     # pauldron
         m.add("upper_arm" + suf, ring((sh[0] + 0.07 * sgn, sh[1] + 0.045, sh[2]), (0, 1, 0), 0.05, 0.14, 4) if False else ell((0.06, 0.02, 0.06), (sh[0] + 0.10 * sgn, sh[1] + 0.145, sh[2]), 1, 1, seg=14, rings=8), ORANGE)
         m.add("upper_arm" + suf, rbox(0.15, 0.04, 0.17, 0.3, (sh[0] + 0.08 * sgn, sh[1] - 0.045, sh[2]), rot=(0, 0, -25 * sgn)), ARMOR_DK)
         m.add("upper_arm" + suf, ell((0.09, 0.07, 0.09), tuple(el + np.array([0.0, 0.01, -0.015])), 0.6, 0.6), ARMOR_DK)   # elbow
         m.add("forearm" + suf, limb(el, wr, 0.07, 0.058, 14), SUIT)
         mid = (el + wr) / 2
+        m.add("forearm" + suf, place(cylinder(0.079, 0.078, 0.045, 20), el + (wr - el) * 0.52, wr - el, (0, 1, 0)), ORANGE)
         m.add("forearm" + suf, place(cylinder(0.082, 0.07, 0.17, 16), el + (wr - el) * 0.28, wr - el, (0, 1, 0)), ARMOR)
         m.add("forearm" + suf, place(cylinder(0.075, 0.072, 0.06, 16), wr - (wr - el) * 0.28, wr - el, (0, 1, 0)), ARMOR_DK)
         if sgn < 0:   # wrist computer on the left forearm
@@ -292,11 +297,14 @@ def build(visor_deg=0.0, spin_deg=0.0, barrel_deg=0.0):
         suf = ".R" if sgn > 0 else ".L"
         hp = np.array([HIP[0] * sgn, HIP[1], HIP[2]]); kn = np.array([KN[0] * sgn, KN[1], KN[2]]); an = np.array([AN[0] * sgn, AN[1], AN[2]])
         m.add("thigh" + suf, limb(hp, kn, 0.11, 0.085, 16), SUIT)
+        m.add("thigh" + suf, place(cylinder(0.109, 0.106, 0.055, 22), hp + (kn - hp) * 0.78, kn - hp, (0, 1, 0)), ORANGE)
+        m.add("thigh" + suf, place(cylinder(0.113, 0.110, 0.02, 22), hp + (kn - hp) * 0.64, kn - hp, (0, 1, 0)), ARMOR_DK)
         m.add("thigh" + suf, rbox(0.14, 0.30, 0.07, 0.3, tuple((hp + kn) / 2 + np.array([0.0, 0.02, 0.09]))), ARMOR)          # thigh plate
         m.add("thigh" + suf, rbox(0.04, 0.22, 0.12, 0.3, tuple((hp + kn) / 2 + np.array([0.105 * sgn, 0.0, 0.0]))), ARMOR_DK)
         m.add("shin" + suf, ell((0.095, 0.075, 0.09), tuple(kn + np.array([0.0, 0.0, 0.045])), 0.6, 0.6), ARMOR)            # knee pad
         m.add("shin" + suf, ell((0.05, 0.02, 0.04), tuple(kn + np.array([0.0, 0.01, 0.115])), 1, 1, seg=12, rings=8), ORANGE)
         m.add("shin" + suf, limb(kn, an, 0.082, 0.062, 16), SUIT)
+        m.add("shin" + suf, place(cylinder(0.087, 0.083, 0.05, 20), kn + (an - kn) * 0.62, an - kn, (0, 1, 0)), ORANGE)
         m.add("shin" + suf, rbox(0.12, 0.30, 0.06, 0.3, tuple((kn + an) / 2 + np.array([0.0, 0.0, 0.065]))), ARMOR)           # greave
         m.add("shin" + suf, ring(tuple(an + np.array([0.0, 0.015, 0.0])), (0, 1, 0), 0.085, 0.07, 18), ARMOR_DK)
         m.add("foot" + suf, rbox(0.15, 0.12, 0.30, 0.3, tuple(an + np.array([0.0, -0.025, 0.06]))), ARMOR_DK)             # boot
