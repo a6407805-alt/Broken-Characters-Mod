@@ -4,7 +4,7 @@
 //  A mod creator picks the folder where their mod lives (a copy of the repo: it has src\ and mods\ inside) and
 //  presses PUBLISH. This class:
 //    1. checks the creator key (a GitHub token that can write to this one repo) and finds out who it belongs to,
-//    2. works out which mods that person may publish (launcher/creators.json; brand-new mods are always allowed),
+//    2. lists the mods in the folder that changed (every creator may update every mod; creators.json only notes who added one),
 //    3. compares the local files with what is online and lists what changed,
 //    4. uploads ONLY the changed files that belong to the chosen mods, as one commit on top of the newest main.
 //       Nothing else in the repo can be touched, and nothing is ever deleted, so one person's publish can't
@@ -111,6 +111,10 @@ namespace BrokenCharactersLauncher
         private readonly string _token;
         public string Login { get; private set; } = "";
         public bool IsAdmin => Login.Equals(Repo.Split('/')[0], StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>The owner's rule: the pack is ONE shared mod, so every creator may update every mod (Vince updates
+        /// existing mods). creators.json now only records who added a mod first; it no longer locks anyone out.</summary>
+        public bool CanEditAll => true;
 
         public Publisher(string token) { _token = token.Trim(); }
 
@@ -288,7 +292,7 @@ namespace BrokenCharactersLauncher
         {
             (string head, string treeSha) = await GetHeadAsync(ct);
             var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (IsAdmin)
+            if (CanEditAll || IsAdmin)
             {
                 JsonNode? tree = await CallAsync(HttpMethod.Get, "/git/trees/" + treeSha + "?recursive=1", null, ct);
                 foreach (JsonNode? item in tree?["tree"]?.AsArray() ?? new JsonArray())
@@ -390,7 +394,7 @@ namespace BrokenCharactersLauncher
             foreach (string mod in names)
             {
                 bool isNew = !remoteMods.Contains(mod);
-                bool allowed = IsAdmin || isNew || owned.Contains("*") || owned.Contains(mod, StringComparer.OrdinalIgnoreCase);
+                bool allowed = CanEditAll || IsAdmin || isNew || owned.Contains("*") || owned.Contains(mod, StringComparer.OrdinalIgnoreCase);
                 if (!allowed) continue; // someone else's mod: not even shown, so it can't be touched by accident
 
                 bool hasSource = Directory.Exists(Path.Combine(folder, "src", mod)) || remoteSource.Contains(mod);
@@ -408,7 +412,7 @@ namespace BrokenCharactersLauncher
                     return list;
                 }, ct);
 
-                if (IsAdmin && !files.Any(f => f.Changed)) continue; // admins have every mod: only list the ones with changes
+                if ((CanEditAll || IsAdmin) && !files.Any(f => f.Changed)) continue; // everyone has every mod: only list the ones with changes
 
                 string conflict = "";
                 int changedCount = files.Count(f => f.Changed);

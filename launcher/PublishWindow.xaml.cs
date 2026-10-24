@@ -171,7 +171,7 @@ namespace BrokenCharactersLauncher
                 if (_plans.Count == 0)
                 {
                     EmptyText.Text = _quickMode
-                        ? "Nothing to upload. Either those files are already in the pack, it's someone else's mod, or the mod is built from source (its dll comes from the build server, so send the source instead)."
+                        ? "Nothing new to upload: those files are already in the pack. (Mods built from source on GitHub, like SpecialForces, get their dll from the build server, so a dll alone does nothing: send the changed source instead.)"
                         : "No mods of yours were found in this folder, or nothing has changed. If this is the wrong folder, press \"Choose folder...\".";
                     EmptyText.Visibility = Visibility.Visible;
                 }

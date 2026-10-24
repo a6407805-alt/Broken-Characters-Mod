@@ -11,8 +11,8 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - `release/` installer (`install.ps1`), updater (`update.ps1`), `package.sh`. `.github/workflows/build.yml` does it all.
 - Launcher cards: one file per mod in `launcher/cards/<Mod>.json` (CI merges them into `roster.json` via
   `release/merge_roster.py` and attaches the result to the release). Never rewrite `launcher/roster.json` wholesale.
-- Creator window (`launcher/Publisher.cs`, `PublishWindow.xaml*`): lets a creator upload only their own mod through the
-  GitHub API; who owns what is `launcher/creators.json`. Don't commit dlls into `mods/<Mod>/` when `src/<Mod>/` exists.
+- Creator window (`launcher/Publisher.cs`, `PublishWindow.xaml*`): lets any creator upload mods through the
+  GitHub API. Every creator may update EVERY mod (owner's rule: one shared pack); `creators.json` just records who added a mod. Don't commit dlls into `mods/<Mod>/` when `src/<Mod>/` exists.
   Before changing a mod you don't own, check `creators.json` and `git log -- src/<Mod>`.
   Quick upload (`QuickUpload.cs`, `PublishWindow.Quick.cs`): pick/drag a friend's .zip/.dll, it's staged as
   `%TEMP%\BrokenCharacters-QuickUpload\<id>\mods\<Mod>\` and the normal scan/publish runs on that.

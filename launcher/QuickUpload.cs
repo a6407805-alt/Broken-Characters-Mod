@@ -87,7 +87,7 @@ namespace BrokenCharactersLauncher
 
             if (!Directory.EnumerateFiles(Path.Combine(root, "mods"), "*", SearchOption.AllDirectories).Any())
                 throw new InvalidOperationException(result.Skipped.Count > 0
-                    ? "None of those mods are ones you can update in the pack (skipped: " + Short(result.Skipped) + ")."
+                    ? "None of those folders are mods in the pack (skipped: " + Short(result.Skipped) + ")."
                     : "There were no files in what you picked.");
             return result;
         }
