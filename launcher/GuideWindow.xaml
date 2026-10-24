@@ -129,7 +129,23 @@
                     </TextBlock>
 
                     <TextBlock Style="{StaticResource SectionHeader}" Text="The extras (optional)" />
-                    <TextBlock Style="{StaticResource StepBody}" Text="Some copyrighted content is friends-only. Ask the pack owner for the extras password (it isn't printed here). Type it into the EXTRAS box and press Save, once." />
+                    <TextBlock Style="{StaticResource StepBody}" Text="Some copyrighted content is friends-only. Ask the pack owner for the guide password, type it below to show the extras key, press Copy, then paste it (Ctrl+V) into the EXTRAS box bottom-left and press Save." />
+                    <Border Background="#1AFFC928" BorderBrush="#60FFC928" BorderThickness="1" CornerRadius="6" Padding="14,12" Margin="0,4,0,6">
+                        <StackPanel>
+                            <TextBlock Text="EXTRAS KEY (LOCKED)" Foreground="{StaticResource Accent}" FontSize="14" FontWeight="Black" />
+                            <DockPanel Margin="0,8,0,0">
+                                <Button DockPanel.Dock="Right" x:Name="UnlockButton" Content="Unlock" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="Unlock_Click" />
+                                <PasswordBox x:Name="GuidePasswordBox" Height="36" FontSize="15" VerticalContentAlignment="Center"
+                                             Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" KeyDown="GuidePasswordBox_KeyDown" />
+                            </DockPanel>
+                            <DockPanel x:Name="RevealRow" Margin="0,10,0,0" Visibility="Collapsed">
+                                <Button DockPanel.Dock="Right" x:Name="CopyKeyButton" Content="Copy" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="CopyKey_Click" />
+                                <TextBox x:Name="RevealBox" IsReadOnly="True" Height="36" FontSize="13" FontFamily="Consolas" VerticalContentAlignment="Center" Padding="6,0"
+                                         Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" />
+                            </DockPanel>
+                            <TextBlock x:Name="UnlockStatus" Foreground="#FF9A8C" FontSize="14" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed" />
+                        </StackPanel>
+                    </Border>
 
                     <TextBlock Style="{StaticResource SectionHeader}" Text="Part 2: Publishing your mod" />
                     <TextBlock Style="{StaticResource StepTitle}" Text="1. Open CREATOR" />
