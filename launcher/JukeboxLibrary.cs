@@ -70,6 +70,7 @@ namespace BrokenCharactersLauncher
         public static string FileSongId(string name)
         {
             string id = Regex.Replace(name.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
+            while (id.StartsWith("mp3-", StringComparison.Ordinal)) id = id.Substring(4); // already a shared file's id
             return "mp3-" + (id.Length == 0 ? Guid.NewGuid().ToString("N").Substring(0, 8) : id.Length > 60 ? id.Substring(0, 60) : id);
         }
 
@@ -102,10 +103,25 @@ namespace BrokenCharactersLauncher
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 cts.CancelAfter(TimeSpan.FromSeconds(10));
-                using HttpResponseMessage r = await Http.GetAsync(SharedUrl + "?t=" + DateTime.UtcNow.Ticks, cts.Token);
-                if (r.StatusCode == System.Net.HttpStatusCode.NotFound) return new JukeboxFile();
-                r.EnsureSuccessStatusCode();
-                string text = await r.Content.ReadAsStringAsync(cts.Token);
+                // The GitHub API gives the list as it is right now. The raw file (the fallback, when the API's hourly
+                // limit is used up) can be several minutes old, which once made just-shared songs look unshared.
+                string? text = null;
+                try
+                {
+                    using var api = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/repos/" + Publisher.Repo + "/contents/" + RepoPath + "?ref=main");
+                    api.Headers.TryAddWithoutValidation("Accept", "application/vnd.github.raw");
+                    using HttpResponseMessage ar = await Http.SendAsync(api, cts.Token);
+                    if (ar.StatusCode == System.Net.HttpStatusCode.NotFound) return new JukeboxFile();
+                    if (ar.IsSuccessStatusCode) text = await ar.Content.ReadAsStringAsync(cts.Token);
+                }
+                catch (HttpRequestException) { }
+                if (text == null)
+                {
+                    using HttpResponseMessage r = await Http.GetAsync(SharedUrl + "?t=" + DateTime.UtcNow.Ticks, cts.Token);
+                    if (r.StatusCode == System.Net.HttpStatusCode.NotFound) return new JukeboxFile();
+                    r.EnsureSuccessStatusCode();
+                    text = await r.Content.ReadAsStringAsync(cts.Token);
+                }
                 Directory.CreateDirectory(Folder);
                 File.WriteAllText(SharedCache, text);
                 return Parse(text);

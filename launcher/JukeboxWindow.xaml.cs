@@ -178,9 +178,11 @@ namespace BrokenCharactersLauncher
             List<JukeboxSong> loose = JukeboxLibrary.LooseFiles(_group.Songs.Concat(local.Songs).ToList())
                 .Where(f => f.FilePath!.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase)).ToList();
             if (localOnly.Count + loose.Count == 0 || _busy) return;
+            int shareable = localOnly.Count + loose.Count(f => !_group.Songs.Any(g => g.Id == JukeboxLibrary.FileSongId(f.Id)));
             if (string.IsNullOrEmpty(_creatorKey))
             {
-                Status((localOnly.Count + loose.Count) + " song(s) here aren't shared yet. Sign in once in CREATOR to share them with everyone.");
+                if (shareable == 0) return;
+                Status(shareable + " song(s) here aren't shared yet. Sign in once in CREATOR to share them with everyone.");
                 return;
             }
 
@@ -194,13 +196,22 @@ namespace BrokenCharactersLauncher
                 foreach (JukeboxSong s in localOnly) { s.AddedBy ??= who; add.Add(s); }
                 foreach (JukeboxSong f in loose)
                 {
-                    Status("Uploading \"" + f.Title + "\" for everyone...");
                     string id = JukeboxLibrary.FileSongId(f.Id);
+                    string target = JukeboxLibrary.SongPath(id);
+                    if (_group.Songs.Any(g => g.Id == id) || add.Any(a => a.Id == id))
+                    {
+                        // Already shared (a renamed copy of a group song): just tidy the file, don't upload it again.
+                        if (!File.Exists(target)) File.Move(f.FilePath!, target);
+                        else if (!string.Equals(f.FilePath, target, StringComparison.OrdinalIgnoreCase)) File.Delete(f.FilePath!);
+                        continue;
+                    }
+                    Status("Uploading \"" + f.Title + "\" for everyone...");
                     string url = await pub.UploadReleaseFileAsync("jukebox", id + ".mp3", f.FilePath!, "audio/mpeg", _cts.Token);
                     string dest = JukeboxLibrary.SongPath(id);
                     if (!string.Equals(f.FilePath, dest, StringComparison.OrdinalIgnoreCase)) File.Move(f.FilePath!, dest, true);
                     add.Add(new JukeboxSong { Id = id, Title = f.Title, Artist = who, Audio = url, AddedBy = who, Added = DateTime.UtcNow.ToString("o") });
                 }
+                if (add.Count > 0)
                 await pub.UpdateTextFileAsync(JukeboxLibrary.RepoPath, current =>
                 {
                     JukeboxFile g = JukeboxLibrary.Parse(current);
@@ -210,7 +221,7 @@ namespace BrokenCharactersLauncher
                 }, "Jukebox: share " + add.Count + " song(s)", _cts.Token);
                 local.Songs.RemoveAll(s => add.Any(a => a.Id == s.Id));
                 JukeboxLibrary.SaveLocal(local);
-                Status("Shared " + add.Count + " song(s) with everyone.");
+                if (add.Count > 0) Status("Shared " + add.Count + " song(s) with everyone.");
             }
             catch (GitHubException ex) { Status("Couldn't share: " + ex.Message); }
             catch (System.Net.Http.HttpRequestException ex) { Status("No connection to GitHub: " + ex.Message); }
