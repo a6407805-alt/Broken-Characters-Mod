@@ -556,20 +556,24 @@
                 </Grid>
             </Grid>
 
-            <!-- Right-edge tab: opens the install & update guide (PDF) in the browser -->
-            <Button x:Name="GuideTabButton" Click="GuideTab_Click" HorizontalAlignment="Right" VerticalAlignment="Center"
-                    Width="26" Height="68" Margin="0,0,-13,0" Cursor="Hand" Panel.ZIndex="50"
-                    ToolTip="Open the install &amp; update guide (PDF)">
+            <!-- Left-edge tab: opens the install/update/publish guide in its own window -->
+            <Button x:Name="GuideTabButton" Click="GuideTab_Click" HorizontalAlignment="Left" VerticalAlignment="Center"
+                    Width="110" Height="40" Margin="-13,0,0,0" Cursor="Hand" Panel.ZIndex="50"
+                    ToolTip="Open the install, update &amp; publish guide">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bg" CornerRadius="13" Background="#D8101420" BorderBrush="{StaticResource Accent}" BorderThickness="1">
-                            <TextBlock x:Name="Arrow" Text="&#10095;" Foreground="{StaticResource Accent}" FontSize="13" FontWeight="Bold"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,5,0" />
+                        <Border x:Name="Bg" CornerRadius="10" Background="#D8101420" BorderBrush="{StaticResource Accent}" BorderThickness="1">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="13,0,0,0">
+                                <TextBlock x:Name="Arrow" Text="&#10094;" Foreground="{StaticResource Accent}" FontSize="13" FontWeight="Bold" VerticalAlignment="Center" />
+                                <TextBlock x:Name="Label" Text="GUIDE" Foreground="{StaticResource Accent}" FontSize="13" FontWeight="Bold"
+                                           Margin="6,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bg" Property="Background" Value="{StaticResource Accent}" />
                                 <Setter TargetName="Arrow" Property="Foreground" Value="#1A1205" />
+                                <Setter TargetName="Label" Property="Foreground" Value="#1A1205" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
