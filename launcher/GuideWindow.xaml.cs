@@ -1,6 +1,6 @@
 // ============================================================================================================
 //  The GUIDE window: install/update/publish instructions shown inside the launcher itself (no browser needed).
-//  Opened from the left-edge "GUIDE" tab on the main window. "Open as PDF in browser" is an optional fallback
+//  Opened from the GUIDE button in the main window's title bar. "Open as PDF in browser" is an optional fallback
 //  to the full docs/Broken Characters - Install Guide.pdf committed to the repo, for anyone who wants to print
 //  or share it.
 // ============================================================================================================
