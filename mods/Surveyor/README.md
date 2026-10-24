@@ -9,7 +9,7 @@ sound events only (no copyrighted files).
 
 ## The suit (3D model, v0.3)
 An original heavy-armour space suit on the Commando skeleton (so every Commando animation works): white NASA-EVA-style plates with blue trim and orange stripes over a pressure suit, a
-life-support backpack with a **spinning LiDAR dome** (faster in Overdrive), a rotary minigun whose **barrels spin with the spool**, and a rounded helmet with a
+life-support backpack with a **spinning LiDAR dome** (faster in Overdrive), a rotary minigun whose **barrels spin with the spool**, and a round bubble helmet with a
 **flip-up visor**. The visor snaps up (springy hinge) whenever you use **Peek**, on everyone's screen, and shows a pale face with milky blind eyes; on the
 character-select screen it flips up and down by itself. Config `UseCustomModel_v1`, `ModelScale_v1`. Source: `src/Surveyor/Model/build_surveyor.py`
 (pure Python, no Blender; run it and `gzip -9` the result into `mods/Surveyor/surveyor_model.bin.gz`).
