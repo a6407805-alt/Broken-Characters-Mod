@@ -1568,20 +1568,26 @@ namespace Surveyor
             public bool Big;
         }
 
-        // Scan modes, cycled sequentially by tapping Q (Topography -> Thermal -> Salvage -> Structural).
-        public static readonly string[] OdNames = { "TOPOGRAPHY", "THERMAL", "SALVAGE", "STRUCTURAL" };
+        // Scan modes, cycled sequentially by tapping Q (Needle -> Narrow -> Medium -> Wide Flood).
+        // The Surveyor is blind and must aim his scanner; each mode offers a distinct trade-off between cone angle, distance, and dot dispersion.
+        public static readonly string[] OdNames = { "NEEDLE BEAM", "NARROW CONE", "MEDIUM CONE", "WIDE FLOOD" };
         public static readonly string[] OdDescs =
         {
-            "WIDE TERRAIN CONTOUR FLOOD + PROXIMITY SKIRT",
-            "SEISMIC WALL-SONAR — ENEMIES, BOSSES & DEMON",
-            "360 LOOT & HOLOGRAM HUNTER — CHESTS, ITEMS & TECH",
-            "TWIN 360 RADAR WALLS + LONG-RANGE SPOTLIGHT"
+            "ULTRA-NARROW 12° · EXTREME 180M REACH · HIGH DENSITY",
+            "NARROW 26° · LONG 110M REACH · FORWARD SCOUT",
+            "BALANCED 48° · MID 60M REACH · DISPERSED DOTS",
+            "WIDE 85° · CLOSE 28M REACH · WIDELY SCATTERED FLOOD"
         };
-        private static readonly int[] OdKind = { 1, 3, 1, 0 };    // which overdrive each mode becomes: 0 sweep, 1 burst, 2 focus, 3 echo
+        private static readonly int[] OdKind = { 2, 0, 1, 3 };    // which overdrive each mode becomes: 0 sweep, 1 burst, 2 focus, 3 echo
         public static int OdMode;
-        private float _scanYaw, _sweepRing, _echoPing, _focusLockNext, _peekReady, _modeFlash;
+        private float _focusLockNext, _peekReady, _modeFlash;
         private bool _loggedPeekFx, _peekNeedBurst;
         private float _repulsorReadyAt;
+        private bool _peeking;
+
+        // Ground item crosshair hover state
+        private Poi _hoveredPoi;
+        private float _hoveredPoiUntil = -10f;
 
         // LiDAR-Exclusive Hidden Map Upgrades (Service Panels, Crates, Drop Pods — only visible & interactable via Surveyor LiDAR)
         private struct FieldTechCache
@@ -1628,6 +1634,7 @@ namespace Surveyor
             public Vector3 Extents;
             public Color Col;
             public string Tag;
+            public string ItemDesc;
             public int Kind; // 0 = chest/shop, 1 = shrine/drone, 2 = barrel, 3 = item/pickup, 4 = teleporter
             public int SubShape;
             public PoiOutline Outline;
@@ -1728,7 +1735,7 @@ namespace Surveyor
         }
         private void OnDisable() { Camera.onPreCull -= PreCull; Camera.onPostRender -= PostRender; RestoreCamera(); DropPeekFx(); }
 
-        public bool Peeking { get { return Time.time < _peekUntil; } }
+        public bool Peeking { get { return _peeking && Time.time < _peekUntil; } }
         public bool OverdriveOn { get { return _odActive >= 0 && Time.time < _odUntil; } }
         public SvrDemon Demon { get { return _demon; } }
         private static readonly Collider[] _colHits = new Collider[48];
@@ -1740,19 +1747,25 @@ namespace Surveyor
                 _demon.VacuumHold(body, aim, dt);
             }
 
-            // 1) Sucks dropped items and pickups directly toward the player's feet (zero-lag from pre-scanned _pois)
+            // 1) Sucks dropped items and pulls chests/lockboxes/barrels directly toward the player
             Vector3 foot = body ? (body.footPosition + Vector3.up * 0.5f) : (aim.origin - Vector3.up * 0.5f);
             for (int i = 0; i < _pois.Count; i++)
             {
                 Poi p = _pois[i];
-                if (p.Kind != 3 || !p.Tr || !p.Tr.gameObject.activeInHierarchy) continue;
-                Vector3 toItem = p.Tr.position - aim.origin;
-                float dItem = toItem.magnitude;
-                if (dItem < 38f && (Vector3.Angle(aim.direction, toItem) < 55f || dItem < 8f))
+                if (!p.Tr || !p.Tr.gameObject.activeInHierarchy) continue;
+                bool isItem = (p.Kind == 3);
+                bool isChest = (p.Kind == 0 || p.Kind == 2);
+                if (!isItem && !isChest) continue;
+
+                Vector3 toObj = p.Tr.position - aim.origin;
+                float dObj = toObj.magnitude;
+                if (dObj < 38f && (Vector3.Angle(aim.direction, toObj) < 55f || dObj < 8f))
                 {
-                    p.Tr.position = Vector3.MoveTowards(p.Tr.position, foot, 30f * dt);
+                    float speed = isItem ? 32f : 16f;
+                    Vector3 targetPos = isItem ? foot : (foot + aim.direction * 1.8f);
+                    p.Tr.position = Vector3.MoveTowards(p.Tr.position, targetPos, speed * dt);
                     Rigidbody rb = p.Tr.GetComponent<Rigidbody>();
-                    if (rb) rb.velocity = (foot - p.Tr.position).normalized * 30f;
+                    if (rb) rb.velocity = (targetPos - p.Tr.position).normalized * speed;
                 }
             }
 
@@ -1861,7 +1874,7 @@ namespace Surveyor
             try { _fiGpcPickup = typeof(GenericPickupController).GetField("pickupIndex", flags); } catch { }
         }
 
-        private static void ResolvePickupDisplay(GameObject go, ref string tag, ref Color col)
+        private static void ResolvePickupDisplay(GameObject go, ref string tag, ref Color col, ref string desc)
         {
             if (!go) return;
             try
@@ -1894,14 +1907,39 @@ namespace Surveyor
                         float maxC = Mathf.Max(bc.r, Mathf.Max(bc.g, bc.b));
                         if (maxC > 0.05f)
                         {
-                            // Boost brightness/saturation slightly so white/green/red/yellow/lunar/void tiers pop on black LiDAR
                             col = Color.Lerp(bc * (1f / Mathf.Max(0.45f, maxC)), Color.white, 0.18f);
                             col.a = 1f;
+                        }
+                        if (def.itemIndex != ItemIndex.None)
+                        {
+                            ItemDef iDef = ItemCatalog.GetItemDef(def.itemIndex);
+                            if (iDef != null && !string.IsNullOrEmpty(iDef.pickupToken))
+                            {
+                                string pTok = Language.GetString(iDef.pickupToken);
+                                if (!string.IsNullOrEmpty(pTok) && pTok != iDef.pickupToken)
+                                    desc = pTok;
+                            }
+                        }
+                        else if (def.equipmentIndex != EquipmentIndex.None)
+                        {
+                            EquipmentDef eDef = EquipmentCatalog.GetEquipmentDef(def.equipmentIndex);
+                            if (eDef != null && !string.IsNullOrEmpty(eDef.pickupToken))
+                            {
+                                string pTok = Language.GetString(eDef.pickupToken);
+                                if (!string.IsNullOrEmpty(pTok) && pTok != eDef.pickupToken)
+                                    desc = pTok;
+                            }
                         }
                     }
                 }
             }
             catch { }
+        }
+
+        private static void ResolvePickupDisplay(GameObject go, ref string tag, ref Color col)
+        {
+            string d = null;
+            ResolvePickupDisplay(go, ref tag, ref col, ref d);
         }
 
         public static CachedMeshData GetCachedMesh(Mesh m)
@@ -2342,8 +2380,8 @@ namespace Surveyor
             return rig;
         }
 
-        // Maps active character/monster/boss skeletal animations & skinned meshes onto the real-time point-cloud + wireframe rig
-        private void SweepBody(CharacterBody b, float revealSeconds, int pointBudget = 16)
+        // Maps active character/monster/boss skeletal animations & moving limbs onto the real-time point-cloud
+        private void SweepBody(CharacterBody b, float revealSeconds, int pointBudget = 20)
         {
             if (!b || !b.healthComponent || !b.healthComponent.alive) return;
             SvrSkeletalRig rig = GetOrBuildSkeletalRig(b);
@@ -2357,13 +2395,13 @@ namespace Surveyor
             Color boneCol = isFriendly
                 ? new Color(0.28f, 1f, 0.88f, 1f)
                 : (isBoss ? new Color(1f, 0.42f, 0.1f, 1f) : new Color(1f, 0.18f, 0.14f, 1f));
-            Color edgeCol = Color.Lerp(boneCol, Color.white, 0.3f);
-            float life = 0.24f;
+            Color edgeCol = Color.Lerp(boneCol, Color.white, 0.35f);
+            float life = 0.18f; // Short dot lifetime so moving dots tightly track walking/attacking animation without ghosting or T-pose
 
-            // 1) Emit real-time animated points along active Transform bone links
+            // 1) Emit real-time animated points along active Transform bone links (legs, spine, arms, head)
             if (rig.Bones.Count > 0)
             {
-                int bCnt = Mathf.Min(pointBudget, rig.Bones.Count * 2);
+                int bCnt = Mathf.Min(pointBudget / 2 + 2, rig.Bones.Count);
                 for (int i = 0; i < bCnt; i++)
                 {
                     SvrSkeletalRig.BoneLink bl = rig.Bones[(i + _spin) % rig.Bones.Count];
@@ -2373,7 +2411,6 @@ namespace Surveyor
                     Vector3 seg = pB - pA;
                     float u = Random.value;
                     Vector3 basePt = pA + seg * u;
-                    // Radial surface point around the animated bone cylinder
                     Vector3 upRef = Mathf.Abs(seg.normalized.y) > 0.9f ? Vector3.right : Vector3.up;
                     Vector3 perp1 = Vector3.Cross(seg.normalized, upRef).normalized;
                     Vector3 perp2 = Vector3.Cross(seg.normalized, perp1).normalized;
@@ -2382,10 +2419,11 @@ namespace Surveyor
                     AddDot(surfPt, (i & 1) == 0 ? edgeCol : boneCol, life, true);
                 }
             }
-            // 2) Emit real-time animated points on HurtBox limb capsules/spheres/boxes parented to moving bones
-            else if (rig.Limbs.Count > 0)
+
+            // 2) Emit real-time animated points on HurtBox limb colliders parented directly to moving bones
+            if (rig.Limbs.Count > 0)
             {
-                int lCnt = Mathf.Min(pointBudget, rig.Limbs.Count * 2);
+                int lCnt = Mathf.Min(pointBudget / 2 + 2, rig.Limbs.Count);
                 for (int i = 0; i < lCnt; i++)
                 {
                     SvrSkeletalRig.LimbVolume lv = rig.Limbs[(i + _spin) % rig.Limbs.Count];
@@ -2404,14 +2442,14 @@ namespace Surveyor
                 }
             }
 
-            // 3) If the character/enemy has a readable SkinnedMeshRenderer, bake its live skinning matrix pose right now
+            // 3) Live SkinnedMeshRenderer deformation bake: bakes real-time animated skinning pose (no T-pose)
             if (_sharedBakeMesh && rig.SkinnedMeshes.Count > 0 && now >= rig.NextBakeTime)
             {
-                rig.NextBakeTime = now + 0.045f; // ~22 Hz live skinning bake
+                rig.NextBakeTime = now + 0.04f; // ~25 Hz live skinning bake
                 try
                 {
                     SkinnedMeshRenderer smr = rig.SkinnedMeshes[0];
-                    if (smr && smr.sharedMesh && smr.sharedMesh.isReadable)
+                    if (smr)
                     {
                         _sharedBakeMesh.Clear();
                         smr.BakeMesh(_sharedBakeMesh);
@@ -2425,7 +2463,7 @@ namespace Surveyor
                             {
                                 Vector3 wp = smrTr.TransformPoint(bVerts[v]);
                                 rig.BakedWorldVerts.Add(wp);
-                                if ((v / step) % 4 == 0) AddDot(wp, edgeCol, life, true);
+                                if ((v / step) % 3 == 0) AddDot(wp, edgeCol, life, true);
                             }
                         }
                     }
@@ -2591,12 +2629,22 @@ namespace Surveyor
             }
         }
 
-        public void StartPeek(float seconds)
+        public void StartPeek(float seconds = 4.8f)
         {
+            _peeking = true;
             _peekStart = Time.time;
-            _peekUntil = Time.time + Mathf.Max(seconds, 10.0f);
+            _peekUntil = Time.time + 4.8f;
             _peekNeedBurst = true;
-            // Do not jump _peekK: let LateUpdate smoothly ramp _peekK from 0 -> 1 so the dots fade out smoothly.
+        }
+
+        public void EndPeek()
+        {
+            if (!_peeking && Time.time >= _peekUntil) return;
+            _peeking = false;
+            _peekUntil = Time.time;
+            _peekReady = Time.time + SvrPlugin.PeekCooldown.Value;
+            Util.PlaySound("Play_huntress_m2_throw_short", gameObject);
+            SvrRigPart.CloseVisor(gameObject);
         }
 
         // ---------------------------------------------------------------- per frame
@@ -2829,15 +2877,29 @@ namespace Surveyor
                 TriggerModeBurst();
             }
 
-            // Peek on its own key, whatever is in the utility slot. It runs the Peek state on the Body machine,
-            // which is networked, so everyone sees the visor flip.
-            if (TryKey(SvrPlugin.PeekKey.Value, out peek) && Input.GetKeyDown(peek) && Time.time >= _peekReady && !Peeking)
+            // Peek on its own key. Toggleable: pressing F lifts visor, pressing F again closes it.
+            // When open, screen slowly washes out to blinding pure white over ~4.5s, then snaps shut with a cooldown.
+            if (TryKey(SvrPlugin.PeekKey.Value, out peek) && Input.GetKeyDown(peek))
             {
-                EntityStateMachine esm = EntityStateMachine.FindByCustomName(gameObject, "Body");
-                if (esm)
+                if (Peeking)
                 {
-                    esm.SetInterruptState(new SvrPeekState(), InterruptPriority.Skill);
-                    _peekReady = Time.time + SvrPlugin.PeekCooldown.Value;
+                    EndPeek();
+                }
+                else if (Time.time >= _peekReady)
+                {
+                    EntityStateMachine esm = EntityStateMachine.FindByCustomName(gameObject, "Body");
+                    if (esm)
+                    {
+                        esm.SetInterruptState(new SvrPeekState(), InterruptPriority.Skill);
+                    }
+                    else
+                    {
+                        StartPeek(4.8f);
+                    }
+                }
+                else
+                {
+                    Util.PlaySound("Play_UI_insufficient_funds", gameObject);
                 }
             }
             // Ghost-Trap [G]: throws out a Ghostbusters / Luigi's Mansion containment trap on the floor ahead (or triggers Active-Reload Compression Slam).
@@ -3043,8 +3105,9 @@ namespace Surveyor
                     Transform tr = gpc.gameObject.transform;
                     if ((tr.position - me).sqrMagnitude > maxDistSqr * 1.3f) continue;
                     string tag = "ITEM";
+                    string desc = "HOLD [M2] TO VACUUM ITEM";
                     Color col = new Color(0.32f, 1f, 0.94f, 1f);
-                    ResolvePickupDisplay(gpc.gameObject, ref tag, ref col);
+                    ResolvePickupDisplay(gpc.gameObject, ref tag, ref col, ref desc);
                     Vector3 ext = new Vector3(0.55f, 0.55f, 0.55f);
                     SvrLiDARScanTarget st = EnsureScanTarget(gpc.gameObject, 3, 8, tag, col, new Vector3(0f, 0.45f, 0f), ext);
                     _pois.Add(new Poi
@@ -3054,6 +3117,7 @@ namespace Surveyor
                         Extents = ext,
                         Col = col,
                         Tag = tag,
+                        ItemDesc = desc,
                         Kind = 3,
                         SubShape = 8,
                         Outline = GetOrBuildOutline(tr, 3),
@@ -3073,8 +3137,9 @@ namespace Surveyor
                     Transform tr = ppc.gameObject.transform;
                     if ((tr.position - me).sqrMagnitude > maxDistSqr * 1.3f) continue;
                     string tag = "COMMAND ESSENCE";
+                    string desc = "HOLD [M2] TO VACUUM ESSENCE";
                     Color col = new Color(0.35f, 1f, 0.95f, 1f);
-                    ResolvePickupDisplay(ppc.gameObject, ref tag, ref col);
+                    ResolvePickupDisplay(ppc.gameObject, ref tag, ref col, ref desc);
                     Vector3 ext = new Vector3(0.6f, 0.6f, 0.6f);
                     SvrLiDARScanTarget st = EnsureScanTarget(ppc.gameObject, 3, 8, tag, col, new Vector3(0f, 0.5f, 0f), ext);
                     _pois.Add(new Poi
@@ -3084,6 +3149,7 @@ namespace Surveyor
                         Extents = ext,
                         Col = col,
                         Tag = tag,
+                        ItemDesc = desc,
                         Kind = 3,
                         SubShape = 8,
                         Outline = GetOrBuildOutline(tr, 3),
@@ -3185,21 +3251,26 @@ namespace Surveyor
             _nextPoiPaint = now + (OdMode == 2 ? 0.042f : 0.068f);
 
             Vector3 me = _body.corePosition;
-            float baseRange = SvrPlugin.ScanRange.Value * SvrSenses.SightMult;
-            float maxRange = baseRange * (OdMode == 2 ? 2.0f : (OdMode == 1 ? 1.55f : 1.35f));
-            int mult = (burst ? 3 : 1) * (OdMode == 2 ? 2 : 1);
+            int mult = (burst ? 3 : 1);
             float life = SvrPlugin.DotLife.Value * 0.58f;
+
+            // Focal cone angle and reach for interactable illumination based on current Q mode
+            float coneAngle = (OdMode % 4 == 0) ? 14f : ((OdMode % 4 == 1) ? 28f : ((OdMode % 4 == 2) ? 50f : 88f));
+            float maxRange = (OdMode % 4 == 0) ? 180f : ((OdMode % 4 == 1) ? 115f : ((OdMode % 4 == 2) ? 65f : 30f));
 
             for (int i = 0; i < _pois.Count; i++)
             {
                 Poi p = _pois[i];
                 if (!p.Tr || !p.Tr.gameObject.activeInHierarchy) continue;
                 Vector3 pos = p.Pos;
-                float dist = Vector3.Distance(me, pos);
-                if (p.Target && (burst || OdMode == 2 || dist < 50f))
+                Vector3 toPoi = pos - me;
+                float dist = toPoi.magnitude;
+                bool isHovered = (_hoveredPoi.Tr == p.Tr && Time.time < _hoveredPoiUntil);
+
+                if (p.Target && (burst || isHovered || dist < 25f))
                     p.Target.OnWaveWash(burst ? 5.0f : 2.5f, 1f);
 
-                if (p.Kind == 4) // TELEPORTER: always paint out to 240m with base ring + actual 3D teleporter prongs + tall vertical beacon spire
+                if (p.Kind == 4) // TELEPORTER: always paint out to 240m with base ring + tall vertical beacon spire
                 {
                     if (dist > 240f) continue;
                     int ringPts = 14 * mult;
@@ -3222,9 +3293,14 @@ namespace Surveyor
                     continue;
                 }
 
-                if (dist > maxRange) continue;
+                // Gated by current scanner cone mode unless burst, hovered, or in close touch (dist <= 4.5m)
+                if (!burst && !isHovered && dist > 4.5f)
+                {
+                    if (dist > maxRange) continue;
+                    if (_input && Vector3.Angle(_input.aimDirection, toPoi) > coneAngle) continue;
+                }
 
-                int sampleBudget = (p.Kind == 3 ? 18 : (p.Kind == 2 ? 10 : 16)) * mult;
+                int sampleBudget = (p.Kind == 3 ? (isHovered ? 36 : 24) : (p.Kind == 2 ? 10 : 16)) * mult;
                 if (p.Target && p.Target.Parts.Count > 0)
                 {
                     PaintTargetWireframe(p.Target, sampleBudget, life);
@@ -3232,6 +3308,19 @@ namespace Surveyor
                 else if (p.Outline != null && p.Outline.Parts.Count > 0)
                 {
                     PaintMeshOutline(p.Outline, p.Col, sampleBudget, life);
+                }
+
+                // Ground item extra pedestal ring so dropped loot is clearly visible in LiDAR view
+                if (p.Kind == 3)
+                {
+                    int ringPts = isHovered ? 10 : 6;
+                    for (int r = 0; r < ringPts; r++)
+                    {
+                        float ang = (r / (float)ringPts) * 6.28318f + (isHovered ? now * 4f : 0f);
+                        Vector3 rp = p.Pos + new Vector3(Mathf.Cos(ang) * 0.42f, 0.08f, Mathf.Sin(ang) * 0.42f);
+                        AddDot(rp, p.Col, life, true);
+                    }
+                    AddDot(p.Pos + Vector3.up * 0.3f, Color.white, life, true);
                 }
             }
         }
@@ -3296,99 +3385,16 @@ namespace Surveyor
             float life = SvrPlugin.DotLife.Value * (sight < 1f ? 0.7f : 1f);
             switch (OdMode % 4)
             {
-                case 1:     // THERMAL: Wide cone + seismic ground rings + 115m wall-penetrating enemy/boss/demon sonar
+                case 0:     // NEEDLE BEAM: Super narrow 12-degree cone, extreme 180m reach, high dot density
                 {
-                    int rays = Mathf.RoundToInt(baseRays * 1.5f);
+                    int rays = Mathf.RoundToInt(baseRays * 1.55f);
+                    float r = range * 2.5f;
+                    float l = life * 1.25f;
                     for (int i = 0; i < rays; i++)
                     {
                         _spin++;
-                        if (i % 4 == 0)
-                        {
-                            // Seismic ground/wall ring
-                            float yaw = (_spin * 9.7f) % 360f;
-                            float pitch = Random.Range(-35f, 25f);
-                            Cast(o, Quaternion.Euler(-pitch, yaw, 0f) * Vector3.forward, range * 1.2f, life, false);
-                            continue;
-                        }
-                        float f2 = ((_spin % 257) + Random.value) / 257f;
-                        Cast(o, Cone(aim, 56f * Mathf.Sqrt(f2), _spin * 2.39996f), range * 1.15f, life, false);
-                    }
-                    if (Time.time >= _echoPing)
-                    {
-                        _echoPing = Time.time + 0.50f;
-                        _revealUntil = Mathf.Max(_revealUntil, Time.time + 0.75f); // THERMAL also reveals the Shimmer Demon through walls
-                        try
-                        {
-                            SphereSearch s = new SphereSearch { origin = _body.corePosition, radius = 115f * sight, mask = LayerIndex.entityPrecise.mask };
-                            s.RefreshCandidates();
-                            s.FilterCandidatesByHurtBoxTeam(TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex));
-                            s.FilterCandidatesByDistinctHurtBoxEntities();
-                            foreach (HurtBox hb in s.GetHurtBoxes())
-                                if (hb && hb.healthComponent && hb.healthComponent.alive && !_tracked.Contains(hb.healthComponent) && _tracked.Count < 45)
-                                {
-                                    _tracked.Add(hb.healthComponent);
-                                    _trackedUntil.Add(Time.time + 0.75f);
-                                }
-                        }
-                        catch { }
-                    }
-                    break;
-                }
-                case 2:     // SALVAGE: Massive 360 omni-dome + concentric latitude bands + long-range loot & hologram hunter
-                {
-                    int rays = Mathf.RoundToInt(baseRays * 1.65f);
-                    for (int i = 0; i < rays; i++)
-                    {
-                        _spin++;
-                        if (i % 3 == 0)
-                        {
-                            // Structured 360 horizontal & dome bands so walls, rooms, and chests read crisply all around her
-                            float bandYaw = (_spin * 7.13f) % 360f;
-                            float bandPitch = Mathf.Lerp(-50f, 55f, ((_spin / 36) % 12) / 11f) + Random.Range(-3f, 3f);
-                            Cast(o, Quaternion.Euler(-bandPitch, bandYaw, 0f) * Vector3.forward, range * 1.3f, life * 1.15f, false);
-                        }
-                        else
-                        {
-                            Vector3 d = Random.onUnitSphere;
-                            d.y *= 0.72f;
-                            Cast(o, d.normalized, range * 1.2f, life, false);
-                        }
-                    }
-                    break;
-                }
-                case 3:     // STRUCTURAL: Twin opposing 360 radar walls + expanding sonar floor ring + long-range spotlight & target lock
-                {
-                    int rays = Mathf.RoundToInt(baseRays * 1.7f);
-                    _scanYaw += 310f * dt;
-                    _sweepRing = (_sweepRing + dt * 0.85f) % 1f;
-                    float ringYawBase = Time.time * 90f;
-                    for (int i = 0; i < rays; i++)
-                    {
-                        _spin++;
-                        int mod = i % 5;
-                        if (mod == 0 || mod == 2)
-                        {
-                            // Ultra-long forward structural spotlight (2.2x range)
-                            float f1 = ((_spin % 257) + Random.value) / 257f;
-                            float spread = (mod == 0) ? 16f * Mathf.Sqrt(f1) : 36f * Mathf.Sqrt(f1);
-                            float r = (mod == 0) ? range * 2.2f : range * 1.5f;
-                            Cast(o, Cone(aim, spread, _spin * 2.39996f), r, life * 1.35f, i % 6 == 0);
-                        }
-                        else if (mod == 1)
-                        {
-                            // Expanding horizontal sonar floor/wall ring sweeping outward
-                            float rYaw = ringYawBase + (i / (float)rays) * 360f + Random.Range(-4f, 4f);
-                            float rPitch = Mathf.Lerp(-48f, 18f, _sweepRing) + Random.Range(-3f, 3f);
-                            Cast(o, Quaternion.Euler(-rPitch, rYaw, 0f) * Vector3.forward, range * 1.55f, life * 1.25f, true);
-                        }
-                        else
-                        {
-                            // Twin opposing vertical radar walls (front wall + rear wall 180 deg apart)
-                            float wallOffset = (i & 1) == 0 ? 0f : 180f;
-                            float yaw = _scanYaw + wallOffset + Random.Range(-3.5f, 3.5f);
-                            float pitch = Mathf.Lerp(-65f, 72f, Random.value);
-                            Cast(o, Quaternion.Euler(-pitch, yaw, 0f) * Vector3.forward, range * 1.6f, life * 1.35f, false);
-                        }
+                        float f = ((_spin % 257) + Random.value) / 257f;
+                        Cast(o, Cone(aim, 12f * Mathf.Sqrt(f), _spin * 2.39996f), r, l, i % 5 == 0);
                     }
                     if (Time.time >= _focusLockNext)
                     {
@@ -3399,8 +3405,8 @@ namespace Surveyor
                             {
                                 searchOrigin = o,
                                 searchDirection = aim,
-                                maxDistanceFilter = range * 2.2f,
-                                maxAngleFilter = 22f,
+                                maxDistanceFilter = r,
+                                maxAngleFilter = 14f,
                                 teamMaskFilter = TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex),
                                 filterByLoS = false,
                                 sortMode = BullseyeSearch.SortMode.Angle
@@ -3417,22 +3423,40 @@ namespace Surveyor
                     }
                     break;
                 }
-                default:    // TOPOGRAPHY: Wide 65-degree high-density terrain contour flood ahead + 360 proximity skirt
+                case 1:     // NARROW CONE: 26-degree cone, long 110m reach, focused dots
                 {
-                    int rays = Mathf.RoundToInt(baseRays * 1.5f);
+                    int rays = Mathf.RoundToInt(baseRays * 1.35f);
+                    float r = range * 1.6f;
+                    float l = life * 1.1f;
                     for (int i = 0; i < rays; i++)
                     {
                         _spin++;
-                        if (i % 4 == 0)
-                        {
-                            // 360 close-range room/foot skirt so walls and ledges beside her are always painted
-                            Vector3 d = Random.onUnitSphere;
-                            d.y *= 0.65f;
-                            Cast(o, d.normalized, range * 0.65f, life, false);
-                            continue;
-                        }
                         float f = ((_spin % 257) + Random.value) / 257f;
-                        Cast(o, Cone(aim, 65f * Mathf.Sqrt(f), _spin * 2.39996f), range * 1.3f, life, false);
+                        Cast(o, Cone(aim, 26f * Mathf.Sqrt(f), _spin * 2.39996f), r, l, i % 6 == 0);
+                    }
+                    break;
+                }
+                case 2:     // MEDIUM CONE: 48-degree cone, mid 60m reach, dispersed dots across the wider angle
+                {
+                    int rays = Mathf.RoundToInt(baseRays * 1.05f);
+                    float r = range * 0.95f;
+                    for (int i = 0; i < rays; i++)
+                    {
+                        _spin++;
+                        float f = ((_spin % 257) + Random.value) / 257f;
+                        Cast(o, Cone(aim, 48f * Mathf.Sqrt(f), _spin * 2.39996f), r, life, false);
+                    }
+                    break;
+                }
+                default:    // WIDE FLOOD: 85-degree peripheral cone, close 28m reach, widely dispersed scattered dots
+                {
+                    int rays = Mathf.RoundToInt(baseRays * 0.85f);
+                    float r = range * 0.45f;
+                    for (int i = 0; i < rays; i++)
+                    {
+                        _spin++;
+                        float f = ((_spin % 257) + Random.value) / 257f;
+                        Cast(o, Cone(aim, 85f * Mathf.Sqrt(f), _spin * 2.39996f), r, life * 0.85f, false);
                     }
                     break;
                 }
@@ -3502,9 +3526,14 @@ namespace Surveyor
             if (!_local || !_body) return;
             if (!Alive) { RestoreCamera(); DropPeekFx(); _peekK = 0f; return; }
 
+            float now = Time.time;
+            if (_peeking && now >= _peekUntil)
+            {
+                EndPeek();
+            }
+
             // Peek intensity (_peekK): smoothly ramps 0 -> 1 over ~0.35s as the visor lifts, holds at 1 while peeking,
             // and smoothly ramps 1 -> 0 over ~0.4s as the visor comes back down.
-            float now = Time.time;
             float target = 0f;
             if (Peeking)
             {
@@ -3513,6 +3542,48 @@ namespace Surveyor
             }
             float speed = Peeking ? 2.85f : 2.5f;
             _peekK = Mathf.MoveTowards(_peekK, target, Time.deltaTime * speed);
+
+            // Ground item crosshair hover inspection
+            if (_input)
+            {
+                Vector3 aimO = _input.aimOrigin;
+                Vector3 aimD = _input.aimDirection;
+                Poi closestHover = default;
+                float closestDist = float.MaxValue;
+                bool foundHover = false;
+
+                for (int i = 0; i < _pois.Count; i++)
+                {
+                    Poi p = _pois[i];
+                    if (p.Kind != 3 || !p.Tr || !p.Tr.gameObject.activeInHierarchy) continue;
+                    Vector3 toP = p.Pos - aimO;
+                    float fwd = Vector3.Dot(toP, aimD);
+                    if (fwd > 0.4f && fwd < 48f)
+                    {
+                        Vector3 proj = aimO + aimD * fwd;
+                        float rayDist = Vector3.Distance(proj, p.Pos);
+                        float threshold = Mathf.Clamp(fwd * 0.08f, 0.75f, 2.8f);
+                        if (rayDist < threshold && rayDist < closestDist)
+                        {
+                            closestDist = rayDist;
+                            closestHover = p;
+                            foundHover = true;
+                        }
+                    }
+                }
+
+                if (foundHover)
+                {
+                    _hoveredPoi = closestHover;
+                    _hoveredPoiUntil = now + 0.18f;
+                    for (int k = 0; k < 8; k++)
+                    {
+                        float ang = k * 0.785f + now * 5f;
+                        Vector3 hDot = _hoveredPoi.Pos + new Vector3(Mathf.Cos(ang) * 0.55f, 0.15f + 0.08f * Mathf.Sin(now * 8f + k), Mathf.Sin(ang) * 0.55f);
+                        AddDot(hDot, _hoveredPoi.Col, 0.12f, true);
+                    }
+                }
+            }
 
             Camera cam = Cam();
             if (!cam) return;
@@ -4492,84 +4563,50 @@ namespace Surveyor
             }
         }
 
-        // Blown-out visor-off look: frosted static/glitch blind overlay, white wash, chromatic edge refraction, and smooth dark fade when closing.
+        // Visor-off navigation: real-world view fades slowly to pure white (sensory overload),
+        // then snaps shut automatically and enters cooldown.
         private void DrawPeekWash(float scale)
         {
-            float now = Time.time;
             float k = _peekK;
             if (k < 0.01f) return;
             Texture2D white = Texture2D.whiteTexture;
 
-            float flick = 0.88f + 0.12f * Mathf.Sin(now * 23f) + (Random.value < 0.04f ? 0.25f : 0f);
-            float wash = 0.26f * k * flick;
-            GUI.color = new Color(0.95f, 0.98f, 1f, Mathf.Clamp01(wash));
-            GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), white);
-
-            // Frosted helmet-glass vignette + chromatic edge refraction
-            for (int i = 0; i < 7; i++)
+            float elapsed = Time.time - _peekStart;
+            // Over ~4.5 seconds, white wash builds up smoothly to 100% pure blinding white
+            float wash = Mathf.Clamp01((elapsed - 0.6f) / 3.6f) * k;
+            if (wash > 0.005f)
             {
-                float inset = i * 0.035f;
-                float a = (0.16f - i * 0.02f) * k * flick;
-                if (a <= 0f) continue;
-                GUI.color = (i == 0) ? new Color(0.75f, 0.94f, 1f, a * 1.2f) : new Color(1f, 0.98f, 0.92f, a);
-                float bx = Screen.width * inset, by = Screen.height * inset;
-                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, by + 6f), white);
-                GUI.DrawTexture(new Rect(0f, Screen.height - by - 6f, Screen.width, by + 6f), white);
-                GUI.DrawTexture(new Rect(0f, 0f, bx + 6f, Screen.height), white);
-                GUI.DrawTexture(new Rect(Screen.width - bx - 6f, 0f, bx + 6f, Screen.height), white);
-            }
-            // Frosted static & horizontal scanline glitch bars
-            for (int i = 0; i < 9; i++)
-            {
-                bool cyanTint = (i & 1) == 0;
-                GUI.color = cyanTint
-                    ? new Color(0.75f, 0.96f, 1f, Random.Range(0.08f, 0.28f) * k)
-                    : new Color(1f, 0.92f, 0.88f, Random.Range(0.1f, 0.32f) * k);
-                float bw = Random.Range(0.25f, 1f) * Screen.width;
-                GUI.DrawTexture(new Rect(Random.value * (Screen.width - bw), Random.value * Screen.height, bw, Random.Range(1.5f, 14f) * scale), white);
+                GUI.color = new Color(1f, 1f, 1f, wash);
+                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), white);
             }
         }
 
-        // Draws one of the four tactical LiDAR scanner mode icons (0=TOPOGRAPHY, 1=THERMAL, 2=SALVAGE, 3=STRUCTURAL)
+        // Draws one of the four tactical LiDAR scanner mode icons (0=NEEDLE, 1=NARROW, 2=MEDIUM, 3=WIDE)
         private static void DrawModeIcon(Vector2 center, float r, int mode, Color col, float scale, Texture2D white)
         {
             GUI.color = col;
             float t = Mathf.Max(1.5f, 2f * scale);
-            // Map scan mode -> icon glyph: TOPOGRAPHY = flood wedge, THERMAL = sonar chevrons, SALVAGE = omni diamond, STRUCTURAL = radar rotor
-            int glyph;
-            switch (mode % 4) { case 1: glyph = 4; break; case 2: glyph = 2; break; case 3: glyph = 1; break; default: glyph = 0; break; }
-            switch (glyph)
+            switch (mode % 4)
             {
-                case 0: // CONE: wide 65-deg flood wedge + base dot
-                    DrawScreenLine(center + new Vector2(0f, r * 0.7f), center + new Vector2(-r * 0.85f, -r * 0.65f), t, white);
-                    DrawScreenLine(center + new Vector2(0f, r * 0.7f), center + new Vector2(r * 0.85f, -r * 0.65f), t, white);
-                    DrawScreenLine(center + new Vector2(-r * 0.85f, -r * 0.65f), center + new Vector2(0f, -r * 0.9f), t, white);
-                    DrawScreenLine(center + new Vector2(0f, -r * 0.9f), center + new Vector2(r * 0.85f, -r * 0.65f), t, white);
+                case 0: // NEEDLE BEAM: ultra-narrow focused vertical ray beam
+                    DrawScreenLine(center + new Vector2(0f, -r * 1.15f), center + new Vector2(0f, r * 1.15f), t * 1.2f, white);
+                    DrawScreenLine(center + new Vector2(-r * 0.35f, -r * 0.4f), center + new Vector2(0f, -r * 1.15f), t, white);
+                    DrawScreenLine(center + new Vector2(r * 0.35f, -r * 0.4f), center + new Vector2(0f, -r * 1.15f), t, white);
                     break;
-                case 1: // SWEEP: twin opposing radar rotor blades + ring
-                    DrawScreenLine(center + new Vector2(-r * 0.85f, -r * 0.85f), center + new Vector2(r * 0.85f, r * 0.85f), t, white);
-                    DrawScreenLine(center + new Vector2(-r * 0.85f, r * 0.85f), center + new Vector2(r * 0.85f, -r * 0.85f), t * 0.75f, white);
-                    GUI.DrawTexture(new Rect(center.x - 2.5f * scale, center.y - 2.5f * scale, 5f * scale, 5f * scale), white);
+                case 1: // NARROW CONE: 26-degree forward wedge
+                    DrawScreenLine(center + new Vector2(0f, r * 0.85f), center + new Vector2(-r * 0.42f, -r * 0.95f), t, white);
+                    DrawScreenLine(center + new Vector2(0f, r * 0.85f), center + new Vector2(r * 0.42f, -r * 0.95f), t, white);
+                    DrawScreenLine(center + new Vector2(-r * 0.42f, -r * 0.95f), center + new Vector2(r * 0.42f, -r * 0.95f), t, white);
                     break;
-                case 2: // WIDE: 360 omni-dome diamond + inner core
-                    DrawScreenLine(center + new Vector2(0f, -r), center + new Vector2(r, 0f), t, white);
-                    DrawScreenLine(center + new Vector2(r, 0f), center + new Vector2(0f, r), t, white);
-                    DrawScreenLine(center + new Vector2(0f, r), center + new Vector2(-r, 0f), t, white);
-                    DrawScreenLine(center + new Vector2(-r, 0f), center + new Vector2(0f, -r), t, white);
-                    GUI.DrawTexture(new Rect(center.x - 3f * scale, center.y - 3f * scale, 6f * scale, 6f * scale), white);
+                case 2: // MEDIUM CONE: 48-degree balanced wedge
+                    DrawScreenLine(center + new Vector2(0f, r * 0.75f), center + new Vector2(-r * 0.75f, -r * 0.75f), t, white);
+                    DrawScreenLine(center + new Vector2(0f, r * 0.75f), center + new Vector2(r * 0.75f, -r * 0.75f), t, white);
+                    DrawScreenLine(center + new Vector2(-r * 0.75f, -r * 0.75f), center + new Vector2(r * 0.75f, -r * 0.75f), t, white);
                     break;
-                case 3: // FOCUS: sniper crosshair + tight vertical beam
-                    DrawScreenLine(center + new Vector2(0f, -r), center + new Vector2(0f, r), t, white);
-                    DrawScreenLine(center + new Vector2(-r, 0f), center + new Vector2(r, 0f), t, white);
-                    GUI.DrawTexture(new Rect(center.x - r * 0.45f, center.y - r * 0.45f, r * 0.9f, r * 0.9f), white);
-                    break;
-                default: // ECHO: seismic concentric sonar chevrons
-                    for (int w = 0; w < 3; w++)
-                    {
-                        float rw = r * (0.4f + w * 0.3f);
-                        DrawScreenLine(center + new Vector2(-rw, rw * 0.3f), center + new Vector2(0f, -rw * 0.7f), t, white);
-                        DrawScreenLine(center + new Vector2(0f, -rw * 0.7f), center + new Vector2(rw, rw * 0.3f), t, white);
-                    }
+                default: // WIDE FLOOD: 85-degree wide peripheral fan
+                    DrawScreenLine(center + new Vector2(0f, r * 0.65f), center + new Vector2(-r * 1.1f, -r * 0.5f), t, white);
+                    DrawScreenLine(center + new Vector2(0f, r * 0.65f), center + new Vector2(r * 1.1f, -r * 0.5f), t, white);
+                    DrawScreenLine(center + new Vector2(-r * 1.1f, -r * 0.5f), center + new Vector2(r * 1.1f, -r * 0.5f), t, white);
                     break;
             }
         }
@@ -4649,7 +4686,7 @@ namespace Surveyor
                 GUI.Label(new Rect(bx, by + h + 4f * scale, w + 40f * scale, 20f * scale), spoolTag, _label);
             }
 
-            // Installed LiDAR-Exclusive Hidden Tech Upgrade badges
+            // Installed LiDAR-Exclusive Hidden Tech Upgrade badges (thin glowing borders, no black box)
             if (SvrUpgrades.UnlockedCount > 0)
             {
                 float ux = Screen.width * 0.03f, uy = Screen.height * 0.782f;
@@ -4658,13 +4695,57 @@ namespace Surveyor
                     if (!SvrUpgrades.Has(u)) continue;
                     string uName = SvrUpgrades.ShortNames[u];
                     float uw = (uName.Length * 7.8f + 12f) * scale;
-                    GUI.color = new Color(0.03f, 0.06f, 0.09f, 0.75f);
-                    GUI.DrawTexture(new Rect(ux, uy, uw, 18f * scale), white);
                     Color uCol = u < 4 ? new Color(1f, 0.84f, 0.25f, 0.95f) : new Color(0.3f, 0.96f, 1f, 0.95f);
                     GUI.color = uCol;
                     GUI.DrawTexture(new Rect(ux, uy, 2.5f * scale, 18f * scale), white);
+                    GUI.DrawTexture(new Rect(ux, uy + 17f * scale, uw, 1.5f * scale), white);
                     GUI.Label(new Rect(ux + 5f * scale, uy - 2f * scale, uw, 20f * scale), uName, _label);
                     ux += uw + 5f * scale;
+                }
+            }
+
+            // Ground item crosshair hover inspection tooltip
+            if (Time.time < _hoveredPoiUntil && _hoveredPoi.Tr)
+            {
+                Camera cam = Cam();
+                if (cam)
+                {
+                    Vector3 itemSp = cam.WorldToScreenPoint(_hoveredPoi.Pos);
+                    if (itemSp.z > 0.3f)
+                    {
+                        float hx = itemSp.x, hy = Screen.height - itemSp.y;
+                        float cardW = 280f * scale, cardH = 46f * scale;
+                        float cx = Mathf.Clamp(hx - cardW * 0.5f, 20f, Screen.width - cardW - 20f);
+                        float cy = Mathf.Clamp(hy - cardH - 22f * scale, 20f, Screen.height - cardH - 20f);
+
+                        // Holographic brackets around the ground item
+                        float bSz = 10f * scale;
+                        Color itemCol = _hoveredPoi.Col;
+                        GUI.color = itemCol;
+                        DrawScreenLine(new Vector2(hx - bSz, hy - bSz), new Vector2(hx - bSz * 0.35f, hy - bSz), 2f * scale, white);
+                        DrawScreenLine(new Vector2(hx - bSz, hy - bSz), new Vector2(hx - bSz, hy - bSz * 0.35f), 2f * scale, white);
+                        DrawScreenLine(new Vector2(hx + bSz, hy - bSz), new Vector2(hx + bSz * 0.35f, hy - bSz), 2f * scale, white);
+                        DrawScreenLine(new Vector2(hx + bSz, hy - bSz), new Vector2(hx + bSz, hy - bSz * 0.35f), 2f * scale, white);
+                        DrawScreenLine(new Vector2(hx - bSz, hy + bSz), new Vector2(hx - bSz * 0.35f, hy + bSz), 2f * scale, white);
+                        DrawScreenLine(new Vector2(hx - bSz, hy + bSz), new Vector2(hx - bSz, hy + bSz * 0.35f), 2f * scale, white);
+                        DrawScreenLine(new Vector2(hx + bSz, hy + bSz), new Vector2(hx + bSz * 0.35f, hy + bSz), 2f * scale, white);
+                        DrawScreenLine(new Vector2(hx + bSz, hy + bSz), new Vector2(hx + bSz, hy + bSz * 0.35f), 2f * scale, white);
+
+                        // Clean holographic wireframe card (NO solid black rect!)
+                        GUI.color = itemCol;
+                        GUI.DrawTexture(new Rect(cx, cy, cardW, 2f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, cy + cardH, cardW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, cy, 2f * scale, cardH), white);
+                        GUI.DrawTexture(new Rect(cx + cardW, cy, 2f * scale, cardH), white);
+
+                        string iTitle = !string.IsNullOrEmpty(_hoveredPoi.Tag) ? _hoveredPoi.Tag : "DROPPED ITEM";
+                        GUI.color = itemCol;
+                        GUI.Label(new Rect(cx + 8f * scale, cy + 3f * scale, cardW - 16f * scale, 22f * scale), iTitle, _label);
+
+                        string iSub = !string.IsNullOrEmpty(_hoveredPoi.ItemDesc) ? _hoveredPoi.ItemDesc : "HOLD [M2] TO VACUUM ITEM";
+                        GUI.color = new Color(0.85f, 0.96f, 1f, 0.92f);
+                        GUI.Label(new Rect(cx + 8f * scale, cy + 22f * scale, cardW - 16f * scale, 20f * scale), iSub, _label);
+                    }
                 }
             }
 
@@ -4691,39 +4772,58 @@ namespace Surveyor
                     GUI.color = i == mIdx ? new Color(pc.r, pc.g, pc.b, 0.95f) : new Color(pc.r, pc.g, pc.b, 0.22f);
                     GUI.DrawTexture(new Rect(sx + i * 18f * scale, sy - 8f * scale, 14f * scale, 5f * scale), white);
                 }
+
+                // Visor Peek readout: toggle status and sensory overload load
                 float pr = _peekReady - Time.time;
-                GUI.color = new Color(0.9f, 0.95f, 1f, 0.85f);
-                GUI.Label(new Rect(sx, sy + 36f * scale, 150f * scale, 24f * scale), "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "]" + (pr > 0f ? "  " + pr.ToString("0") + "s" : "  ready"), _label);
+                string peekTxt;
+                Color peekCol;
+                if (Peeking)
+                {
+                    float elapsed = Time.time - _peekStart;
+                    float pct = Mathf.Clamp01(elapsed / 4.5f) * 100f;
+                    peekTxt = "PEEKING [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "] " + Mathf.RoundToInt(pct) + "% SENSORY OVERLOAD [PRESS TO CLOSE]";
+                    peekCol = new Color(1f, 0.95f, 0.7f, 0.95f);
+                }
+                else if (pr > 0f)
+                {
+                    peekTxt = "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "] " + pr.ToString("0") + "s COOLDOWN";
+                    peekCol = new Color(0.7f, 0.75f, 0.8f, 0.75f);
+                }
+                else
+                {
+                    peekTxt = "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "] READY";
+                    peekCol = new Color(0.9f, 0.96f, 1f, 0.95f);
+                }
+                GUI.color = peekCol;
+                GUI.Label(new Rect(sx, sy + 36f * scale, 300f * scale, 24f * scale), peekTxt, _label);
 
                 GUI.color = new Color(0.35f, 0.95f, 1f, 0.92f);
-                GUI.Label(new Rect(sx + 155f * scale, sy + 36f * scale, 480f * scale, 24f * scale), "VACUUM [M2] — HOLD TO SUCK DEMON, ENEMIES & ITEMS", _label);
+                GUI.Label(new Rect(sx + 310f * scale, sy + 36f * scale, 450f * scale, 24f * scale), "VACUUM [M2] — SUCKS DEMON, ENEMIES, ITEMS & CHESTS", _label);
 
-                // Top-center banner when tapping Q switches scanner mode
+                // Top-center banner when tapping Q switches scanner mode (clean border lines, zero black box)
                 if (sinceSwitch < 1.35f)
                 {
                     float bAlpha = Mathf.Clamp01(1.35f - sinceSwitch);
                     float bw = 480f * scale, bh = 46f * scale;
                     float bx = Screen.width * 0.5f - bw * 0.5f, by = Screen.height * 0.16f;
-                    GUI.color = new Color(0f, 0f, 0f, 0.75f * bAlpha);
-                    GUI.DrawTexture(new Rect(bx, by, bw, bh), white);
                     GUI.color = new Color(accent.r, accent.g, accent.b, 0.96f * bAlpha);
                     GUI.DrawTexture(new Rect(bx, by, bw, 2.5f * scale), white);
+                    GUI.DrawTexture(new Rect(bx, by + bh, bw, 1.5f * scale), white);
                     DrawModeIcon(new Vector2(bx + 20f * scale, by + 23f * scale), 11f * scale, mIdx, GUI.color, scale, white);
                     GUI.Label(new Rect(bx + 38f * scale, by + 4f * scale, bw - 44f * scale, 22f * scale), "SCANNER MODE: " + OdNames[mIdx] + "  (" + (mIdx + 1) + "/" + OdNames.Length + ")", _label);
                     GUI.color = new Color(0.82f, 0.95f, 1f, 0.9f * bAlpha);
                     GUI.Label(new Rect(bx + 38f * scale, by + 22f * scale, bw - 44f * scale, 22f * scale), OdDescs[mIdx], _label);
                 }
 
-                // Prompt when standing next to a LiDAR-Exclusive Hidden Tech Cache
+                // Prompt when standing next to a LiDAR-Exclusive Hidden Tech Cache (clean glowing frame, zero black box)
                 if (_nearCacheIdx >= 0 && _nearCacheIdx < _techCaches.Count && !_techCaches[_nearCacheIdx].Collected)
                 {
                     int upgId = _techCaches[_nearCacheIdx].UpgradeId;
                     float pw = 540f * scale, ph = 46f * scale;
                     float px = Screen.width * 0.5f - pw * 0.5f, py = Screen.height * 0.56f;
-                    GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.88f);
-                    GUI.DrawTexture(new Rect(px, py, pw, ph), white);
                     GUI.color = new Color(1f, 0.86f, 0.2f, 0.98f);
                     GUI.DrawTexture(new Rect(px, py, pw, 2.5f * scale), white);
+                    GUI.DrawTexture(new Rect(px, py + ph, pw, 1.5f * scale), white);
                     GUI.Label(new Rect(px + 14f * scale, py + 4f * scale, pw - 24f * scale, 22f * scale), "PRESS [E] TO INSTALL HIDDEN LIDAR TECH: " + SvrUpgrades.Names[upgId], _label);
                     GUI.color = new Color(0.35f, 0.98f, 1f, 0.92f);
                     GUI.Label(new Rect(px + 14f * scale, py + 23f * scale, pw - 24f * scale, 20f * scale), SvrUpgrades.Descs[upgId], _label);
@@ -4733,25 +4833,23 @@ namespace Surveyor
                     float uAlpha = Mathf.Clamp01(_upgradeToastUntil - Time.time);
                     float pw = 560f * scale, ph = 36f * scale;
                     float px = Screen.width * 0.5f - pw * 0.5f, py = Screen.height * 0.28f;
-                    GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.85f * uAlpha);
-                    GUI.DrawTexture(new Rect(px, py, pw, ph), white);
                     GUI.color = new Color(1f, 0.86f, 0.2f, 0.98f * uAlpha);
                     GUI.DrawTexture(new Rect(px, py, pw, 2.5f * scale), white);
+                    GUI.DrawTexture(new Rect(px, py + ph, pw, 1.5f * scale), white);
                     GUI.Label(new Rect(px + 12f * scale, py + 7f * scale, pw - 20f * scale, 22f * scale), _upgradeToast, _label);
                 }
 
-                // Ghostbusters / Luigi's Mansion Containment & Vacuuming HUD bar while Vacuuming Demon or Trap Active
+                // Ghostbusters / Luigi's Mansion Containment & Vacuuming HUD bar while Vacuuming Demon or Trap Active (clean lines, zero black box)
                 if (_demon.TrapActive || _demon.TetherActive || _demon.CaptureProgress > 0.01f)
                 {
                     float cw = 520f * scale, ch = 66f * scale;
                     float cx = Screen.width * 0.5f - cw * 0.5f, cy = Screen.height * 0.22f;
-                    GUI.color = new Color(0.02f, 0.04f, 0.06f, 0.86f);
-                    GUI.DrawTexture(new Rect(cx, cy, cw, ch), white);
                     Color topBarCol = _demon.CounterSteering
                         ? new Color(0.25f, 1f, 0.55f, 1f)
                         : (_demon.TetherActive ? new Color(0.3f, 0.95f, 1f, 0.98f) : new Color(1f, 0.86f, 0.15f, 0.95f));
                     GUI.color = topBarCol;
                     GUI.DrawTexture(new Rect(cx, cy, cw, 2.5f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, cy + ch, cw, 1.5f * scale), white);
 
                     string strainTxt = _demon.StrainStacks > 0 ? (" · STRAIN x" + _demon.StrainStacks) : "";
                     string hdr = _demon.TetherActive
@@ -4773,8 +4871,9 @@ namespace Surveyor
 
                     float barW = cw - 24f * scale, barH = 12f * scale;
                     float barX = cx + 12f * scale, barY = cy + 46f * scale;
-                    GUI.color = new Color(0.12f, 0.16f, 0.2f, 0.9f);
-                    GUI.DrawTexture(new Rect(barX, barY, barW, barH), white);
+                    GUI.color = new Color(topBarCol.r, topBarCol.g, topBarCol.b, 0.45f);
+                    GUI.DrawTexture(new Rect(barX, barY, barW, 1.5f * scale), white);
+                    GUI.DrawTexture(new Rect(barX, barY + barH, barW, 1.5f * scale), white);
 
                     // Gold Active-Reload Compression Slam Zone [64% .. 89%]
                     GUI.color = new Color(1f, 0.86f, 0.18f, 0.45f);
@@ -4794,10 +4893,9 @@ namespace Surveyor
                     float rAlpha = Mathf.Clamp01(_demon.LastRestoredUntil - Time.time);
                     float cw = 520f * scale, ch = 44f * scale;
                     float cx = Screen.width * 0.5f - cw * 0.5f, cy = Screen.height * 0.22f;
-                    GUI.color = new Color(0.02f, 0.06f, 0.04f, 0.82f * rAlpha);
-                    GUI.DrawTexture(new Rect(cx, cy, cw, ch), white);
                     GUI.color = new Color(0.25f, 1f, 0.55f, 0.98f * rAlpha);
-                    GUI.DrawTexture(new Rect(cx, cy, cw, 3f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, cy, cw, 2.5f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, cy + ch, cw, 1.5f * scale), white);
                     string msg = !string.IsNullOrEmpty(_demon.LastRestoredSense)
                         ? ("GHOST CONTAINED — " + _demon.LastRestoredSense)
                         : "GHOST CONTAINED — ALL SENSES INTACT!";
@@ -4808,11 +4906,11 @@ namespace Surveyor
             {
                 float left = Mathf.Clamp01((_peekUntil - Time.time) / Mathf.Max(0.1f, _peekUntil - _peekStart));
                 float pw = 220f * scale;
-                GUI.color = new Color(0f, 0f, 0f, 0.55f);
-                GUI.DrawTexture(new Rect(Screen.width * 0.5f - pw * 0.5f - 2f, Screen.height * 0.12f - 2f, pw + 4f, 10f * scale + 4f), white);
                 GUI.color = new Color(1f, 0.95f, 0.8f, 0.95f);
-                GUI.DrawTexture(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f, pw * left, 10f * scale), white);
-                GUI.Label(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f + 14f * scale, pw, 24f * scale), "VISOR OFF", _label);
+                GUI.DrawTexture(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f, pw * left, 8f * scale), white);
+                GUI.DrawTexture(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f, pw, 1.5f * scale), white);
+                GUI.DrawTexture(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f + 8f * scale, pw, 1.5f * scale), white);
+                GUI.Label(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f + 12f * scale, pw, 24f * scale), "VISOR OFF", _label);
             }
 
             // Suit interference near the demon: subtle crimson/cyan vector glitch ticks on peripheral HUD (no solid/gray boxes).
@@ -4843,9 +4941,9 @@ namespace Surveyor
         {
             float w = (name.Length * 11f + 22f) * scale;
             Texture2D white = Texture2D.whiteTexture;
-            GUI.color = new Color(0f, 0f, 0f, 0.5f);
-            GUI.DrawTexture(new Rect(x, y, w, 24f * scale), white);
-            GUI.color = lost ? new Color(1f, 0.3f, 0.25f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.95f);
+            Color sc = lost ? new Color(1f, 0.3f, 0.25f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.95f);
+            GUI.color = sc;
+            GUI.DrawTexture(new Rect(x, y + 22f * scale, w, 1.5f * scale), white);
             GUI.Label(new Rect(x + 6f * scale, y, w, 24f * scale), lost ? name + " X" : name, _label);
             x += w + 6f * scale;
         }

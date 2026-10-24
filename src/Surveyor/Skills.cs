@@ -526,7 +526,7 @@ namespace Surveyor
         {
             base.OnEnter();
             Util.PlaySound("Play_commando_R", gameObject);
-            float duration = Mathf.Max(SvrPlugin.PeekSeconds.Value, 10.0f);
+            float duration = 4.8f;
             SvrRigPart.OpenVisor(gameObject, duration);      // the visor flips up on every client
             if (isAuthority)
             {

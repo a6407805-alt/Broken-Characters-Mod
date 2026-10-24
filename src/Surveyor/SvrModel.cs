@@ -592,6 +592,14 @@ namespace Surveyor
                 if (p._kind == Kind.Visor) p._openUntil = Time.time + seconds;
         }
 
+        /// <summary>Snap every visor on this body back down (when Peek ends or fades out).</summary>
+        public static void CloseVisor(GameObject body)
+        {
+            if (!body) return;
+            foreach (SvrRigPart p in body.GetComponentsInChildren<SvrRigPart>(true))
+                if (p._kind == Kind.Visor) p._openUntil = 0f;
+        }
+
         private void Start()
         {
             _base = transform.localRotation;

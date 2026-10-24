@@ -123,8 +123,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.5.5",
-      "note": "Active WIP (v0.5.5): M2 Poltergust Vacuum completely overhauled (zero-lag CharacterBody and POI queries, continuous vortex suction pulling enemies & dropped items into player, shredding damage), horizon flat plane eliminated (PreCull cullingMask/solid-color enforcement, RampFog PostProcessVolume suppressed, skybox nulled)"
+      "version": "0.5.6",
+      "note": "Active WIP (v0.5.6): 4 directional focal cones (Needle 12°/180m, Narrow 26°/110m, Medium 48°/60m, Wide 85°/28m) replacing omni scan, ground item crosshair hover card & illumination, M2 vacuum pulls chests/barrels & items, toggleable visor peek with sensory fade-to-white & 12s cooldown, black rectangle artifact eliminated, enemy animated walking dots (no T-pose)"
     }
   ]
 }
