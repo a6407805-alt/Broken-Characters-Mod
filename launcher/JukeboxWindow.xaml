@@ -10,7 +10,8 @@
         WindowStartupLocation="CenterScreen"
         FontFamily="Segoe UI"
         Loaded="Window_Loaded"
-        Closing="Window_Closing">
+        Closing="Window_Closing"
+        AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop">
 
     <Window.Resources>
         <SolidColorBrush x:Key="Accent" Color="#FFC928" />
@@ -111,14 +112,10 @@
 
             <!-- add a song -->
             <StackPanel Grid.Row="1" Margin="0,6,0,0">
-                <TextBlock Text="Add a song" Foreground="White" FontSize="18" FontWeight="Bold" />
+                <TextBlock Text="Add songs" Foreground="White" FontSize="18" FontWeight="Bold" />
                 <TextBlock Foreground="{StaticResource TextDim}" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,8"
-                           Text="On Suno, press Share on the song and copy the link, then paste it here. The song must be public." />
-                <DockPanel>
-                    <Button DockPanel.Dock="Right" x:Name="AddButton" Content="ADD" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="Add_Click" />
-                    <TextBox x:Name="LinkBox" Height="34" FontSize="14" VerticalContentAlignment="Center" Padding="6,0"
-                             Background="#30FFFFFF" Foreground="White" CaretBrush="White" BorderBrush="#60FFFFFF" KeyDown="LinkBox_KeyDown" />
-                </DockPanel>
+                           Text="Download your songs as MP3 (on Suno: the ... menu, Download, MP3 Audio), then press the button and pick them. You can pick several at once, or drag MP3s onto this window." />
+                <Button x:Name="AddButton" Content="&#x2B06;  UPLOAD SONGS" Style="{StaticResource GoldButton}" Click="Upload_Click" />
                 <CheckBox x:Name="ShareBox" Visibility="Collapsed" />
                 <StackPanel Margin="0,10,0,0">
                     <TextBlock x:Name="ShareText" Text="Every song goes on everyone's jukebox." Foreground="White" FontSize="13" TextWrapping="Wrap" />
