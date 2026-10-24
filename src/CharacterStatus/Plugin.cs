@@ -13,8 +13,8 @@ namespace CharacterStatus
     /// <summary>
     /// Adds a status line to every survivor's description on the character select screen:
     /// green = complete, yellow = in progress, red = early / untested. The list is status.json next to the dll
-    /// (generated from the launcher's roster by release/sync_status.py). Every character loads either way; this
-    /// only tells friends what to expect.
+    /// (generated from the launcher's roster by release/sync_status.py).
+    /// Also applies unified 3D Risk of Rain 2 cel-shaded portraits from Portraits/*.png to all custom survivors.
     /// </summary>
     [BepInDependency(LanguageAPI.PluginGUID)]
     [BepInPlugin(PluginGUID, PluginName, PluginVersion)]
@@ -22,7 +22,7 @@ namespace CharacterStatus
     {
         public const string PluginGUID = "com.brokencharacters.characterstatus";
         public const string PluginName = "Character Status";
-        public const string PluginVersion = "1.1.0";
+        public const string PluginVersion = "1.2.0";
         private const string Prefix = "BC_STATUS_DESC_";
 
         [Serializable] private class Entry { public string name; public string status; public string version; public string note; public string[] match; }
@@ -32,6 +32,38 @@ namespace CharacterStatus
         private static Entry[] _entries;
         private static readonly Dictionary<SurvivorDef, string> Original = new Dictionary<SurvivorDef, string>();
         private static readonly HashSet<string> Reported = new HashSet<string>();
+
+        private static readonly Dictionary<string, Texture2D> _portraits = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> _appliedPortraits = new HashSet<string>();
+
+        private static readonly Dictionary<string, string> KeyAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "surveyor", "Surveyor" },
+            { "thesurveyor", "Surveyor" },
+            { "duelist", "Duelist" },
+            { "theduelist", "Duelist" },
+            { "carmax", "CarMaxSpecialist" },
+            { "carmaxspecialist", "CarMaxSpecialist" },
+            { "auditech", "AudiTechnician" },
+            { "auditechnician", "AudiTechnician" },
+            { "billy", "BillyBigsuits" },
+            { "billybigsuits", "BillyBigsuits" },
+            { "wilbur", "WilburMod" },
+            { "wilburmod", "WilburMod" },
+            { "brother", "OatsBrother" },
+            { "oatsbrother", "OatsBrother" },
+            { "ashwing", "AshwingDrake" },
+            { "ashwingdrake", "AshwingDrake" },
+            { "nidus", "Nidus" },
+            { "phantom", "PhantomAssassin" },
+            { "phantomassassin", "PhantomAssassin" },
+            { "infestedgeneral", "InfestedGeneral" },
+            { "gravitos", "Gravitos" },
+            { "clayrebel", "ClayRebel" },
+            { "rebel", "ClayRebel" },
+            { "emberwarden", "Emberwarden" },
+            { "reaper", "Reaper" }
+        };
 
         private void Awake()
         {
@@ -47,10 +79,63 @@ namespace CharacterStatus
             }
             catch (Exception e) { Logger.LogWarning("status.json could not be read: " + e.Message); }
 
-            if (_entries == null || _entries.Length == 0) { Logger.LogWarning("No status.json found; no status lines will be added."); return; }
+            LoadPortraits();
+
             RoR2Application.onLoad += Apply;
             Language.onCurrentLanguageChanged += Apply;
-            Logger.LogInfo("Character Status: " + _entries.Length + " entries.");
+            if (_entries != null)
+            {
+                Logger.LogInfo("Character Status: " + _entries.Length + " entries loaded.");
+            }
+        }
+
+        private void Update()
+        {
+            if (Input.GetKeyDown(KeyCode.F9))
+            {
+                LoadPortraits();
+                _appliedPortraits.Clear();
+                Apply();
+                Logger.LogInfo("Reloaded and reapplied 3D portraits.");
+            }
+        }
+
+        private void LoadPortraits()
+        {
+            _portraits.Clear();
+            string modDir = System.IO.Path.GetDirectoryName(Info.Location);
+            string portraitsDir = System.IO.Path.Combine(modDir, "Portraits");
+            if (!System.IO.Directory.Exists(portraitsDir))
+            {
+                portraitsDir = System.IO.Path.Combine(Paths.PluginPath, "CharacterStatus", "Portraits");
+            }
+            if (!System.IO.Directory.Exists(portraitsDir))
+            {
+                Logger.LogWarning("Portraits folder not found at: " + portraitsDir);
+                return;
+            }
+
+            foreach (string file in System.IO.Directory.GetFiles(portraitsDir, "*.png"))
+            {
+                try
+                {
+                    byte[] data = System.IO.File.ReadAllBytes(file);
+                    Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                    tex.filterMode = FilterMode.Bilinear;
+                    tex.wrapMode = TextureWrapMode.Clamp;
+                    if (tex.LoadImage(data))
+                    {
+                        string name = System.IO.Path.GetFileNameWithoutExtension(file);
+                        tex.name = "texPortrait" + name;
+                        _portraits[name] = tex;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning("Failed loading portrait " + file + ": " + ex.Message);
+                }
+            }
+            Logger.LogInfo("Character Status: Loaded " + _portraits.Count + " custom 3D portraits.");
         }
 
         private static string Norm(string s)
@@ -63,6 +148,7 @@ namespace CharacterStatus
 
         private static Entry Find(SurvivorDef sd)
         {
+            if (_entries == null) return null;
             string hay = Norm(sd.cachedName) + "|" + Norm(sd.bodyPrefab ? sd.bodyPrefab.name : "") + "|" + Norm(Language.GetString(sd.displayNameToken));
             foreach (Entry e in _entries)
             {
@@ -70,6 +156,52 @@ namespace CharacterStatus
                 foreach (string m in e.match)
                     if (!string.IsNullOrEmpty(m) && hay.Contains(Norm(m))) return e;
             }
+            return null;
+        }
+
+        private static Texture2D FindPortrait(SurvivorDef sd, Entry e)
+        {
+            if (_portraits.Count == 0) return null;
+
+            // Direct check on Entry.match
+            if (e != null && e.match != null)
+            {
+                foreach (string m in e.match)
+                {
+                    if (string.IsNullOrEmpty(m)) continue;
+                    if (KeyAliases.TryGetValue(m, out string alias) && _portraits.TryGetValue(alias, out Texture2D tex))
+                        return tex;
+                    if (_portraits.TryGetValue(m, out Texture2D directTex))
+                        return directTex;
+                }
+            }
+
+            // Check body prefab / cachedName / displayName
+            string[] candidates = {
+                sd.bodyPrefab ? sd.bodyPrefab.name : null,
+                sd.cachedName,
+                e != null ? e.name : null
+            };
+
+            foreach (string c in candidates)
+            {
+                if (string.IsNullOrEmpty(c)) continue;
+                string norm = Norm(c);
+                if (KeyAliases.TryGetValue(norm, out string alias) && _portraits.TryGetValue(alias, out Texture2D tex))
+                    return tex;
+                if (_portraits.TryGetValue(c, out Texture2D directTex))
+                    return directTex;
+            }
+
+            // Check dictionary fuzzy
+            foreach (var kvp in _portraits)
+            {
+                string normKey = Norm(kvp.Key);
+                string hay = Norm(sd.cachedName) + "|" + Norm(sd.bodyPrefab ? sd.bodyPrefab.name : "") + "|" + (e != null ? Norm(e.name) : "");
+                if (hay.Contains(normKey) || normKey.Contains(Norm(sd.cachedName)))
+                    return kvp.Value;
+            }
+
             return null;
         }
 
@@ -108,37 +240,59 @@ namespace CharacterStatus
 
         private static void Apply()
         {
-            if (_entries == null) return;
             try
             {
                 foreach (SurvivorDef sd in SurvivorCatalog.allSurvivorDefs)
                 {
                     if (!sd) continue;
-                    string orig;
-                    if (!Original.TryGetValue(sd, out orig))
-                    {
-                        orig = sd.descriptionToken;
-                        if (string.IsNullOrEmpty(orig) || orig.StartsWith(Prefix)) continue;
-                        Original[sd] = orig;
-                    }
-                    string baseText = Language.GetString(orig);
-                    if (string.IsNullOrEmpty(baseText) || baseText == orig) continue;
-
                     string key = (sd.bodyPrefab ? sd.bodyPrefab.name : sd.cachedName) ?? "unknown";
                     Entry e = Find(sd);
-                    string line = StatusLine(e);
-                    if (line == null)
+
+                    // 1. Apply unified 3D cel-shaded portrait if available
+                    if (sd.bodyPrefab)
                     {
-                        if (Reported.Add(key)) _log.LogInfo("No status for survivor '" + key + "' (" + Language.GetString(sd.displayNameToken) + ").");
-                        continue;
+                        CharacterBody body = sd.bodyPrefab.GetComponent<CharacterBody>();
+                        if (body != null)
+                        {
+                            Texture2D portrait = FindPortrait(sd, e);
+                            if (portrait != null)
+                            {
+                                body.portraitIcon = portrait;
+                                if (_appliedPortraits.Add(key))
+                                {
+                                    _log.LogInfo("Applied 3D portrait to '" + key + "' (" + portrait.name + ").");
+                                }
+                            }
+                        }
                     }
-                    string token = Prefix + key;
-                    SetString(token, baseText + "\r\n\r\n" + line);
-                    sd.descriptionToken = token;
-                    if (Reported.Add(key)) _log.LogInfo("'" + key + "' is " + e.status + " (" + e.name + ").");
+
+                    // 2. Apply status line to description
+                    if (_entries != null)
+                    {
+                        string orig;
+                        if (!Original.TryGetValue(sd, out orig))
+                        {
+                            orig = sd.descriptionToken;
+                            if (string.IsNullOrEmpty(orig) || orig.StartsWith(Prefix)) continue;
+                            Original[sd] = orig;
+                        }
+                        string baseText = Language.GetString(orig);
+                        if (string.IsNullOrEmpty(baseText) || baseText == orig) continue;
+
+                        string line = StatusLine(e);
+                        if (line == null)
+                        {
+                            if (Reported.Add(key)) _log.LogInfo("No status for survivor '" + key + "' (" + Language.GetString(sd.displayNameToken) + ").");
+                            continue;
+                        }
+                        string token = Prefix + key;
+                        SetString(token, baseText + "\r\n\r\n" + line);
+                        sd.descriptionToken = token;
+                        if (Reported.Add(key)) _log.LogInfo("'" + key + "' is " + e.status + " (" + e.name + ").");
+                    }
                 }
             }
-            catch (Exception e) { _log.LogWarning("Applying statuses failed: " + e); }
+            catch (Exception e) { _log.LogWarning("Applying statuses and portraits failed: " + e); }
         }
     }
 }
