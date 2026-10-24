@@ -77,7 +77,8 @@ to your Claude.
    `mods/<Name>/Sounds/`, plus a short `README.md` and `manifest.json`.
 4. **Launcher card:** create **your own file** `launcher/cards/<Name>.json` (never edit `launcher/roster.json`, it is
    shared and edits there get overwritten):
-   `{ "characters": [ { "name", "tagline", "added" (now, ISO format), "accent" (hex), "image": "Assets/Roster/<Name>.png" } ] }`
+   `{ "characters": [ { "name", "tagline", "added" (now, ISO format), "accent" (hex), "status" ("green" complete, "yellow" in progress, "red" early / untested), "image": "Assets/Roster/<Name>.png" } ] }`
+   (everything loads whether finished or not; the status shows as a tag on the card and a line in the in-game description; after changing it run `python3 release/sync_status.py`)
    and put a square portrait at `launcher/Assets/Roster/<Name>.png`. A card file may also have `"maps"` and `"modes"`
    lists (`title`, `subtitle`, `image` = `Assets/Tiles/<Name>.png`, optional `badge`). The build server merges every
    card file into the roster; an entry with the same name/title as an existing one replaces it. The newest `added`

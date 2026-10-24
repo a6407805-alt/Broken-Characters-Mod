@@ -37,10 +37,21 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - Never run the installer on the owner's PC yourself. Game log for bugs: `BepInEx\LogOutput.log` (stage it, grep for
   the mod's namespace and "Exception").
 
-## Dev branch (work in progress, owner's fast test loop)
-- Unfinished changes go on the `dev` branch, never `main`. A push to `dev` builds the mods and the launcher (no
-  installer test) and publishes `Broken-Characters-Mod-dev.zip` to the `dev` pre-release. Launchers/updaters read only
-  `latest`, so dev builds never reach friends. There is ONE launcher for everyone (from main); never publish a separate dev launcher. Merge `dev` into `main` when a change is finished.
+## Character status (green / yellow / red)
+- Every roster entry/card has `"status"`: `green` = complete, `yellow` = in progress, `red` = early / untested. The launcher
+  card shows it as a tag and `src/CharacterStatus/` adds a status line to each survivor's description in game.
+- The owner sets statuses by clicking answers in the chat (AskUserQuestion). To change one: edit `"status"` in
+  `launcher/roster.json` (existing characters) or `launcher/cards/<Mod>.json` (new ones; ALWAYS give a new card a status),
+  run `python3 release/sync_status.py` (rewrites `mods/CharacterStatus/status.json`; add a MATCH entry there for new names), commit both.
+- Current: green Billy Bigsuits, Brother, Clay Rebel, Reaper; yellow CarMax, Audi Technician, Wilbur, Nidus, Phantom Assassin,
+  Infested General, Emberwarden, Duelist; red Surveyor, Ashwing Drake, Gravitos.
+
+## Dev branch (optional, for risky experiments)
+- Owner's rule (Oct 24 2026): PLAY and TEST LEVEL load EVERY character, finished or not. Unfinished characters go to `main`
+  too; the owner tells friends what to expect with a **status**, not with a branch (see "Character status" below).
+  `dev` is still available for risky experiments: a push to `dev` builds the mods and the launcher (no installer test)
+  and publishes `Broken-Characters-Mod-dev.zip` to the `dev` pre-release. Launchers/updaters read only `latest`.
+  There is ONE launcher for everyone (from main); never publish a separate dev launcher.
 - Fetch: `https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/dev/Broken-Characters-Mod-dev.zip`.
 - Hot reload: ScriptEngine is installed on the owner's PC (`BepInEx\plugins\ScriptEngine\`). A mod being
   hot-reloaded lives in `BepInEx\scripts\` (F6 reloads it) and must NOT also be in `plugins\`. Only code reloads;

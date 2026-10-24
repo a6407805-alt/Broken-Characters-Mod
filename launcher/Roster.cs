@@ -28,6 +28,18 @@ namespace BrokenCharactersLauncher
         public Brush AccentBrush => new SolidColorBrush(AccentColor);
         public bool IsNew { get; set; }
         public Visibility NewBadgeVisibility => IsNew ? Visibility.Visible : Visibility.Collapsed;
+
+        /// <summary>"green" (complete), "yellow" (in progress) or "red" (early / untested). Empty = no tag.</summary>
+        public string Status { get; init; } = "";
+        public string StatusText => Status.ToLowerInvariant() switch { "green" => "COMPLETE", "yellow" => "IN PROGRESS", "red" => "EARLY", _ => "" };
+        public Brush StatusBrush => Status.ToLowerInvariant() switch
+        {
+            "green" => new SolidColorBrush(Color.FromRgb(0x4C, 0xD9, 0x64)),
+            "yellow" => new SolidColorBrush(Color.FromRgb(0xFF, 0xD2, 0x2E)),
+            "red" => new SolidColorBrush(Color.FromRgb(0xFF, 0x4D, 0x4D)),
+            _ => Brushes.Transparent
+        };
+        public Visibility StatusVisibility => StatusText.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>One map or game mode thumbnail.</summary>
@@ -66,6 +78,7 @@ namespace BrokenCharactersLauncher
                         Added = DateTimeOffset.TryParse(Str(c, "added"), CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTimeOffset d) ? d : DateTimeOffset.MinValue,
                         Portrait = Image(Str(c, "image"), imageBase),
                         AccentColor = ParseColor(Str(c, "accent")),
+                        Status = Str(c, "status"),
                         IsNew = c.TryGetProperty("new", out JsonElement n) && n.ValueKind == JsonValueKind.True
                     });
                 }

@@ -1,0 +1,11 @@
+{
+  "name": "CharacterStatus",
+  "version_number": "1.0.0",
+  "website_url": "",
+  "description": "Adds a green / yellow / red status line (complete, in progress, early) to every survivor's description. Personal use.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2121",
+    "RiskofThunder-R2API_Core-5.3.0",
+    "RiskofThunder-R2API_Language-1.1.0"
+  ]
+}
