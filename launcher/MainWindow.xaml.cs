@@ -97,6 +97,8 @@ namespace BrokenCharactersLauncher
         public MainWindow()
         {
             InitializeComponent();
+            LocationChanged += DockSidePanels; // GUIDE / CREATOR side panels follow the launcher
+            SizeChanged += DockSidePanels;
         }
 
         // ================================================================== startup
@@ -712,32 +714,47 @@ namespace BrokenCharactersLauncher
 
         /// <summary>The GUIDE button (title bar, left of STEAM PLAY): opens the install/update/publish guide in its own window inside the launcher.</summary>
         private GuideWindow? _guide;
+        private PublishWindow? _creator;
+        private const double SidePanelGap = 16;
 
         private void GuideTab_Click(object sender, RoutedEventArgs e)
         {
             if (_guide != null) { _guide.Close(); return; } // the button toggles the panel
             _guide = new GuideWindow { Owner = this };
-            _guide.Closed += (_, __) => { _guide = null; LocationChanged -= DockGuide; SizeChanged -= DockGuide; };
-            LocationChanged += DockGuide;
-            SizeChanged += DockGuide;
-            DockGuide(this, EventArgs.Empty);
+            _guide.Closed += (_, __) => _guide = null;
+            DockSidePanels(this, EventArgs.Empty);
             _guide.Show();
         }
 
-        /// <summary>Keeps the guide stuck to the launcher's left side, same height, and follows it when the launcher moves.</summary>
-        private void DockGuide(object? sender, EventArgs e)
+        /// <summary>Keeps the side panels stuck to the launcher, same height, same gap: GUIDE on the left, CREATOR on
+        /// the right. Hooked to LocationChanged/SizeChanged in the constructor, so they follow the launcher.</summary>
+        private void DockSidePanels(object? sender, EventArgs e)
         {
-            if (_guide == null) return;
-            _guide.Height = ActualHeight > 0 ? ActualHeight : Height;
-            _guide.Top = Top;
-            double left = Left - _guide.Width - 16; // a small gap between the guide and the launcher
-            _guide.Left = Math.Max(SystemParameters.VirtualScreenLeft, left);
+            double h = ActualHeight > 0 ? ActualHeight : Height;
+            double w = ActualWidth > 0 ? ActualWidth : Width;
+            if (_guide != null)
+            {
+                _guide.Height = h;
+                _guide.Top = Top;
+                _guide.Left = Math.Max(SystemParameters.VirtualScreenLeft, Left - _guide.Width - SidePanelGap);
+            }
+            if (_creator != null)
+            {
+                _creator.Height = h;
+                _creator.Top = Top;
+                _creator.Left = Math.Min(SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - _creator.Width,
+                                         Left + w + SidePanelGap);
+            }
         }
 
         /// <summary>Opens the "publish my mod" window (see PublishWindow.xaml.cs / Publisher.cs).</summary>
         private void Creator_Click(object sender, RoutedEventArgs e)
         {
-            new PublishWindow { Owner = this }.ShowDialog();
+            if (_creator != null) { _creator.Close(); return; } // the button toggles the panel
+            _creator = new PublishWindow { Owner = this };
+            _creator.Closed += (_, __) => _creator = null;
+            DockSidePanels(this, EventArgs.Empty);
+            _creator.Show();
         }
 
         private void Jukebox_Click(object sender, RoutedEventArgs e)

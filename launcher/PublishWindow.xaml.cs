@@ -49,7 +49,11 @@ namespace BrokenCharactersLauncher
 
         private void ShowKeyPanel(string? error)
         {
-            MainPanel.Visibility = Visibility.Collapsed;
+            // The main panel stays on screen (so Pick files / Publish are visible), just greyed out until signed in.
+            MainPanel.Visibility = Visibility.Visible;
+            MainPanel.IsEnabled = false;
+            MainPanel.Opacity = 0.45;
+            HelloText.Text = "Not signed in yet: sign in above to use Pick files and Publish.";
             KeyPanel.Visibility = Visibility.Visible;
             KeyError.Text = error ?? "";
             KeyError.Visibility = string.IsNullOrEmpty(error) ? Visibility.Collapsed : Visibility.Visible;
@@ -106,6 +110,8 @@ namespace BrokenCharactersLauncher
 
             KeyPanel.Visibility = Visibility.Collapsed;
             MainPanel.Visibility = Visibility.Visible;
+            MainPanel.IsEnabled = true;
+            MainPanel.Opacity = 1;
             HelloText.Text = "Signed in as " + _pub.Login;
 
             string? saved = Publisher.ReadSavedFolder();
