@@ -1,8 +1,8 @@
 {
   "name": "Jukebox",
-  "version_number": "1.0.0",
+  "version_number": "1.1.0",
   "website_url": "",
-  "description": "Plays the group's Suno songs in game with a song vote. Songs are added in the launcher's JUKEBOX window. Personal use.",
+  "description": "Plays the group's Suno songs in game with a song vote and HUD menu under the difficulty bar. Songs are added in the launcher's JUKEBOX window. Personal use.",
   "dependencies": [
     "bbepis-BepInExPack-5.4.2121",
     "RiskofThunder-R2API_Core-5.3.0",
