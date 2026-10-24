@@ -136,6 +136,8 @@
                     <TextBlock Style="{StaticResource StepBody}" Text="The first time, paste the creator key you generated (see below) and press Save. It's remembered after that." />
                     <TextBlock Style="{StaticResource StepTitle}" Text="3. Pick your mod's folder and publish" />
                     <TextBlock Style="{StaticResource StepBody}" Text="Choose the folder your mod lives in (it needs a src/&lt;YourMod&gt; or mods/&lt;YourMod&gt; subfolder) and press PUBLISH. It only touches the mod you own." />
+                    <TextBlock Style="{StaticResource StepTitle}" Text="Quick upload (a .zip or .dll from MEGA, Discord...)" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="In CREATOR, press Pick files... (or drag the files onto the QUICK UPLOAD box). Check the mod name: pick one from the list to update it, or type a new name for a new mod. Press Check files, then the gold button. You can only update mods you own; new names become yours." />
                     <TextBlock Style="{StaticResource StepBody}" FontStyle="Italic" Text="See CONTRIBUTING.md in the repo for the full new-character checklist." />
 
                     <TextBlock Style="{StaticResource SectionHeader}" Text="Getting your creator key" />

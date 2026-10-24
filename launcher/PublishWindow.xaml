@@ -142,6 +142,26 @@
                             <TextBlock x:Name="FolderText" Foreground="White" FontSize="13" TextTrimming="CharacterEllipsis" Text="No folder chosen yet" />
                         </Border>
                     </DockPanel>
+
+                    <!-- QUICK UPLOAD: a friend's .zip/.dll from MEGA etc. (PublishWindow.Quick.cs) -->
+                    <Border x:Name="QuickBox" Background="#1AFFC928" BorderBrush="#60FFC928" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,10,0,0"
+                            AllowDrop="True" DragOver="Quick_DragOver" DragEnter="Quick_DragOver" Drop="Quick_Drop">
+                        <StackPanel>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" x:Name="PickFilesButton" Content="Pick files..." Style="{StaticResource GhostButton}" Margin="8,0,0,0" VerticalAlignment="Center" Click="PickFiles_Click" />
+                                <StackPanel>
+                                    <TextBlock Text="OR QUICK UPLOAD" Foreground="{StaticResource Accent}" FontSize="13" FontWeight="Black" />
+                                    <TextBlock x:Name="QuickText" Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap"
+                                               Text="Got a mod as a .zip or .dll (MEGA, Discord...)? Pick it, or drag it onto this box." />
+                                </StackPanel>
+                            </DockPanel>
+                            <DockPanel x:Name="QuickNameRow" Margin="0,8,0,0" Visibility="Collapsed">
+                                <TextBlock DockPanel.Dock="Left" Text="Mod name:" Foreground="White" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <Button DockPanel.Dock="Right" x:Name="QuickCheckButton" Content="Check files" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="QuickCheck_Click" />
+                                <ComboBox x:Name="QuickName" IsEditable="True" Height="30" FontSize="13" VerticalContentAlignment="Center" />
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
                     <TextBlock Text="2. Your mods" Foreground="White" FontSize="18" FontWeight="Bold" Margin="0,18,0,8" />
                 </StackPanel>
 
