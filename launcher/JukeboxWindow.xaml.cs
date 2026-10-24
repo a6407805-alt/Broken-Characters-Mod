@@ -24,8 +24,6 @@ namespace BrokenCharactersLauncher
         public JukeboxSong Song { get; init; } = new JukeboxSong();
         public bool InGroup { get; init; }
         public bool CanRemove { get; init; }
-        public bool CanShare { get; init; } // an "ONLY ME" Suno song + this PC has a creator key
-        public Visibility ShareVisibility => CanShare && !InGroup && !Loose ? Visibility.Visible : Visibility.Collapsed;
         public string Title => Song.Title;
         public string Artist => Song.Artist;
         public bool Loose => Song.FilePath != null;
@@ -69,13 +67,15 @@ namespace BrokenCharactersLauncher
             if (_screenshotPath != null) { await ShowDemoAsync(); return; }
             _creatorKey = Publisher.ReadSavedKey();
             bool canShare = !string.IsNullOrEmpty(_creatorKey);
-            ShareBox.IsChecked = canShare;
-            ShareBox.IsEnabled = canShare;
-            if (!canShare) ShareText.Text = "Only for me (adding for the whole group needs a creator key: CREATOR button)";
+            ShareText.Text = canShare
+                ? "Every song you add goes on everyone's jukebox."
+                : "You get everyone's songs automatically. To ADD songs, sign in once in CREATOR (then reopen this).";
+            AddButton.IsEnabled = canShare;
 
             Status("Loading the song list...");
             _group = await JukeboxLibrary.FetchGroupAsync(_cts.Token);
             Rebuild();
+            await ShareMineAsync();
             await SyncAsync();
         }
 
@@ -87,7 +87,7 @@ namespace BrokenCharactersLauncher
             foreach (JukeboxSong s in _group.Songs)
                 _rows.Add(new JukeboxRow { Song = s, InGroup = true, CanRemove = canShare });
             foreach (JukeboxSong s in local.Songs.Where(l => !_group.Songs.Any(g => g.Id == l.Id)))
-                _rows.Add(new JukeboxRow { Song = s, InGroup = false, CanRemove = true, CanShare = canShare });
+                _rows.Add(new JukeboxRow { Song = s, InGroup = false, CanRemove = true });
             foreach (JukeboxSong s in JukeboxLibrary.LooseFiles(_rows.Select(r => r.Song).ToList()))
                 _rows.Add(new JukeboxRow { Song = s, InGroup = false, CanRemove = true });
             EmptyText.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -129,7 +129,8 @@ namespace BrokenCharactersLauncher
                 JukeboxSong song = await JukeboxLibrary.ResolveAsync(link, _cts.Token);
                 if (_rows.Any(r => r.Song.Id == song.Id)) { Status("\"" + song.Title + "\" is already in the jukebox."); return; }
 
-                bool forGroup = ShareBox.IsChecked == true && !string.IsNullOrEmpty(_creatorKey);
+                bool forGroup = !string.IsNullOrEmpty(_creatorKey); // songs are always for everyone
+                if (!forGroup) { Status("To add songs, sign in once in CREATOR, then reopen the jukebox."); return; }
                 if (forGroup)
                 {
                     Status("Adding \"" + song.Title + "\" for the group...");
@@ -165,35 +166,57 @@ namespace BrokenCharactersLauncher
             finally { SetBusy(false); }
         }
 
-        /// <summary>"Share": moves one of my ONLY ME songs into the group list, so every friend's launcher downloads it.</summary>
-        private async void Share_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// No "only me" songs: anything this PC has that the group doesn't (old only-me Suno songs, MP3s dropped in the
+        /// folder) gets shared. MP3s are uploaded to the repo's "jukebox" release; the list just points at them.
+        /// Needs a creator key; without one the songs stay on this PC and the status line says why.
+        /// </summary>
+        private async Task ShareMineAsync()
         {
-            if (_busy || string.IsNullOrEmpty(_creatorKey) || (sender as FrameworkElement)?.DataContext is not JukeboxRow row) return;
+            JukeboxFile local = JukeboxLibrary.LoadLocal();
+            List<JukeboxSong> localOnly = local.Songs.Where(l => !_group.Songs.Any(g => g.Id == l.Id)).ToList();
+            List<JukeboxSong> loose = JukeboxLibrary.LooseFiles(_group.Songs.Concat(local.Songs).ToList())
+                .Where(f => f.FilePath!.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (localOnly.Count + loose.Count == 0 || _busy) return;
+            if (string.IsNullOrEmpty(_creatorKey))
+            {
+                Status((localOnly.Count + loose.Count) + " song(s) here aren't shared yet. Sign in once in CREATOR to share them with everyone.");
+                return;
+            }
+
             SetBusy(true);
             try
             {
-                Status("Sharing \"" + row.Title + "\" with the group...");
                 var pub = new Publisher(_creatorKey!);
-                JukeboxSong song = row.Song;
-                try { song.AddedBy = await pub.SignInAsync(_cts.Token); } catch (GitHubException) { }
+                string who = "";
+                try { who = await pub.SignInAsync(_cts.Token); } catch (GitHubException) { }
+                var add = new List<JukeboxSong>();
+                foreach (JukeboxSong s in localOnly) { s.AddedBy ??= who; add.Add(s); }
+                foreach (JukeboxSong f in loose)
+                {
+                    Status("Uploading \"" + f.Title + "\" for everyone...");
+                    string id = JukeboxLibrary.FileSongId(f.Id);
+                    string url = await pub.UploadReleaseFileAsync("jukebox", id + ".mp3", f.FilePath!, "audio/mpeg", _cts.Token);
+                    string dest = JukeboxLibrary.SongPath(id);
+                    if (!string.Equals(f.FilePath, dest, StringComparison.OrdinalIgnoreCase)) File.Move(f.FilePath!, dest, true);
+                    add.Add(new JukeboxSong { Id = id, Title = f.Title, Artist = who, Audio = url, AddedBy = who, Added = DateTime.UtcNow.ToString("o") });
+                }
                 await pub.UpdateTextFileAsync(JukeboxLibrary.RepoPath, current =>
                 {
-                    JukeboxFile f = JukeboxLibrary.Parse(current);
-                    if (!f.Songs.Any(s => s.Id == song.Id)) f.Songs.Add(song);
-                    _group = f;
-                    return JukeboxLibrary.Serialize(f);
-                }, "Jukebox: add " + song.Title, _cts.Token);
-                JukeboxFile local = JukeboxLibrary.LoadLocal();
-                local.Songs.RemoveAll(s => s.Id == song.Id);
+                    JukeboxFile g = JukeboxLibrary.Parse(current);
+                    foreach (JukeboxSong s in add) if (!g.Songs.Any(o => o.Id == s.Id)) g.Songs.Add(s);
+                    _group = g;
+                    return JukeboxLibrary.Serialize(g);
+                }, "Jukebox: share " + add.Count + " song(s)", _cts.Token);
+                local.Songs.RemoveAll(s => add.Any(a => a.Id == s.Id));
                 JukeboxLibrary.SaveLocal(local);
-                Rebuild();
-                Status("Shared \"" + row.Title + "\". Friends get it next time they open the launcher.");
+                Status("Shared " + add.Count + " song(s) with everyone.");
             }
-            catch (GitHubException ex) { Status(ex.Message); }
+            catch (GitHubException ex) { Status("Couldn't share: " + ex.Message); }
             catch (System.Net.Http.HttpRequestException ex) { Status("No connection to GitHub: " + ex.Message); }
             catch (IOException ex) { Status(ex.Message); }
             catch (OperationCanceledException) { }
-            finally { SetBusy(false); }
+            finally { SetBusy(false); Rebuild(); }
         }
 
         private async void Remove_Click(object sender, RoutedEventArgs e)
@@ -301,6 +324,7 @@ namespace BrokenCharactersLauncher
         {
             _group = await JukeboxLibrary.FetchGroupAsync(_cts.Token);
             Rebuild();
+            await ShareMineAsync();
             await SyncAsync();
         }
 
@@ -317,7 +341,7 @@ namespace BrokenCharactersLauncher
         private void SetBusy(bool busy)
         {
             _busy = busy;
-            AddButton.IsEnabled = !busy;
+            AddButton.IsEnabled = !busy && !string.IsNullOrEmpty(_creatorKey);
             SyncButton.IsEnabled = !busy;
         }
 

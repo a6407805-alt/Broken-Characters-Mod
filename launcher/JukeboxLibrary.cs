@@ -66,6 +66,13 @@ namespace BrokenCharactersLauncher
 
         private const string BrowserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
 
+        /// <summary>An id for a shared MP3 file (from its file name): lowercase letters, digits and dashes.</summary>
+        public static string FileSongId(string name)
+        {
+            string id = Regex.Replace(name.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
+            return "mp3-" + (id.Length == 0 ? Guid.NewGuid().ToString("N").Substring(0, 8) : id.Length > 60 ? id.Substring(0, 60) : id);
+        }
+
         public static string SongPath(string id) => Path.Combine(Folder, id + ".mp3");
         public static bool IsDownloaded(string id) => File.Exists(SongPath(id));
 
@@ -174,8 +181,11 @@ namespace BrokenCharactersLauncher
         {
             Directory.CreateDirectory(Folder);
             string dest = SongPath(song.Id), part = dest + ".part";
-            var urls = new List<string> { "https://cdn1.suno.ai/" + song.Id + ".mp3" };
+            var urls = new List<string>();
+            bool fromSuno = !song.Id.StartsWith("mp3-", StringComparison.Ordinal);
+            if (fromSuno) urls.Add("https://cdn1.suno.ai/" + song.Id + ".mp3");
             if (!string.IsNullOrEmpty(song.Audio) && !urls.Contains(song.Audio)) urls.Add(song.Audio);
+            if (fromSuno)
             try
             {
                 // The song page names the current audio address; read it fresh in case the CDN moved.
@@ -183,7 +193,7 @@ namespace BrokenCharactersLauncher
                 if (!string.IsNullOrEmpty(fresh.Audio) && !urls.Contains(fresh.Audio)) urls.Add(fresh.Audio);
             }
             catch (InvalidOperationException) { }
-            urls.Add("https://cdn2.suno.ai/" + song.Id + ".mp3");
+            if (fromSuno) urls.Add("https://cdn2.suno.ai/" + song.Id + ".mp3");
             Exception? last = null;
             foreach (string url in urls)
             {
