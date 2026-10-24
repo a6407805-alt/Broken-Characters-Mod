@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using RoR2;
 using UnityEngine;
+using UnityEngine.Rendering.PostProcessing;
 using Random = UnityEngine.Random;
 
 namespace Surveyor
@@ -113,64 +114,171 @@ namespace Surveyor
         private float _stageTime, _modeTimer, _flank, _stagger, _chain, _chainT, _goneTimer;
         private float _phase;
         private Vector3 _center;
-        private static readonly List<Vector3> Local = BuildLocal();
+
+        // Animation state: the gait clock, how fast it is really moving, how long it has been staggered.
+        private float _gait, _speedNow, _stagT, _lungeT;
+        private Vector3 _lastPos;
+        private static readonly Vector3[] Sph = BuildSphere();
 
         public bool Active { get { return State != Mode.Dormant && State != Mode.Gone; } }
         public Vector3 Center { get { return _center; } }
 
-        // ---------------------------------------------------------------- the body: a horned humanoid made of points
+        // ---------------------------------------------------------------- the body: a rigged, filled horned humanoid made of points
 
-        private static List<Vector3> BuildLocal()
+        private static Vector3[] BuildSphere()
         {
-            List<Vector3> l = new List<Vector3>();
             System.Random rnd = new System.Random(7);
-            Func<Vector3> sphere = () =>
+            Vector3[] a = new Vector3[160];
+            for (int i = 0; i < a.Length; i++)
             {
                 Vector3 v = new Vector3((float)(rnd.NextDouble() * 2 - 1), (float)(rnd.NextDouble() * 2 - 1), (float)(rnd.NextDouble() * 2 - 1));
-                return v.sqrMagnitude < 0.0001f ? Vector3.up : v.normalized;
-            };
-            for (int i = 0; i < 26; i++) l.Add(new Vector3(0f, 2.4f, 0.04f) + sphere() * 0.27f);                                  // head
-            for (int side = -1; side <= 1; side += 2)
-                for (int s = 0; s < 11; s++)                                                                                       // horns
-                {
-                    float u = s / 10f;
-                    l.Add(new Vector3(side * (0.2f + 0.3f * Mathf.Sin(u * 2.2f)), 2.55f + u * 0.62f, 0.04f - u * 0.1f));
-                }
-            for (int i = 0; i < 12; i++) l.Add(new Vector3(Mathf.Lerp(-0.62f, 0.62f, i / 11f), 2.05f, 0f));                         // shoulders
-            for (int i = 0; i < 50; i++) { Vector3 v = sphere(); l.Add(new Vector3(0f, 1.5f, 0f) + new Vector3(v.x * 0.4f, v.y * 0.62f, v.z * 0.24f)); } // torso
-            for (int side = -1; side <= 1; side += 2)
-            {
-                for (int i = 0; i < 14; i++)                                                                                       // arms
-                {
-                    float u = i / 13f;
-                    l.Add(new Vector3(side * Mathf.Lerp(0.62f, 0.8f, u), Mathf.Lerp(2.05f, 0.75f, u), Mathf.Lerp(0f, 0.32f, Mathf.Sin(u * 1.5f))));
-                }
-                for (int c = 0; c < 4; c++)                                                                                        // claws
-                    l.Add(new Vector3(side * (0.8f + c * 0.04f), 0.72f - c * 0.07f, 0.34f + c * 0.04f));
-                for (int i = 0; i < 14; i++)                                                                                       // legs
-                {
-                    float u = i / 13f;
-                    l.Add(new Vector3(side * Mathf.Lerp(0.2f, 0.27f, u), Mathf.Lerp(1.0f, 0f, u), Mathf.Sin(u * Mathf.PI) * 0.18f));
-                }
+                a[i] = v.sqrMagnitude < 0.0001f ? Vector3.up : v.normalized;
             }
-            return l;
+            return a;
         }
 
-        /// <summary>Its points in world space for this frame (wobbling, breathing, shaking when staggered).</summary>
+        /// <summary>Direction pointing down from a joint, swung forward by deg degrees (180 = straight up).</summary>
+        private static Vector3 Down(float deg, float outward)
+        {
+            float r = deg * Mathf.Deg2Rad;
+            return new Vector3(outward, -Mathf.Cos(r), Mathf.Sin(r)).normalized;
+        }
+
+        /// <summary>A filled tube of points from a to b (a spiral around the axis, so it reads as a solid limb, not a line).</summary>
+        private static void Tube(List<Vector3> into, Vector3 a, Vector3 b, float r0, float r1, int n, float twist)
+        {
+            Vector3 d = b - a;
+            Vector3 dn = d.sqrMagnitude < 0.0001f ? Vector3.up : d.normalized;
+            Vector3 p1 = Vector3.Cross(dn, Vector3.right);
+            if (p1.sqrMagnitude < 0.01f) p1 = Vector3.Cross(dn, Vector3.forward);
+            p1.Normalize();
+            Vector3 p2 = Vector3.Cross(dn, p1);
+            for (int i = 0; i < n; i++)
+            {
+                float t = (i + 0.5f) / n;
+                float ang = i * 2.4f + twist;
+                float r = Mathf.Lerp(r0, r1, t);
+                into.Add(a + d * t + (p1 * Mathf.Cos(ang) + p2 * Mathf.Sin(ang)) * r);
+            }
+        }
+
+        private readonly List<Vector3> _local = new List<Vector3>(512);
+
+        /// <summary>Poses the rig for this moment: walking, prowling, galloping when it hunts, flailing when staggered.</summary>
+        private void BuildPose(float t)
+        {
+            List<Vector3> p = _local;
+            p.Clear();
+            bool hunt = State == Mode.Hunt, stag = State == Mode.Stagger, prowl = State == Mode.Prowl;
+            float run = Mathf.Clamp01(_speedNow / 4f);                       // 0 standing, 1 moving
+            float amp = stag ? 8f : (hunt ? 58f : (prowl ? 24f : 34f)) * run;
+            float armAmp = stag ? 0f : (hunt ? 62f : 18f) * run;
+            float lean = hunt ? 38f : (prowl ? 16f : 24f);
+            float bob = (hunt ? 0.13f : 0.05f) * run * Mathf.Abs(Mathf.Sin(_gait)) + 0.015f * Mathf.Sin(t * 1.3f);
+            float headPitch = lean * 0.4f + Mathf.Sin(t * 0.9f) * 6f;
+            float twist = Mathf.Sin(_gait) * (hunt ? 16f : 9f) * run;
+            float armHang = 8f;
+            float kneeBase = hunt ? 28f : 16f;
+
+            if (stag)
+            {
+                float k = Mathf.Clamp01(_stagT / 0.35f);
+                lean = Mathf.Lerp(lean, -28f, k) + Mathf.Sin(t * 26f) * 7f;
+                headPitch = -50f + Mathf.Sin(t * 31f) * 14f;
+                armHang = 150f + Mathf.Sin(t * 22f) * 25f;
+                kneeBase = 50f;
+                twist = Mathf.Sin(t * 19f) * 22f;
+                bob = -0.12f;
+            }
+            else if (_lungeT > 0f)
+            {
+                armHang = 70f;
+                lean += 14f;
+            }
+
+            Vector3 pelvis = new Vector3(0f, 1.02f + bob, 0f);
+            Vector3 chest = pelvis + new Vector3(0f, Mathf.Cos(lean * Mathf.Deg2Rad), Mathf.Sin(lean * Mathf.Deg2Rad)) * 0.95f;
+            Quaternion tw = Quaternion.Euler(0f, twist, 0f);
+
+            // torso: a fat tube (ribcage wider than the waist) plus a hump of spine
+            Tube(p, pelvis, chest, 0.30f, 0.44f, 120, 0f);
+            Tube(p, pelvis + new Vector3(0f, 0.2f, -0.12f), chest + new Vector3(0f, 0.1f, -0.2f), 0.1f, 0.14f, 14, 1f);
+
+            // head, neck and horns
+            Vector3 headDir = new Vector3(0f, Mathf.Cos(headPitch * Mathf.Deg2Rad), Mathf.Sin(headPitch * Mathf.Deg2Rad));
+            Vector3 head = chest + headDir * 0.42f + new Vector3(Mathf.Sin(t * 0.7f) * 0.05f, 0f, 0f);
+            Tube(p, chest, head, 0.16f, 0.12f, 12, 0f);
+            for (int i = 0; i < 44; i++) p.Add(head + Sph[i] * 0.27f);
+            Quaternion hq = Quaternion.Euler(headPitch, 0f, 0f);
+            for (int side = -1; side <= 1; side += 2)
+                for (int s = 0; s < 12; s++)
+                {
+                    float u = s / 11f;
+                    p.Add(head + hq * new Vector3(side * (0.2f + 0.3f * Mathf.Sin(u * 2.2f)), 0.12f + u * 0.62f, 0.02f - u * 0.1f));
+                }
+            p.Add(head + hq * new Vector3(-0.1f, 0.04f, 0.24f));            // eyes
+            p.Add(head + hq * new Vector3(0.1f, 0.04f, 0.24f));
+
+            // arms, swinging against the legs; the hunt throws them forward
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float ph = _gait + (side > 0 ? 0f : Mathf.PI);
+                Vector3 sh = chest + tw * new Vector3(side * 0.52f, -0.08f, 0f);
+                float a = armHang - Mathf.Sin(ph) * armAmp;
+                if (stag) a = armHang + side * 15f;
+                Vector3 elbow = sh + Down(a, side * 0.14f) * 0.62f;
+                float e = a + (hunt ? 50f : 28f) + (stag ? 20f : 0f);
+                Vector3 edir = Down(e, side * 0.05f);
+                Vector3 hand = elbow + edir * 0.66f;
+                Tube(p, sh, elbow, 0.12f, 0.09f, 24, side);
+                Tube(p, elbow, hand, 0.09f, 0.07f, 24, side);
+                for (int c = 0; c < 4; c++)                                  // claws
+                    p.Add(hand + edir * (0.12f + c * 0.07f) + new Vector3(side * (c - 1.5f) * 0.05f, 0f, 0f));
+                for (int c = 0; c < 6; c++) p.Add(sh + Sph[60 + c + (side > 0 ? 0 : 6)] * 0.17f);   // shoulder plate
+            }
+
+            // legs: thigh, knee that bends as the foot lifts, shin, foot
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float ph = _gait + (side > 0 ? Mathf.PI : 0f);
+                Vector3 hip = pelvis + new Vector3(side * 0.2f, -0.02f, 0f);
+                float a = Mathf.Sin(ph) * amp;
+                Vector3 knee = hip + Down(a, side * 0.02f) * 0.55f;
+                float lift = Mathf.Max(0f, Mathf.Cos(ph)) * (stag ? 10f : 38f) * run;
+                float b = a - kneeBase - lift;
+                Vector3 foot = knee + Down(b, 0f) * 0.55f;
+                Tube(p, hip, knee, 0.15f, 0.1f, 26, side);
+                Tube(p, knee, foot, 0.1f, 0.07f, 26, side);
+                p.Add(foot + new Vector3(side * 0.04f, 0f, 0.1f));
+                p.Add(foot + new Vector3(side * 0.04f, 0f, 0.2f));
+                p.Add(foot + new Vector3(side * 0.1f, 0f, 0.12f));
+            }
+        }
+
+        /// <summary>Its points in world space for this frame (posed, breathing, shaking when staggered).</summary>
         public void FillWorld(List<Vector3> into, float t)
         {
             into.Clear();
+            BuildPose(t);
             Quaternion q = Quaternion.Euler(0f, Yaw, 0f);
-            float shake = State == Mode.Stagger ? 0.09f : 0f;
-            float breathe = 1f + 0.02f * Mathf.Sin(t * 1.1f);
-            for (int i = 0; i < Local.Count; i++)
+            float shake = State == Mode.Stagger ? 0.07f : 0.012f;
+            for (int i = 0; i < _local.Count; i++)
             {
-                Vector3 w = Local[i] * 1.15f;
-                w.x += Mathf.Sin(t * 1.8f + w.y * 2f) * 0.04f;
-                w.y *= breathe;
-                if (shake > 0f) { w.x += (Random.value - 0.5f) * shake; w.z += (Random.value - 0.5f) * shake; }
+                Vector3 w = _local[i] * 1.15f;
+                w.x += (Random.value - 0.5f) * shake;
+                w.z += (Random.value - 0.5f) * shake;
                 into.Add(Pos + q * w);
             }
+        }
+
+        private void Animate(float dt)
+        {
+            float moved = (Pos - _lastPos).magnitude / Mathf.Max(dt, 0.0001f);
+            _speedNow = Mathf.Lerp(_speedNow, Mathf.Min(moved, 30f), 1f - Mathf.Exp(-8f * dt));
+            _lastPos = Pos;
+            _gait += dt * (2.2f + _speedNow * (State == Mode.Hunt ? 0.75f : 1.1f));
+            if (State == Mode.Stagger) _stagT += dt; else _stagT = 0f;
+            if (_lungeT > 0f) _lungeT -= dt;
         }
 
         // ---------------------------------------------------------------- queries
@@ -252,6 +360,7 @@ namespace Surveyor
             Vector3 p = player + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * Random.Range(45f, 60f);
             p.y = GroundY(p, player.y);
             Pos = p;
+            _lastPos = p;
             State = Mode.Prowl;
             _modeTimer = Random.Range(18f, 30f);
             _chain = 0f;
@@ -321,6 +430,8 @@ namespace Surveyor
             if (fd < 12f) targetY = Mathf.Max(gy, Mathf.Min(pp.y, gy + 30f));
             Pos.y = Mathf.MoveTowards(Pos.y, targetY, 10f * dt);
             _center = Pos + Vector3.up * 1.4f;
+            if (State == Mode.Hunt && fd < 7f) _lungeT = 0.4f;
+            Animate(dt);
             if (fd > 0.1f && State != Mode.Stagger) Yaw = Mathf.LerpAngle(Yaw, Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg, 6f * dt);
 
             if (State != Mode.Stagger && Vector3.Distance(body.corePosition, _center) < SvrPlugin.DemonContactRange.Value + 0.6f) Feed();
@@ -351,19 +462,44 @@ namespace Surveyor
             public bool Big;
         }
 
+        public static readonly string[] OdNames = { "SWEEP", "BURST", "FOCUS", "ECHO" };
+        public static int OdMode;                                  // chosen with the mode key, read by the Overdrive skill
+
         private Dot[] _dots;
         private int _head, _count;
         private CharacterBody _body;
         private InputBankTest _input;
         private bool _local;
         private SvrDemon _demon;
-        private readonly List<Vector3> _demonPoints = new List<Vector3>(256);
+        private readonly List<Vector3> _demonPoints = new List<Vector3>(512);
+        private readonly List<Vector3> _trailA = new List<Vector3>(512);
+        private readonly List<Vector3> _trailB = new List<Vector3>(512);
+        private float _trailT;
 
         private int _pulseLeft;
         private Vector3 _pulseAt;
         private float _pulseRange;
         private readonly List<HealthComponent> _tracked = new List<HealthComponent>();
         private readonly List<float> _trackedUntil = new List<float>();
+
+        // Overdrive (the LiDAR pushed past its limits, in one of four modes)
+        private int _odActive = -1;
+        private float _odUntil, _odStart, _sweepYaw, _echoNext, _revealUntil;
+        private int _spin;
+
+        // Peek (visor off: real vision, blurry and blown out)
+        private float _peekUntil, _peekStart, _peekK;
+        private Camera _peekCam;
+        private bool _warped;
+        private float _warpFov;
+        private Quaternion _warpRot;
+        private PostProcessVolume _ppVol;
+        private Bloom _bloom;
+        private DepthOfField _dof;
+        private ChromaticAberration _ca;
+        private ColorGrading _cg;
+        private LensDistortion _ld;
+        private bool _ppFailed;
 
         private Camera _dimCam;
         private int _origMask;
@@ -373,17 +509,30 @@ namespace Surveyor
         private float _nextAudio;
         private GUIStyle _label;
 
+        // The point cloud is drawn into a small pixel buffer (one draw call for tens of thousands of dots).
+        private Texture2D _buf;
+        private Color32[] _pix;
+        private int _bufW, _bufH;
+
         private void Awake()
         {
             _body = GetComponent<CharacterBody>();
             _input = GetComponent<InputBankTest>();
-            _dots = new Dot[Mathf.Max(256, SvrPlugin.MaxDots.Value)];
+            _dots = new Dot[Mathf.Max(1024, SvrPlugin.MaxDots.Value)];
             _demon = new SvrDemon();
         }
 
-        private void OnDestroy() { RestoreCamera(); }
-        private void OnDisable() { RestoreCamera(); }
+        private void OnEnable()
+        {
+            Camera.onPreCull += PreCull;
+            Camera.onPostRender += PostRender;
+        }
 
+        private void OnDestroy() { Camera.onPreCull -= PreCull; Camera.onPostRender -= PostRender; RestoreCamera(); DropPeekFx(); if (_buf) Destroy(_buf); }
+        private void OnDisable() { Camera.onPreCull -= PreCull; Camera.onPostRender -= PostRender; RestoreCamera(); DropPeekFx(); }
+
+        public bool Peeking { get { return Time.time < _peekUntil; } }
+        public bool OverdriveOn { get { return _odActive >= 0 && Time.time < _odUntil; } }
         // ---------------------------------------------------------------- helpers
 
         private bool IsLocal()
@@ -488,7 +637,49 @@ namespace Surveyor
             catch { }
         }
 
+        public void Overdrive(int mode)
+        {
+            _odActive = mode;
+            _odStart = Time.time;
+            Vector3 at = _body.corePosition + Vector3.up * 0.8f;
+            switch (mode)
+            {
+                case 0:     // SWEEP: a tall scan line spins all the way around her
+                    _odUntil = Time.time + SvrPlugin.SweepSeconds.Value;
+                    Vector3 f = _input ? _input.aimDirection : transform.forward;
+                    _sweepYaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
+                    break;
+                case 1:     // BURST: the whole sphere around her at once
+                    _odUntil = Time.time + 0.7f;
+                    _pulseAt = at;
+                    _pulseRange = 70f * SvrSenses.SightMult;
+                    _pulseLeft = Mathf.RoundToInt(5200f * SvrSenses.SightMult);
+                    break;
+                case 2:     // FOCUS: one very tight, very dense, very long beam
+                    _odUntil = Time.time + SvrPlugin.FocusSeconds.Value;
+                    break;
+                default:    // ECHO: every enemy lit up through the walls, and the Shimmer Demon with them
+                    _odUntil = Time.time + SvrPlugin.EchoSeconds.Value;
+                    _echoNext = 0f;
+                    _revealUntil = _odUntil;
+                    break;
+            }
+        }
+
+        public void StartPeek(float seconds)
+        {
+            _peekStart = Time.time;
+            _peekUntil = Time.time + seconds * Mathf.Max(0.5f, SvrSenses.SightMult);
+        }
+
         // ---------------------------------------------------------------- per frame
+
+        private static Vector3 Cone(Vector3 aim, float degrees, float theta)
+        {
+            Quaternion rot = Quaternion.LookRotation(aim);
+            Vector3 d = Quaternion.Euler(-degrees * Mathf.Sin(theta), degrees * Mathf.Cos(theta), 0f) * Vector3.forward;
+            return rot * d;
+        }
 
         private void Update()
         {
@@ -499,51 +690,145 @@ namespace Surveyor
 
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
+
+            KeyCode key;
+            if (TryKey(out key) && Input.GetKeyDown(key)) OdMode = (OdMode + 1) % OdNames.Length;
+
             _demon.Tick(dt, _body);
-            Scan();
+            Scan(dt);
+            OverdriveTick(dt);
 
             if (_pulseLeft > 0)
             {
-                int n = Mathf.Min(_pulseLeft, 380);
+                int n = Mathf.Min(_pulseLeft, 650);
                 for (int i = 0; i < n; i++) Cast(_pulseAt + Vector3.up * 0.8f, Random.onUnitSphere, _pulseRange, SvrPlugin.DotLife.Value * 1.6f, true);
                 _pulseLeft -= n;
             }
 
+            int per = (_odActive == 3 && OverdriveOn) ? 9 : 3;
             for (int i = _tracked.Count - 1; i >= 0; i--)
             {
                 HealthComponent hc = _tracked[i];
                 if (!hc || !hc.alive || !hc.body || Time.time > _trackedUntil[i]) { _tracked.RemoveAt(i); _trackedUntil.RemoveAt(i); continue; }
-                for (int k = 0; k < 3; k++)
+                for (int k = 0; k < per; k++)
                     AddDot(hc.body.corePosition + Random.insideUnitSphere * Mathf.Max(0.5f, hc.body.radius), new Color(1f, 0.15f, 0.1f, 1f), 0.4f, true);
             }
 
             if (SvrSenses.Hearing && Time.unscaledTime > _nextAudio) { _nextAudio = Time.unscaledTime + 2f; SvrAudio.Muffle(true); }
         }
 
-        private void Scan()
+        private static bool TryKey(out KeyCode k)
+        {
+            k = KeyCode.V;
+            try { return Enum.TryParse(SvrPlugin.ModeKey.Value, true, out k); }
+            catch { return false; }
+        }
+
+        // The always-on scanner. Rays fan out in a spiral over a wide cone, so the cloud fills in evenly and packs tight.
+        private void Scan(float dt)
         {
             if (!_input) return;
             float prox = _demon.Proximity(_body.corePosition);
             if (prox > 0.2f && Random.value < prox * 0.85f) return;      // the suit's scanner stutters and drops frames near it
             float sight = SvrSenses.SightMult;
-            int rays = Mathf.RoundToInt(SvrPlugin.RaysPerFrame.Value * sight * (1f - 0.5f * prox));
+            float frames = Mathf.Clamp(dt * 60f, 0.5f, 3f);
+            int rays = Mathf.RoundToInt(SvrPlugin.RaysPerFrame.Value * frames * sight * (1f - 0.5f * prox));
             float range = SvrPlugin.ScanRange.Value * sight;
             Vector3 o = _input.aimOrigin;
             Vector3 aim = _input.aimDirection;
             float life = SvrPlugin.DotLife.Value * (sight < 1f ? 0.7f : 1f);
             for (int i = 0; i < rays; i++)
             {
-                if (Random.value < 0.15f) Cast(o, Random.onUnitSphere, range * 0.35f, life, false);   // a little all around her
-                else Cast(o, (aim + Random.insideUnitSphere * 0.75f).normalized, range, life, false);
+                _spin++;
+                if (Random.value < 0.18f) { Cast(o, Random.onUnitSphere, range * 0.35f, life, false); continue; }   // a little all around her
+                float f = ((_spin % 257) + Random.value) / 257f;
+                Cast(o, Cone(aim, 52f * Mathf.Sqrt(f), _spin * 2.39996f), range, life, false);
             }
         }
+
+        private void OverdriveTick(float dt)
+        {
+            if (_odActive < 0) return;
+            if (Time.time >= _odUntil) { _odActive = -1; return; }
+            float sight = SvrSenses.SightMult;
+            Vector3 o = _input ? _input.aimOrigin : _body.corePosition;
+            Vector3 aim = _input ? _input.aimDirection : transform.forward;
+            float life = SvrPlugin.DotLife.Value * 1.8f;
+            switch (_odActive)
+            {
+                case 0:
+                {
+                    float dur = Mathf.Max(0.5f, _odUntil - _odStart);
+                    float step = 360f / dur * dt;
+                    int slices = Mathf.Max(1, Mathf.CeilToInt(step / 1.1f));
+                    for (int s = 0; s < slices; s++)
+                    {
+                        _sweepYaw += step / slices;
+                        for (int i = 0; i < 52; i++)
+                        {
+                            float pitch = Mathf.Lerp(-60f, 70f, (i + Random.value) / 52f);
+                            Cast(o, Quaternion.Euler(-pitch, _sweepYaw, 0f) * Vector3.forward, 100f * sight, life, false);
+                        }
+                    }
+                    break;
+                }
+                case 2:
+                {
+                    int n = Mathf.RoundToInt(520f * Mathf.Clamp(dt * 60f, 0.5f, 3f) * sight);
+                    for (int i = 0; i < n; i++)
+                        Cast(o, Cone(aim, 6.5f * Mathf.Sqrt(Random.value), Random.value * 6.283f), 170f * sight, life * 1.2f, false);
+                    break;
+                }
+                case 3:
+                {
+                    if (Time.time < _echoNext) break;
+                    _echoNext = Time.time + 0.4f;
+                    try
+                    {
+                        SphereSearch s = new SphereSearch { origin = _body.corePosition, radius = 85f, mask = LayerIndex.entityPrecise.mask };
+                        s.RefreshCandidates();
+                        s.FilterCandidatesByHurtBoxTeam(TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex));
+                        s.FilterCandidatesByDistinctHurtBoxEntities();
+                        foreach (HurtBox hb in s.GetHurtBoxes())
+                            if (hb && hb.healthComponent && hb.healthComponent.alive && !_tracked.Contains(hb.healthComponent) && _tracked.Count < 40)
+                            {
+                                _tracked.Add(hb.healthComponent);
+                                _trackedUntil.Add(_odUntil);
+                            }
+                    }
+                    catch { }
+                    break;
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------- camera: dark world, or the real world while peeking
 
         private void LateUpdate()
         {
             if (!_local || !_body) return;
-            if (!SvrPlugin.DarkWorld.Value || !Alive) { RestoreCamera(); return; }
+            if (!Alive) { RestoreCamera(); DropPeekFx(); _peekK = 0f; return; }
+
+            // Peek intensity: snaps on, holds, then fades back to the dark over the last second.
+            float now = Time.time;
+            float target = 0f;
+            if (Peeking) target = Mathf.Min(1f, (now - _peekStart) / 0.2f) * Mathf.Clamp01((_peekUntil - now) / 0.9f + 0.25f);
+            else if (now < _peekUntil + 0.8f) target = 0f;
+            _peekK = Mathf.MoveTowards(_peekK, target, Time.deltaTime * 6f);
+
             Camera cam = Cam();
             if (!cam) return;
+            _peekCam = cam;
+
+            if (Peeking)
+            {
+                RestoreCamera();                          // the real world is back
+                ApplyPeekFx(cam);
+                return;
+            }
+            if (_ppVol) _ppVol.weight = 0f;
+
+            if (!SvrPlugin.DarkWorld.Value) { RestoreCamera(); return; }
             if (!_dimmed || _dimCam != cam)
             {
                 RestoreCamera();
@@ -570,6 +855,68 @@ namespace Surveyor
             _dimCam = null;
         }
 
+        // Peek post-processing: heavy blur (depth of field), blown-out bloom and exposure, colour fringing, a bulging lens.
+        private void ApplyPeekFx(Camera cam)
+        {
+            if (_ppFailed) return;
+            try
+            {
+                if (!_ppVol)
+                {
+                    PostProcessLayer layer = cam.GetComponent<PostProcessLayer>();
+                    if (!layer) { _ppFailed = true; return; }
+                    int mask = layer.volumeLayer.value, lay = 0;
+                    for (int i = 0; i < 32; i++) if ((mask & (1 << i)) != 0) { lay = i; break; }
+                    _bloom = ScriptableObject.CreateInstance<Bloom>();
+                    _bloom.enabled.Override(true); _bloom.intensity.Override(28f); _bloom.threshold.Override(0.25f); _bloom.diffusion.Override(10f);
+                    _dof = ScriptableObject.CreateInstance<DepthOfField>();
+                    _dof.enabled.Override(true); _dof.focusDistance.Override(0.35f); _dof.aperture.Override(32f); _dof.focalLength.Override(150f); _dof.kernelSize.Override(KernelSize.VeryLarge);
+                    _ca = ScriptableObject.CreateInstance<ChromaticAberration>();
+                    _ca.enabled.Override(true); _ca.intensity.Override(1f);
+                    _cg = ScriptableObject.CreateInstance<ColorGrading>();
+                    _cg.enabled.Override(true); _cg.postExposure.Override(2.6f); _cg.saturation.Override(-30f); _cg.contrast.Override(-25f);
+                    _ld = ScriptableObject.CreateInstance<LensDistortion>();
+                    _ld.enabled.Override(true); _ld.intensity.Override(-45f);
+                    _ppVol = PostProcessManager.instance.QuickVolume(lay, 300f, _bloom, _dof, _ca, _cg, _ld);
+                    _ppVol.weight = 0f;
+                }
+                _ppVol.weight = _peekK;
+            }
+            catch (Exception e)
+            {
+                _ppFailed = true;
+                SvrPlugin.Log.LogWarning("Peek post-processing unavailable, using the screen wash only: " + e.Message);
+            }
+        }
+
+        private void DropPeekFx()
+        {
+            try { if (_ppVol) RuntimeUtilities.DestroyVolume(_ppVol, true, true); } catch { }
+            _ppVol = null;
+        }
+
+        // The lens pulses and rolls while the visor is off (applied right before the camera renders, undone right after).
+        private void PreCull(Camera c)
+        {
+            if (!_local || c != _peekCam || _peekK < 0.02f) return;
+            try
+            {
+                _warpFov = c.fieldOfView;
+                _warpRot = c.transform.rotation;
+                c.fieldOfView = _warpFov * (1f + 0.06f * _peekK * Mathf.Sin(Time.time * 7f));
+                c.transform.rotation = _warpRot * Quaternion.Euler(0f, 0f, Mathf.Sin(Time.time * 11f) * 2.2f * _peekK);
+                _warped = true;
+            }
+            catch { }
+        }
+
+        private void PostRender(Camera c)
+        {
+            if (!_warped || c != _peekCam) return;
+            try { c.fieldOfView = _warpFov; c.transform.rotation = _warpRot; } catch { }
+            _warped = false;
+        }
+
         // ---------------------------------------------------------------- drawing (IMGUI, so no shaders or materials are needed)
 
         private void OnGUI()
@@ -582,46 +929,93 @@ namespace Surveyor
             Color old = GUI.color;
             DrawDots(cam, scale);
             DrawDemon(cam, scale);
+            DrawPeekWash(scale);
             DrawHud(scale);
             GUI.color = old;
         }
 
         private void DrawDots(Camera cam, float scale)
         {
-            Texture2D white = Texture2D.whiteTexture;
+            int div = Mathf.Clamp(SvrPlugin.DotDivider.Value, 1, 4);
+            int W = Mathf.Max(64, Screen.width / div), H = Mathf.Max(64, Screen.height / div);
+            if (_buf == null || _bufW != W || _bufH != H)
+            {
+                if (_buf) Destroy(_buf);
+                _buf = new Texture2D(W, H, TextureFormat.RGBA32, false);
+                _buf.filterMode = FilterMode.Point;
+                _buf.wrapMode = TextureWrapMode.Clamp;
+                _pix = new Color32[W * H];
+                _bufW = W; _bufH = H;
+            }
+            Array.Clear(_pix, 0, _pix.Length);
+
+            Matrix4x4 m = cam.projectionMatrix * cam.worldToCameraMatrix;
             float now = Time.time;
             int len = _dots.Length;
-            int drawn = 0;
-            for (int k = 0; k < _count; k++)
+            bool voidOn = _demon.Active;
+            for (int k = _count - 1; k >= 0; k--)          // oldest first, so the newest dots end up on top
             {
                 int idx = ((_head - 1 - k) % len + len) % len;
                 Dot d = _dots[idx];
                 float age = now - d.T;
                 if (age >= d.Life) continue;
-                Vector3 sp = cam.WorldToScreenPoint(d.P);
-                if (sp.z <= 0.3f || sp.x < -8f || sp.x > Screen.width + 8f || sp.y < -8f || sp.y > Screen.height + 8f) continue;
-                if (_demon.InVoid(d.P, 2.2f)) continue;
+                Vector3 p = d.P;
+                float w = m.m30 * p.x + m.m31 * p.y + m.m32 * p.z + m.m33;
+                if (w <= 0.3f) continue;
+                float nx = (m.m00 * p.x + m.m01 * p.y + m.m02 * p.z + m.m03) / w;
+                float ny = (m.m10 * p.x + m.m11 * p.y + m.m12 * p.z + m.m13) / w;
+                if (nx < -1f || nx > 1f || ny < -1f || ny > 1f) continue;
+                if (voidOn && _demon.InVoid(p, 2.2f)) continue;
                 float fade = 1f - age / d.Life;
-                float size = Mathf.Lerp(3.6f, 1.6f, Mathf.Clamp01(sp.z / 55f)) * scale * (SvrPlugin.DotSize.Value / 3f) * (d.Big ? 1.5f : 1f);
-                GUI.color = new Color(d.C.r, d.C.g, d.C.b, d.C.a * fade);
-                GUI.DrawTexture(new Rect(sp.x - size * 0.5f, Screen.height - sp.y - size * 0.5f, size, size), white);
-                if (++drawn >= 4000) break;
+                float a = d.C.a * fade;
+                Color32 c = new Color32((byte)(d.C.r * 255f), (byte)(d.C.g * 255f), (byte)(d.C.b * 255f), (byte)(Mathf.Clamp01(a) * 255f));
+                int ix = (int)((nx * 0.5f + 0.5f) * W), iy = (int)((ny * 0.5f + 0.5f) * H);
+                int sz = (d.Big || w < 9f) ? 2 : 1;
+                for (int yy = 0; yy < sz; yy++)
+                {
+                    int y = iy + yy;
+                    if (y >= H) break;
+                    for (int xx = 0; xx < sz; xx++)
+                    {
+                        int x = ix + xx;
+                        if (x >= W) break;
+                        _pix[y * W + x] = c;
+                    }
+                }
             }
+            _buf.SetPixels32(_pix);
+            _buf.Apply(false);
+            GUI.color = new Color(1f, 1f, 1f, Mathf.Lerp(1f, 0.3f, _peekK));
+            GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _buf, ScaleMode.StretchToFill, true);
         }
 
         private void DrawDemon(Camera cam, float scale)
         {
             if (!_demon.Active) return;
-            bool blocked = Physics.Linecast(cam.transform.position, _demon.Center, LayerIndex.world.mask, QueryTriggerInteraction.Ignore);
-            float vis = blocked ? 0.18f : 0.9f;
+            bool revealed = Time.time < _revealUntil;
+            bool blocked = !revealed && Physics.Linecast(cam.transform.position, _demon.Center, LayerIndex.world.mask, QueryTriggerInteraction.Ignore);
+            float vis = blocked ? 0.18f : 0.95f;
             _demon.FillWorld(_demonPoints, Time.time);
+
+            // afterimages: where it was a moment ago, so its movement smears
+            _trailT -= Time.deltaTime;
+            if (_trailT <= 0f)
+            {
+                _trailT = 0.07f;
+                _trailB.Clear(); _trailB.AddRange(_trailA);
+                _trailA.Clear(); _trailA.AddRange(_demonPoints);
+            }
             Texture2D white = Texture2D.whiteTexture;
+            DrawTrail(cam, _trailB, 0.10f * vis, scale, white);
+            DrawTrail(cam, _trailA, 0.20f * vis, scale, white);
+
             float split = (2.5f + Random.value * 1.5f) * scale;
             for (int i = 0; i < _demonPoints.Count; i++)
             {
+                if (Random.value < 0.06f) continue;                                // flicker
                 Vector3 sp = cam.WorldToScreenPoint(_demonPoints[i]);
                 if (sp.z <= 0.3f) continue;
-                float size = Mathf.Clamp(320f / sp.z, 2.2f, 8f) * scale;
+                float size = Mathf.Clamp(380f / sp.z, 2.4f, 9f) * scale;
                 float dx = split;
                 if (Mathf.Sin(sp.y * 0.045f + Time.time * 38f) > 0.975f) dx += (Random.value - 0.5f) * 40f * scale;   // glitch bands
                 float y = Screen.height - sp.y - size * 0.5f;
@@ -631,6 +1025,50 @@ namespace Surveyor
                 GUI.DrawTexture(new Rect(sp.x + dx - size * 0.5f, y, size, size), white);
                 GUI.color = new Color(0.9f, 0.97f, 1f, vis);
                 GUI.DrawTexture(new Rect(sp.x - size * 0.5f, y, size, size), white);
+            }
+        }
+
+        private static void DrawTrail(Camera cam, List<Vector3> pts, float alpha, float scale, Texture2D white)
+        {
+            GUI.color = new Color(1f, 0.2f, 0.25f, alpha);
+            for (int i = 0; i < pts.Count; i += 2)
+            {
+                Vector3 sp = cam.WorldToScreenPoint(pts[i]);
+                if (sp.z <= 0.3f) continue;
+                float size = Mathf.Clamp(300f / sp.z, 2f, 7f) * scale;
+                GUI.DrawTexture(new Rect(sp.x - size * 0.5f, Screen.height - sp.y - size * 0.5f, size, size), white);
+            }
+        }
+
+        // Blown-out visor-off look: white wash, light bleeding in from the edges, streaks, and a burn-in after it ends.
+        private void DrawPeekWash(float scale)
+        {
+            float now = Time.time;
+            float k = _peekK;
+            float after = (!Peeking && now < _peekUntil + 0.8f) ? 1f - (now - _peekUntil) / 0.8f : 0f;
+            if (k < 0.02f && after <= 0f) return;
+            Texture2D white = Texture2D.whiteTexture;
+            float flick = 0.88f + 0.12f * Mathf.Sin(now * 23f) + (Random.value < 0.04f ? 0.25f : 0f);
+            float wash = (0.22f * k + 0.45f * after) * flick;
+            GUI.color = new Color(1f, 0.97f, 0.9f, Mathf.Clamp01(wash));
+            GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), white);
+            for (int i = 0; i < 7; i++)
+            {
+                float inset = i * 0.035f;
+                float a = (0.16f - i * 0.02f) * k * flick;
+                if (a <= 0f) continue;
+                GUI.color = new Color(1f, 0.98f, 0.92f, a);
+                float bx = Screen.width * inset, by = Screen.height * inset;
+                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, by + 6f), white);
+                GUI.DrawTexture(new Rect(0f, Screen.height - by - 6f, Screen.width, by + 6f), white);
+                GUI.DrawTexture(new Rect(0f, 0f, bx + 6f, Screen.height), white);
+                GUI.DrawTexture(new Rect(Screen.width - bx - 6f, 0f, bx + 6f, Screen.height), white);
+            }
+            for (int i = 0; i < 6; i++)
+            {
+                GUI.color = new Color(1f, 1f, 1f, Random.Range(0.1f, 0.35f) * k);
+                float bw = Random.Range(0.25f, 1f) * Screen.width;
+                GUI.DrawTexture(new Rect(Random.value * (Screen.width - bw), Random.value * Screen.height, bw, Random.Range(2f, 16f) * scale), white);
             }
         }
 
@@ -673,6 +1111,25 @@ namespace Surveyor
                 GUI.DrawTexture(new Rect(bx, by, w * sp.Spool, h), white);
                 GUI.color = new Color(0.8f, 1f, 0.7f, 0.9f);
                 GUI.Label(new Rect(bx, by + h + 2f, w, 20f * scale), sp.AnchorLeft > 0f ? "SPOOL  ANCHORED" : "SPOOL", _label);
+            }
+
+            // Overdrive mode readout (only when the skill is equipped) and the visor timer.
+            SkillLocator skl = _body.skillLocator;
+            bool hasOd = skl && skl.special && skl.special.skillDef && skl.special.skillDef.skillName == SvrPlugin.T + "OVERDRIVE";
+            if (hasOd)
+            {
+                GUI.color = OverdriveOn ? new Color(1f, 0.9f, 0.3f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.95f);
+                GUI.Label(new Rect(Screen.width * 0.03f, Screen.height * 0.715f, 400f * scale, 24f * scale), "OVERDRIVE: " + OdNames[OdMode % OdNames.Length] + "   [" + SvrPlugin.ModeKey.Value.ToUpperInvariant() + "] change", _label);
+            }
+            if (Peeking)
+            {
+                float left = Mathf.Clamp01((_peekUntil - Time.time) / Mathf.Max(0.1f, _peekUntil - _peekStart));
+                float pw = 220f * scale;
+                GUI.color = new Color(0f, 0f, 0f, 0.55f);
+                GUI.DrawTexture(new Rect(Screen.width * 0.5f - pw * 0.5f - 2f, Screen.height * 0.12f - 2f, pw + 4f, 10f * scale + 4f), white);
+                GUI.color = new Color(1f, 0.95f, 0.8f, 0.95f);
+                GUI.DrawTexture(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f, pw * left, 10f * scale), white);
+                GUI.Label(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f + 14f * scale, pw, 24f * scale), "VISOR OFF", _label);
             }
 
             // Suit failure near the demon: the HUD parts flicker with static and drop offline one after another.
