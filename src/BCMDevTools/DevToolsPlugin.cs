@@ -27,7 +27,7 @@ using Path = System.IO.Path;
 namespace BCMDevTools
 {
     [BepInPlugin(Guid, "BCM Dev Tools", "1.0.0")]
-    public class DevToolsPlugin : BaseUnityPlugin
+    public partial class DevToolsPlugin : BaseUnityPlugin
     {
         public const string Guid = "com.a6407805.bcmdevtools";
 
@@ -53,7 +53,7 @@ namespace BCMDevTools
         object _cursorSystem;             // the MPEventSystem we opened the cursor on
         int _spawnPick = 2;
         Harmony _harmony;
-        Rect _win = new Rect(Screen.width - 440, 60, 420, 10);
+        Rect _win = new Rect(Screen.width - 490, 60, 470, 10);
 
         static readonly string[] SpawnNames = { "Beetle", "Lemurian", "Stone Golem", "Elder Lemurian", "Stone Titan" };
         static readonly string[] SpawnMasters = { "BeetleMaster", "LemurianMaster", "GolemMaster", "LemurianBruiserMaster", "TitanMaster" };
@@ -73,11 +73,13 @@ namespace BCMDevTools
             {
                 Directory.CreateDirectory(SharedDir);
                 File.WriteAllText(MarkerFile, "BCM Dev Tools " + DateTime.Now.ToString("o"));  // shows TEST LEVEL in the launcher
-                if (File.Exists(FlagFile)) { File.Delete(FlagFile); _quick = Quick.WaitTitle; Logger.LogInfo("Quick test requested"); }
+                if (File.Exists(FlagFile)) { File.Delete(FlagFile); _quick = Quick.WaitTitle; _testSession = true; Logger.LogInfo("Quick test requested"); }
+                else Logger.LogInfo("Normal launch (PLAY): dev tools stay off. Use TEST LEVEL in the launcher.");
             }
             catch (Exception e) { Logger.LogWarning("Shared files: " + e.Message); }
 
             SceneManager.activeSceneChanged += OnSceneChanged;
+            SceneManager.sceneLoaded += OnSceneLoaded;
             GlobalEventManager.onServerDamageDealt += OnDamage;
             Stage.onServerStageBegin += OnStageBegin;
 
@@ -90,6 +92,7 @@ namespace BCMDevTools
         void OnDestroy()
         {
             SceneManager.activeSceneChanged -= OnSceneChanged;
+            SceneManager.sceneLoaded -= OnSceneLoaded;
             GlobalEventManager.onServerDamageDealt -= OnDamage;
             Stage.onServerStageBegin -= OnStageBegin;
             _harmony?.UnpatchSelf();
@@ -101,10 +104,14 @@ namespace BCMDevTools
         /// The dev tools only work alone: in the menus, or in a singleplayer run. Hosting or joining a multiplayer
         /// lobby/run turns everything off (no god mode, no spawning, waves normal, panel hidden).
         /// </summary>
+        /// <summary>True only when this game was started with TEST LEVEL (or the dev tools' RELAUNCH). PLAY = off.</summary>
+        static bool _testSession;
+
         static bool Allowed
         {
             get
             {
+                if (!_testSession) return false;
                 if (!NetworkServer.active && !NetworkClient.active) return true;   // main menu, nothing online
                 return RoR2Application.isInSinglePlayer && NetworkUser.readOnlyInstancesList.Count <= 1;
             }
@@ -113,12 +120,76 @@ namespace BCMDevTools
         static bool BlockWave() => !(_spawnsOff && Allowed);   // false = skip the original (no new wave)
 
         // ================================================================ quick test
+        void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            // Skip the intro cutscene the moment it finishes loading, before its first frame plays.
+            if (_quick != Quick.Off) Logger.LogInfo("Scene loaded: " + scene.name);
+            if (_quick == Quick.WaitTitle && scene.name == "intro") { Logger.LogInfo("Skipping intro"); _introTries = 0; SceneManager.LoadScene("title"); }
+        }
+
         void OnSceneChanged(Scene from, Scene to)
         {
             if (_quick == Quick.Off) return;
-            if (to.name == "intro") { Logger.LogInfo("Skipping intro"); SceneManager.LoadScene("title"); return; }
+            if (to.name == "intro") { SceneManager.LoadScene("title"); return; }
             _quickTimer = 0f;
         }
+
+        int _introTries;
+        bool _introForced;
+
+        static bool LoadFinished()
+        {
+            Traverse t = Traverse.Create(typeof(RoR2Application));
+            foreach (string n in new[] { "loadFinished", "isLoadFinished" })
+            {
+                if (t.Property(n).PropertyExists()) return t.Property(n).GetValue<bool>();
+                if (t.Field(n).FieldExists()) return t.Field(n).GetValue<bool>();
+            }
+            return false;
+        }
+        readonly HashSet<string> _introLogged = new HashSet<string>();
+
+        /// <summary>
+        /// Still in the intro ship cutscene: do what pressing Space does. Calls any skip method the intro's own scripts
+        /// have, jumps videos to their end, and logs what it found (so it can be pinned down if a patch renames it).
+        /// </summary>
+        void SkipIntroNow()
+        {
+            if (_quick != Quick.WaitTitle || SceneManager.GetActiveScene().name != "intro" || _introTries++ > 300) return;
+            foreach (MonoBehaviour mb in FindObjectsOfType<MonoBehaviour>())
+            {
+                if (!mb) continue;
+                Type t = mb.GetType();
+                if (t.Assembly != typeof(RoR2Application).Assembly) continue;
+                foreach (MethodInfo m in t.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                {
+                    if (m.GetParameters().Length != 0 || m.ReturnType != typeof(void)) continue;
+                    if (m.Name.IndexOf("skip", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    try { Logger.LogInfo("Intro skip: " + t.Name + "." + m.Name); m.Invoke(mb, null); }
+                    catch (Exception e) { Logger.LogWarning("Intro skip " + m.Name + ": " + (e.InnerException ?? e).Message); }
+                }
+            }
+            foreach (UnityEngine.Video.VideoPlayer vp in FindObjectsOfType<UnityEngine.Video.VideoPlayer>())
+                if (vp && vp.length > 1) vp.time = vp.length - 0.1;
+
+            // The intro is also the loading screen: the moment loading is done, go to the title (like pressing Space).
+            if (!_introForced && LoadFinished())
+            {
+                _introForced = true;
+                Logger.LogInfo("Loading done, leaving intro");
+                SceneManager.LoadScene("title");
+            }
+        }
+
+        /// <summary>Quick test only: run the logo screens at 30x speed until the title menu is up.</summary>
+        void FastBoot()
+        {
+            string scene = SceneManager.GetActiveScene().name;
+            bool booting = _quick == Quick.WaitTitle && (scene == "splash" || scene == "intro");   // never in a run
+            if (booting) { Time.timeScale = 30f; _fastBoot = true; }
+            else if (_fastBoot) { Time.timeScale = 1f; _fastBoot = false; }
+        }
+        bool _fastBoot;
 
         void QuickTestUpdate()
         {
@@ -126,14 +197,14 @@ namespace BCMDevTools
             _quickTimer += Time.unscaledDeltaTime;
             try
             {
-                if (_quick == Quick.WaitTitle && SceneManager.GetActiveScene().name == "title" && RoR2.Console.instance != null && _quickTimer > 1f)
+                if (_quick == Quick.WaitTitle && SceneManager.GetActiveScene().name == "title" && RoR2.Console.instance != null && _quickTimer > 0.3f)
                 {
                     string mode = _mode.Value.Trim().ToLowerInvariant() == "classic" ? "ClassicRun" : "InfiniteTowerRun";
                     Logger.LogInfo("Quick test: hosting " + mode);
                     RoR2.Console.instance.SubmitCmd(null, "transition_command \"gamemode " + mode + "; host 0;\"");
                     _quick = Quick.WaitLobby; _quickTimer = 0f;
                 }
-                else if (_quick == Quick.WaitLobby && PreGameController.instance != null && _quickTimer > 1.5f)
+                else if (_quick == Quick.WaitLobby && PreGameController.instance != null && _quickTimer > 0.5f)
                 {
                     NetworkUser user = LocalUserManager.GetFirstLocalUser()?.currentNetworkUser;
                     if (user == null) return;
@@ -146,25 +217,11 @@ namespace BCMDevTools
                     _quick = Quick.Off;
                     _spawnsOff = true;   // start in a quiet arena
                     _godMode = true;
-                    _flatPending = _flatWorld.Value;
-                    StartRunNow();
+                    _flatPending = _flatWorld.Value;   // the run starts when you press Ready
+                    Logger.LogInfo("Quick test: at character select");
                 }
             }
             catch (Exception e) { Logger.LogError("Quick test failed: " + e); _quick = Quick.Off; }
-        }
-
-        void StartRunNow()
-        {
-            foreach (string name in new[] { "StartLaunch", "StartRun" })
-            {
-                MethodInfo m = AccessTools.Method(typeof(PreGameController), name, Type.EmptyTypes);
-                if (m == null) continue;
-                Logger.LogInfo("Quick test: PreGameController." + name);
-                m.Invoke(PreGameController.instance, null);
-                return;
-            }
-            Logger.LogInfo("Quick test: pregame_start_run");
-            RoR2.Console.instance.SubmitCmd(LocalUserManager.GetFirstLocalUser()?.currentNetworkUser, "pregame_start_run");
         }
 
         void OnStageBegin(Stage stage)
@@ -176,8 +233,11 @@ namespace BCMDevTools
         // ================================================================ flat world
         System.Collections.IEnumerator GoFlatWhenSpawned()
         {
-            for (float t = 0; t < 30f && !Me; t += 0.25f) yield return new WaitForSeconds(0.25f);
-            yield return new WaitForSeconds(1f);   // let the drop pod / spawn animation finish
+            for (float t = 0; t < 30f && !Me; t += 0.1f) yield return new WaitForSeconds(0.1f);
+            yield return new WaitForSeconds(0.2f);
+            CharacterBody me = Me;
+            if (me && me.currentVehicle) { try { me.currentVehicle.EjectPassenger(me.gameObject); } catch (Exception e) { Logger.LogWarning("Pod: " + e.Message); } }
+            yield return new WaitForSeconds(0.2f);
             GoFlat();
         }
 
@@ -277,6 +337,8 @@ namespace BCMDevTools
 
         void Update()
         {
+            FastBoot();
+            SkipIntroNow();
             QuickTestUpdate();
 
             if (!Allowed)
@@ -374,6 +436,28 @@ namespace BCMDevTools
             catch (Exception e) { Logger.LogError("Relaunch failed: " + e); }
         }
 
+        int _swapPick = -1;
+        static List<SurvivorDef> Survivors() =>
+            SurvivorCatalog.orderedSurvivorDefs.Where(d => d && d.bodyPrefab && !d.hidden).ToList();
+
+        /// <summary>Respawns you on the spot as another survivor (singleplayer host only).</summary>
+        void SwapTo(SurvivorDef def)
+        {
+            CharacterBody me = Me;
+            if (!me || !me.master || !def || !NetworkServer.active) return;
+            try
+            {
+                Vector3 pos = me.footPosition;
+                Quaternion rot = me.gameObject.transform.rotation;
+                CharacterMaster master = me.master;
+                master.bodyPrefab = def.bodyPrefab;
+                master.Respawn(pos, rot);
+                master.GetComponent<PlayerCharacterMasterController>()?.networkUser?.CmdSetBodyPreference(BodyCatalog.FindBodyIndex(def.bodyPrefab));
+                Logger.LogInfo("Swapped to " + def.bodyPrefab.name);
+            }
+            catch (Exception e) { Logger.LogError("Swap failed: " + e); }
+        }
+
         void UseThisSurvivor()
         {
             CharacterBody me = Me;
@@ -410,12 +494,39 @@ namespace BCMDevTools
         {
             if (!_panelOpen || !Allowed) return;
             if (_label == null) _label = new GUIStyle(GUI.skin.label) { richText = true, fontSize = 13, wordWrap = true };
-            _win = GUILayout.Window(0x8CD7, _win, DrawPanel, _mouseMode ? "BCM DEV TOOLS   ·   F1 = back to game" : "BCM DEV TOOLS   ·   F1 = mouse   F2 = hide", GUILayout.Width(420));
+            _win = GUILayout.Window(0x8CD7, _win, DrawPanel, _mouseMode ? "BCM DEV TOOLS   ·   F1 = back to game" : "BCM DEV TOOLS   ·   F1 = mouse   F2 = hide", GUILayout.Width(470));
         }
+
+        int _tab;
+        string _lastTabError;
+        static readonly string[] Tabs = { "STATS", "ITEMS", "SPAWN", "WORLD" };
 
         void DrawPanel(int id)
         {
             CharacterBody me = Me;
+            _tab = GUILayout.Toolbar(_tab, Tabs, GUILayout.Height(28));
+            GUILayout.Space(4);
+            try
+            {
+                switch (_tab)
+                {
+                    case 1: DrawItems(me); break;
+                    case 2: DrawSpawn(me); break;
+                    case 3: DrawWorld(me); break;
+                    default: DrawStats(me); break;
+                }
+            }
+            catch (Exception e) when (!(e is ExitGUIException))
+            {
+                // Never let one broken tab lock the panel: show the error, the tab buttons above still work.
+                if (_lastTabError != e.Message) { _lastTabError = e.Message; Logger.LogError("Panel tab " + Tabs[_tab] + ": " + e); }
+                GUILayout.Label("<color=#ff7070>This tab hit an error (logged). Pick another tab.</color>", _label);
+            }
+            GUI.DragWindow();
+        }
+
+        void DrawStats(CharacterBody me)
+        {
             var sb = new StringBuilder();
 
             if (!me) sb.Append("<color=#aaaaaa>No character yet. Press TEST LEVEL in the launcher,\nor</color> <b>NEW TEST RUN</b> below.");
@@ -463,27 +574,30 @@ namespace BCMDevTools
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("<", GUILayout.Width(26))) _spawnPick = (_spawnPick + SpawnNames.Length - 1) % SpawnNames.Length;
-            if (GUILayout.Button("Spawn " + SpawnNames[_spawnPick] + " [F5]")) SpawnEnemy();
-            if (GUILayout.Button(">", GUILayout.Width(26))) _spawnPick = (_spawnPick + 1) % SpawnNames.Length;
-            if (GUILayout.Button(_dummyAi ? "AI: on" : "AI: off (dummy)")) _dummyAi = !_dummyAi;
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Kill all [F7]")) KillAll();
             if (GUILayout.Button("Reset cooldowns [F8]")) ResetCooldowns();
-            if (GUILayout.Button("Clear log")) _hits.Clear();
+            if (GUILayout.Button("Clear damage log")) _hits.Clear();
             GUILayout.EndHorizontal();
 
+            List<SurvivorDef> list = Survivors();
+            if (list.Count > 0)
+            {
+                if (_swapPick < 0 || _swapPick >= list.Count)
+                    _swapPick = me ? Math.Max(0, list.FindIndex(d => BodyCatalog.FindBodyIndex(d.bodyPrefab) == me.bodyIndex)) : 0;
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button("<", GUILayout.Width(26))) _swapPick = (_swapPick + list.Count - 1) % list.Count;
+                GUILayout.Label("<b>" + Language.GetString(list[_swapPick].displayNameToken) + "</b>", _label, GUILayout.Width(170));
+                if (GUILayout.Button(">", GUILayout.Width(26))) _swapPick = (_swapPick + 1) % list.Count;
+                if (GUILayout.Button("SWAP CHARACTER")) SwapTo(list[_swapPick]);
+                GUILayout.EndHorizontal();
+            }
+
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Flat world [F10]")) GoFlat();
             if (GUILayout.Button("Use this survivor")) UseThisSurvivor();
             if (GUILayout.Button("NEW TEST RUN")) NewTestRun();
             if (GUILayout.Button("RELAUNCH GAME [F9]")) Relaunch();
             GUILayout.EndHorizontal();
 
             GUILayout.Label($"<color=#aaaaaa>Test survivor: {(string.IsNullOrWhiteSpace(_survivor.Value) ? "last used" : _survivor.Value)} · Mode: {_mode.Value} · F6 = hot reload (scripts\\)</color>", _label);
-            GUI.DragWindow();
         }
 
         static void Skill(StringBuilder sb, string key, GenericSkill s)
