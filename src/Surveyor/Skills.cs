@@ -3,6 +3,7 @@ using EntityStates;
 using RoR2;
 using RoR2.Orbs;
 using RoR2.Projectile;
+using RoR2.Skills;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -478,50 +479,39 @@ namespace Surveyor
         public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.PrioritySkill; }
     }
 
-    // ================================================================ R: Acoustic Shockwave
+    // ================================================================ R: Tactical Weapon Switch (Rotary Minigun <-> Piercing Rail Lance)
 
-    public class SvrPulseState : BaseSkillState
+    public class SvrSwitchWeaponState : BaseSkillState
     {
         public override void OnEnter()
         {
             base.OnEnter();
-            PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
-            Util.PlaySound("Play_commando_R", gameObject);
-            if (!isAuthority) return;
-
-            float radius = SvrPlugin.PulseRadius.Value;
-            Vector3 at = characterBody.corePosition;
-            new BlastAttack
+            if (isAuthority && skillLocator)
             {
-                attacker = gameObject,
-                inflictor = gameObject,
-                baseDamage = damageStat * SvrPlugin.PulseDamage.Value,
-                baseForce = SvrPlugin.PulseForce.Value,
-                position = at,
-                radius = radius,
-                falloffModel = BlastAttack.FalloffModel.None,
-                crit = RollCrit(),
-                procCoefficient = 1f,
-                teamIndex = TeamComponent.GetObjectTeam(gameObject)
-            }.Fire();
+                SkillDef cur = skillLocator.primary ? skillLocator.primary.skillDef : null;
+                bool isLance = cur != null && cur.skillNameToken != null && cur.skillNameToken.Contains("LANCE");
+                SkillDef nextDef = isLance ? SvrPlugin.MinigunSkillDef : SvrPlugin.LanceSkillDef;
 
-            try
-            {
-                GameObject fx = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/OmniEffect/OmniExplosionVFX");
-                if (fx) EffectManager.SpawnEffect(fx, new EffectData { origin = at, scale = radius * 0.4f }, false);
+                if (skillLocator.primary != null && nextDef != null)
+                {
+                    skillLocator.primary.SetSkillOverride(gameObject, nextDef, GenericSkill.SkillOverridePriority.Upgrade);
+                }
+
+                Util.PlaySound(isLance ? "Play_commando_R" : "Play_UI_obj_casinoChest_open", gameObject);
+                string weaponName = isLance ? "ROTARY SURVEY MINIGUN" : "PIERCING RAIL LANCE";
+                string colorHex = isLance ? "#00E5FF" : "#FFA028";
+                try
+                {
+                    Chat.AddMessage("<color=" + colorHex + "><b>[WEAPON SWITCHED]</b> " + weaponName + "</color>");
+                }
+                catch { }
             }
-            catch { }
-
-            SvrLidar lidar = GetComponent<SvrLidar>();
-            if (lidar) lidar.Pulse(at, radius, characterBody);
-            SvrSpool sp = GetComponent<SvrSpool>();
-            if (sp) sp.Spool = Mathf.Max(sp.Spool, 0.5f);
         }
 
         public override void FixedUpdate()
         {
             base.FixedUpdate();
-            if (fixedAge >= 0.5f && isAuthority) outer.SetNextStateToMain();
+            if (fixedAge >= 0.15f && isAuthority) outer.SetNextStateToMain();
         }
 
         public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.PrioritySkill; }
@@ -535,11 +525,12 @@ namespace Surveyor
         {
             base.OnEnter();
             Util.PlaySound("Play_commando_R", gameObject);
-            SvrRigPart.OpenVisor(gameObject, SvrPlugin.PeekSeconds.Value);      // the visor flips up on every client
+            float duration = Mathf.Max(SvrPlugin.PeekSeconds.Value, 10.0f);
+            SvrRigPart.OpenVisor(gameObject, duration);      // the visor flips up on every client
             if (isAuthority)
             {
                 SvrLidar lidar = GetComponent<SvrLidar>();
-                if (lidar) lidar.StartPeek(SvrPlugin.PeekSeconds.Value);
+                if (lidar) lidar.StartPeek(duration);
             }
         }
 

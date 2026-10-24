@@ -79,6 +79,7 @@ namespace CharacterStatus
             }
             catch (Exception e) { Logger.LogWarning("status.json could not be read: " + e.Message); }
 
+            LoadPortraits();
             RoR2Application.onLoad += Apply;
             Language.onCurrentLanguageChanged += Apply;
             if (_entries != null)
@@ -107,32 +108,65 @@ namespace CharacterStatus
             {
                 portraitsDir = System.IO.Path.Combine(Paths.PluginPath, "CharacterStatus", "Portraits");
             }
-            if (!System.IO.Directory.Exists(portraitsDir))
-            {
-                Logger.LogWarning("Portraits folder not found at: " + portraitsDir);
-                return;
-            }
 
-            foreach (string file in System.IO.Directory.GetFiles(portraitsDir, "*.png"))
+            if (System.IO.Directory.Exists(portraitsDir))
             {
-                try
+                foreach (string file in System.IO.Directory.GetFiles(portraitsDir, "*.png"))
                 {
-                    byte[] data = System.IO.File.ReadAllBytes(file);
-                    Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                    tex.filterMode = FilterMode.Bilinear;
-                    tex.wrapMode = TextureWrapMode.Clamp;
-                    if (tex.LoadImage(data))
+                    try
                     {
-                        string name = System.IO.Path.GetFileNameWithoutExtension(file);
-                        tex.name = "texPortrait" + name;
-                        _portraits[name] = tex;
+                        byte[] data = System.IO.File.ReadAllBytes(file);
+                        Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                        tex.filterMode = FilterMode.Bilinear;
+                        tex.wrapMode = TextureWrapMode.Clamp;
+                        if (tex.LoadImage(data))
+                        {
+                            string name = System.IO.Path.GetFileNameWithoutExtension(file);
+                            tex.name = "texPortrait" + name;
+                            _portraits[name] = tex;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning("Failed loading portrait " + file + ": " + ex.Message);
                     }
                 }
-                catch (Exception ex)
+            }
+            else
+            {
+                Logger.LogWarning("Portraits folder not found at: " + portraitsDir);
+            }
+
+            // Fallback: look for Icons/portrait.png in peer plugin directories
+            try
+            {
+                if (System.IO.Directory.Exists(Paths.PluginPath))
                 {
-                    Logger.LogWarning("Failed loading portrait " + file + ": " + ex.Message);
+                    foreach (string dir in System.IO.Directory.GetDirectories(Paths.PluginPath))
+                    {
+                        string pFile = System.IO.Path.Combine(dir, "Icons", "portrait.png");
+                        if (!System.IO.File.Exists(pFile)) pFile = System.IO.Path.Combine(dir, "portrait.png");
+                        if (System.IO.File.Exists(pFile))
+                        {
+                            string modName = System.IO.Path.GetFileName(dir);
+                            if (!_portraits.ContainsKey(modName))
+                            {
+                                byte[] data = System.IO.File.ReadAllBytes(pFile);
+                                Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                                tex.filterMode = FilterMode.Bilinear;
+                                tex.wrapMode = TextureWrapMode.Clamp;
+                                if (tex.LoadImage(data))
+                                {
+                                    tex.name = "texPortrait" + modName;
+                                    _portraits[modName] = tex;
+                                }
+                            }
+                        }
+                    }
                 }
             }
+            catch { }
+
             Logger.LogInfo("Character Status: Loaded " + _portraits.Count + " custom 3D portraits.");
         }
 
@@ -245,6 +279,18 @@ namespace CharacterStatus
                     if (!sd) continue;
                     string key = (sd.bodyPrefab ? sd.bodyPrefab.name : sd.cachedName) ?? "unknown";
                     Entry e = Find(sd);
+
+                    // Apply custom 3D unified portrait if available
+                    Texture2D pTex = FindPortrait(sd, e);
+                    if (pTex != null)
+                    {
+                        CharacterBody cb = sd.bodyPrefab ? sd.bodyPrefab.GetComponent<CharacterBody>() : null;
+                        if (cb) cb.portraitIcon = pTex;
+                        if (_appliedPortraits.Add(key))
+                        {
+                            _log.LogInfo("Applied 3D portrait to survivor '" + key + "' (" + (e != null ? e.name : sd.cachedName) + ").");
+                        }
+                    }
 
                     // Apply status line to description
                     if (_entries != null)

@@ -30,12 +30,13 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.5.3";
+        public const string PluginVersion = "0.5.4";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
         public static SvrPlugin Instance;
         public static GameObject BodyPrefab, DisplayPrefab;
+        public static SkillDef MinigunSkillDef, LanceSkillDef;
 
         // ---------------------------------------------------------------- config
         public static ConfigEntry<float> SpoolSeconds, MinRate, MaxRate, BulletDamage, SpreadMin, SpreadMax, MinigunRange, MoveSlow;
@@ -128,8 +129,8 @@ namespace Surveyor
             DotLife = Config.Bind("5. LiDAR", "DotSeconds_v2", 9f, "How long a dot stays before it fades.");
             DotDivider = Config.Bind("5. LiDAR", "DotResolutionDivider_v1", 2, "The cloud is drawn at screen size divided by this (2 = every dot is a 2x2 block at 1080p; 1 = finest, slowest; 3 = chunkier).");
 
-            PeekSeconds = Config.Bind("8. Peek and Overdrive", "PeekSeconds_v1", 4.5f, "How long the visor stays off.");
-            PeekCooldown = Config.Bind("8. Peek and Overdrive", "PeekCooldown_v1", 16f, "Seconds. Starts when you use it.");
+            PeekSeconds = Config.Bind("8. Peek and Overdrive", "PeekSeconds_v1", 10.0f, "How long the visor stays off.");
+            PeekCooldown = Config.Bind("8. Peek and Overdrive", "PeekCooldown_v1", 12.0f, "Seconds. Starts when you use it.");
             OverdriveCooldown = Config.Bind("8. Peek and Overdrive", "OverdriveCooldown_v1", 14f, "Seconds.");
             SweepSeconds = Config.Bind("8. Peek and Overdrive", "SweepSeconds_v1", 3.2f, "SWEEP mode: seconds for the scan line to spin 360 degrees.");
             FocusSeconds = Config.Bind("8. Peek and Overdrive", "FocusSeconds_v1", 4f, "FOCUS mode: seconds of the long dense beam.");
@@ -211,9 +212,8 @@ namespace Surveyor
             LanguageAPI.Add(T + "UTILITY_NAME", "Hydraulic Slide");
             LanguageAPI.Add(T + "UTILITY_DESC", "<style=cIsUtility>Slide forward.</style> Keep <style=cIsUtility>holding the button</style> and she plants an <style=cIsDamage>Anchor</style> for up to " + AnchorSeconds.Value.ToString("0") +
                 "s: rooted, <style=cIsUtility>spools 3x faster</style>, no move penalty, <style=cIsDamage>+" + (AnchorDamageBonus.Value * 100f).ToString("0") + "% minigun damage</style> and a steadier aim.");
-            LanguageAPI.Add(T + "SPECIAL_NAME", "Acoustic Shockwave");
-            LanguageAPI.Add(T + "SPECIAL_DESC", "Slam a pulse out to <style=cIsUtility>" + PulseRadius.Value.ToString("0") + "m</style> for <style=cIsDamage>" + (PulseDamage.Value * 100f).ToString("0") +
-                "% damage</style>. It <style=cIsUtility>lights up all the geometry around you</style>, tags enemies on your scanner for 5s and <style=cIsUtility>throws the Shimmer Demon away</style>.");
+            LanguageAPI.Add(T + "SPECIAL_NAME", "Tactical Weapon Switch");
+            LanguageAPI.Add(T + "SPECIAL_DESC", "Instantly hot-swap your primary weapon between the rapid-fire <style=cIsDamage>Rotary Survey Minigun</style> and the heavy armor-piercing <style=cIsDamage>Piercing Rail Lance</style>.");
             LanguageAPI.Add(T + "PEEK_NAME", "Peek");
             LanguageAPI.Add(T + "PEEK_DESC", "Rip off the visor for <style=cIsUtility>" + PeekSeconds.Value.ToString("0.#") + "s</style>. The real world comes back and you see <style=cIsUtility>far beyond the scanner</style>, but it is <style=cDeath>blurry, blown out and jarring</style>, and the LiDAR fades. Replaces Hydraulic Slide.");
             LanguageAPI.Add(T + "OVERDRIVE_NAME", "LiDAR Overdrive");
@@ -336,7 +336,7 @@ namespace Surveyor
             ContentAddition.AddEntityState<SvrLanceState>(out _);
             ContentAddition.AddEntityState<SvrSlideState>(out _);
             ContentAddition.AddEntityState<SvrAnchorState>(out _);
-            ContentAddition.AddEntityState<SvrPulseState>(out _);
+            ContentAddition.AddEntityState<SvrSwitchWeaponState>(out _);
             ContentAddition.AddEntityState<SvrPeekState>(out _);
             ContentAddition.AddEntityState<SvrOverdriveState>(out _);
 
@@ -347,21 +347,21 @@ namespace Surveyor
             sl.passiveSkill.skillDescriptionToken = T + "PASSIVE_DESC";
             sl.passiveSkill.icon = SvrIcons.Get("passive", null);
 
-            SkillDef primary = MakeSkill("PRIMARY", typeof(SvrMinigunState), "Weapon", 0f, false, true, InterruptPriority.Any, "primary", false);
+            MinigunSkillDef = MakeSkill("PRIMARY", typeof(SvrMinigunState), "Weapon", 0f, false, true, InterruptPriority.Any, "primary", false);
+            LanceSkillDef = MakeSkill("LANCE", typeof(SvrLanceState), "Weapon", LanceCooldown.Value, true, true, InterruptPriority.Skill, "secondary", true);
             SkillDef secondary = MakeSkill("SECONDARY", typeof(SvrVacuumState), "Weapon", 0f, false, false, InterruptPriority.Skill, "secondary", false);
             secondary.cancelSprintingOnActivation = false;
-            SkillDef lance = MakeSkill("LANCE", typeof(SvrLanceState), "Weapon", LanceCooldown.Value, true, true, InterruptPriority.Skill, "secondary", true);
             SkillDef utility = MakeSkill("UTILITY", typeof(SvrSlideState), "Body", SlideCooldown.Value, true, false, InterruptPriority.PrioritySkill, "utility", true);
-            SkillDef special = MakeSkill("SPECIAL", typeof(SvrPulseState), "Weapon", PulseCooldown.Value, true, true, InterruptPriority.Skill, "special", true);
             utility.cancelSprintingOnActivation = false;
             SkillDef peek = MakeSkill("PEEK", typeof(SvrPeekState), "Body", PeekCooldown.Value, true, false, InterruptPriority.PrioritySkill, "peek", false);
             peek.cancelSprintingOnActivation = false;
+            SkillDef switchWeapon = MakeSkill("SPECIAL", typeof(SvrSwitchWeaponState), "Weapon", 0.5f, true, false, InterruptPriority.Skill, "special", false);
             SkillDef overdrive = MakeSkill("OVERDRIVE", typeof(SvrOverdriveState), "Weapon", OverdriveCooldown.Value, true, false, InterruptPriority.Skill, "overdrive", false);
 
-            sl.primary = Slot("SurveyorPrimary", primary);
-            sl.secondary = Slot("SurveyorSecondary", secondary, lance);
+            sl.primary = Slot("SurveyorPrimary", MinigunSkillDef, LanceSkillDef);
+            sl.secondary = Slot("SurveyorSecondary", secondary);
             sl.utility = Slot("SurveyorUtility", utility, peek);
-            sl.special = Slot("SurveyorSpecial", special, overdrive);
+            sl.special = Slot("SurveyorSpecial", switchWeapon, overdrive);
         }
 
         private static GenericSkill Slot(string family, params SkillDef[] defs)

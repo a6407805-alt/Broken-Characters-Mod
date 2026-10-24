@@ -2549,7 +2549,7 @@ namespace Surveyor
         public void StartPeek(float seconds)
         {
             _peekStart = Time.time;
-            _peekUntil = Time.time + seconds * Mathf.Max(0.5f, SvrSenses.SightMult);
+            _peekUntil = Time.time + Mathf.Max(seconds, 10.0f);
             _peekNeedBurst = true;
             // Do not jump _peekK: let LateUpdate smoothly ramp _peekK from 0 -> 1 so the dots fade out smoothly.
         }
@@ -3536,6 +3536,7 @@ namespace Surveyor
             cam.cullingMask = uiMask;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = Color.black;
+            if (_dimPpLayer && _dimPpLayer.enabled) _dimPpLayer.enabled = false;
             if (_dimSkyboxCam && _dimSkyboxCam.enabled) _dimSkyboxCam.enabled = false;
         }
 
@@ -3888,8 +3889,6 @@ namespace Surveyor
             // and smoothly fade them back from 0% -> 100% as the visor lowers.
             float dotAlpha = Mathf.SmoothStep(1f, 0f, Mathf.Clamp01(_peekK * 1.15f));
             DrawDots(cam, scale, dotAlpha);
-            DrawHologramTargets(cam, scale, dotAlpha);
-            DrawAnimatedSkeletons(cam, scale, dotAlpha);
             DrawDemon(cam, scale, dotAlpha);
             DrawPeekWash(scale);
             DrawHud(scale);

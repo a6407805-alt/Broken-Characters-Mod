@@ -123,8 +123,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.5.3",
-      "note": "Active WIP (v0.5.3): Full UI visibility restored (cullingMask UI, darkCurtain removed), blue ping circles removed, 3D chest/item/enemy wireframe holograms rendered cleanly"
+      "version": "0.5.4",
+      "note": "Active WIP (v0.5.4): Wireframes removed (lag eliminated), weapon swap on R (Minigun <-> Lance), 10s Peek visor visibility, horizon flat plane eliminated, authentic 3D survivor portraits loaded"
     }
   ]
 }
