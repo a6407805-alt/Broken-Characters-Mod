@@ -246,6 +246,14 @@ namespace BrokenCharactersLauncher
             {
                 try { return await GetLatestReleaseOnceAsync(); }
                 catch (ReleaseMissingException) when (attempt < 4) { await Task.Delay(TimeSpan.FromSeconds(5)); }
+                catch (HttpRequestException)
+                {
+                    // GitHub's API allows only 60 checks an hour per home internet; lots of restarts use that up.
+                    // The release also carries release-info.json, a plain download with no such limit: use it.
+                    ReleaseInfo? viaFile = await GetLatestReleaseFromInfoFileAsync();
+                    if (viaFile != null) return viaFile;
+                    throw;
+                }
             }
         }
 
@@ -254,11 +262,40 @@ namespace BrokenCharactersLauncher
             public ReleaseMissingException(string message) : base(message) { }
         }
 
+        /// <summary>The version + sizes from the release's release-info.json (written by the build server). Null if missing.</summary>
+        private static async Task<ReleaseInfo?> GetLatestReleaseFromInfoFileAsync()
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                string text = await Http.GetStringAsync($"https://github.com/{Repo}/releases/latest/download/release-info.json?t={DateTime.UtcNow.Ticks}", cts.Token);
+                using JsonDocument json = JsonDocument.Parse(text);
+                JsonElement r = json.RootElement;
+                string version = r.GetProperty("version").GetString() ?? "";
+                if (version.Length == 0) return null;
+                DateTimeOffset published = r.TryGetProperty("published", out JsonElement p) && p.TryGetDateTimeOffset(out DateTimeOffset d) ? d : DateTimeOffset.MinValue;
+                return new ReleaseInfo(version, $"https://github.com/{Repo}/releases/latest/download/{AssetName}",
+                    r.GetProperty("zipSize").GetInt64(), published, r.TryGetProperty("exeSize", out JsonElement x) ? x.GetInt64() : 0);
+            }
+            catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException || ex is JsonException || ex is KeyNotFoundException || ex is InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>A saved creator key makes API calls count against that person's own 5,000-an-hour limit.</summary>
+        internal static void AddKeyIfAny(HttpRequestMessage request)
+        {
+            string? key = Publisher.ReadSavedKey();
+            if (!string.IsNullOrEmpty(key)) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+        }
+
         private static async Task<ReleaseInfo> GetLatestReleaseOnceAsync()
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Repo}/releases/latest");
             request.Headers.Accept.ParseAdd("application/vnd.github+json");
+            AddKeyIfAny(request);
 
             using HttpResponseMessage response = await Http.SendAsync(request, cts.Token);
             if (response.StatusCode == HttpStatusCode.Forbidden || (int)response.StatusCode == 429)
@@ -312,6 +349,7 @@ namespace BrokenCharactersLauncher
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
                 using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Repo}/commits?per_page=12");
                 request.Headers.Accept.ParseAdd("application/vnd.github+json");
+                AddKeyIfAny(request);
                 using HttpResponseMessage response = await Http.SendAsync(request, cts.Token);
                 response.EnsureSuccessStatusCode();
 

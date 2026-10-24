@@ -116,6 +116,7 @@ namespace BrokenCharactersLauncher
                 {
                     using var api = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/repos/" + Publisher.Repo + "/contents/" + RepoPath + "?ref=main");
                     api.Headers.TryAddWithoutValidation("Accept", "application/vnd.github.raw");
+                    MainWindow.AddKeyIfAny(api);
                     using HttpResponseMessage ar = await Http.SendAsync(api, cts.Token);
                     if (ar.StatusCode == System.Net.HttpStatusCode.NotFound) return new JukeboxFile();
                     if (ar.IsSuccessStatusCode) text = await ar.Content.ReadAsStringAsync(cts.Token);
