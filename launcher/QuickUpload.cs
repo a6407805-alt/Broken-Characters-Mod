@@ -75,6 +75,8 @@ namespace BrokenCharactersLauncher
                 else
                 {
                     if (!IsValidName(modName)) throw new InvalidOperationException("Type the mod name first (letters, numbers, - _ . only).");
+                    if (IsReservedName(modName))
+                        throw new InvalidOperationException("\"" + modName + "\" is the game's mod loader, not a mod. Type the mod's real name (like SpecialForces), or pick the BepInEx\\plugins folder's zip so each mod is found by name.");
                     string dest = Path.Combine(root, "mods", modName);
                     Directory.CreateDirectory(dest);
                     if (source != null) CopyTree(source, dest);
@@ -92,7 +94,16 @@ namespace BrokenCharactersLauncher
 
         /// <summary>A folder holding several mods (like BepInEx\plugins): more than one subfolder with a dll in it.</summary>
         private static bool IsManyMods(string dir) =>
+            Path.GetFileName(dir.TrimEnd('\\', '/')).Equals("plugins", StringComparison.OrdinalIgnoreCase) ||
             Directory.GetDirectories(dir).Count(d => Directory.EnumerateFiles(d, "*.dll", SearchOption.AllDirectories).Any()) > 1;
+
+        /// <summary>Folder names that are the game's mod loader or shared libraries, never one of our mods.</summary>
+        private static readonly string[] NotModNames = { "BepInEx", "plugins", "patchers", "config", "core", "monomod", "cache",
+            "R2API", "HookGenPatcher", "MMHOOK", "ScriptEngine", "Risk of Rain 2", "Risk_of_Rain_2_Data" };
+
+        public static bool IsReservedName(string name) =>
+            NotModNames.Any(n => n.Equals(name, StringComparison.OrdinalIgnoreCase)) ||
+            name.StartsWith("RiskofThunder-", StringComparison.OrdinalIgnoreCase) || name.StartsWith("bbepis-", StringComparison.OrdinalIgnoreCase);
 
         private static void StageMany(string dir, string root, IReadOnlyCollection<string> knownMods, Result result)
         {
