@@ -14,6 +14,8 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - Creator window (`launcher/Publisher.cs`, `PublishWindow.xaml*`): lets a creator upload only their own mod through the
   GitHub API; who owns what is `launcher/creators.json`. Don't commit dlls into `mods/<Mod>/` when `src/<Mod>/` exists.
   Before changing a mod you don't own, check `creators.json` and `git log -- src/<Mod>`.
+  Quick upload (`QuickUpload.cs`, `PublishWindow.Quick.cs`): pick/drag a friend's .zip/.dll, it's staged as
+  `%TEMP%\BrokenCharacters-QuickUpload\<id>\mods\<Mod>\` and the normal scan/publish runs on that.
 
 ## Build & release (nothing builds locally: no dotnet in the sandbox)
 - Every push to main: build Duelist + every `src/*/*.csproj` → package `Broken-Characters-Mod.zip` → Windows installer

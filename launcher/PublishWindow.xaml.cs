@@ -128,6 +128,7 @@ namespace BrokenCharactersLauncher
             if (_folder.Length > 0 && Directory.Exists(_folder)) dialog.InitialDirectory = _folder;
             if (dialog.ShowDialog(this) != true) return;
             _folder = dialog.FolderName;
+            _quickMode = false;
             FolderText.Text = _folder;
             Publisher.SaveFolder(_folder);
             await RefreshAsync();
@@ -150,7 +151,9 @@ namespace BrokenCharactersLauncher
                 ModList.ItemsSource = _plans;
                 if (_plans.Count == 0)
                 {
-                    EmptyText.Text = "No mods of yours were found in this folder, or nothing has changed. If this is the wrong folder, press \"Choose folder...\".";
+                    EmptyText.Text = _quickMode
+                        ? "Nothing to upload. Either those files are already in the pack, it's someone else's mod, or the mod is built from source (its dll comes from the build server, so send the source instead)."
+                        : "No mods of yours were found in this folder, or nothing has changed. If this is the wrong folder, press \"Choose folder...\".";
                     EmptyText.Visibility = Visibility.Visible;
                 }
                 else EmptyText.Visibility = Visibility.Collapsed;
@@ -184,6 +187,8 @@ namespace BrokenCharactersLauncher
             ChooseFolderButton.IsEnabled = !busy;
             RefreshButton.IsEnabled = !busy;
             ChangeKeyButton.IsEnabled = !busy;
+            PickFilesButton.IsEnabled = !busy;
+            QuickCheckButton.IsEnabled = !busy;
             ModList.IsEnabled = !busy;
             NoteBox.IsEnabled = !busy;
             UpdatePublishButton();

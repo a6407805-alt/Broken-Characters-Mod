@@ -243,6 +243,26 @@ namespace BrokenCharactersLauncher
             return owned;
         }
 
+        /// <summary>The existing mods this person may update (admins: every mod in mods/), for the quick-upload name box.</summary>
+        public async Task<List<string>> PublishableModsAsync(CancellationToken ct = default)
+        {
+            (string head, string treeSha) = await GetHeadAsync(ct);
+            var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (IsAdmin)
+            {
+                JsonNode? tree = await CallAsync(HttpMethod.Get, "/git/trees/" + treeSha + "?recursive=1", null, ct);
+                foreach (JsonNode? item in tree?["tree"]?.AsArray() ?? new JsonArray())
+                {
+                    string[] parts = (item?["path"]?.GetValue<string>() ?? "").Split('/');
+                    if (item?["type"]?.GetValue<string>() == "tree" && parts.Length == 2 && parts[0] == "mods") names.Add(parts[1]);
+                }
+            }
+            else
+                foreach (string mod in OwnedMods(await ReadCreatorsAsync(head, ct), Login))
+                    if (mod != "*") names.Add(mod);
+            return names.ToList();
+        }
+
         // ------------------------------------------------------------------ scanning
 
         private static readonly string[] SkipFolders = { "bin", "obj", ".vs", ".git", ".idea", "node_modules" };
