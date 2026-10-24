@@ -11,6 +11,7 @@ sound events only (no copyrighted files).
 - The screen is black (config `DarkWorld`). An always-on scanner paints the world as a decaying cloud of dots:
   **red = near, yellow = mid, green = far**, walls a bit brighter than floor. Enemies are bright red.
 - Minigun hits, the Lance (a streak of dots along the beam) and the Shockwave (a 360 degree burst, then enemies stay tagged for 5 s) paint it fast.
+- v0.2: the cloud is **packed tight** (up to 40000 dots, drawn as a pixel buffer, rays spiral over a wide cone so it fills in evenly) and dots last 9 s. Config `DotResolutionDivider_v1` = chunkiness (1 finest, slowest).
 - Bottom-left: four status boxes (SEE, HEAR, TOUCH, BAL). Middle of the screen: a SPOOL bar while the barrels turn.
 
 ## Skills
@@ -20,10 +21,13 @@ sound events only (no copyrighted files).
 | M2 | **Surveyor Lance** | 0.5 s charge, then a piercing 600% shot with big knockback. 6 s cooldown, no holding to spam. Recoils you back unless anchored. |
 | Shift | **Hydraulic Slide** | Slide forward (0.45 s). **Keep holding** to plant an **Anchor** for up to 3 s: rooted, spools 3x faster, no spool slowdown, +40% minigun damage (+25% Lance), steadier aim. 7 s cooldown after it ends. |
 | R | **Acoustic Shockwave** | 500% damage blast in 30 m, 20 s cooldown. Lights up all geometry around you and throws the Shimmer Demon away. |
+| Shift (alt) | **Peek** | Rip the visor off for 4.5 s. The real world comes back and you see far beyond the scanner, but it is **blurry, blown out and jarring** (depth-of-field blur, bloom, colour fringing, lens bulge, white wash) and the dots fade. 16 s cooldown. Replaces Hydraulic Slide in the loadout. |
+| R (alt) | **LiDAR Overdrive** | Pick a mode with **V** (config `ModeKey`), then use the skill. **SWEEP**: a tall scan line spins 360 degrees (3.2 s). **BURST**: the whole sphere at once. **FOCUS**: a very dense beam out to 170 m (4 s). **ECHO**: every enemy within 85 m lit through walls for 8 s, and the Shimmer Demon is shown through walls too. 14 s cooldown. Replaces Acoustic Shockwave in the loadout. |
 
 Stats: 150 HP (+45 per level), 20 armor, 6.8 move speed, 12 damage.
 
 ## The Shimmer Demon
+- v0.2: it is now a filled, **animated** body (rigged: walk, prowl hunch, galloping hunt with arms thrown forward, flailing stagger, afterimage trail) instead of a still outline.
 A horned humanoid drawn as a shifting outline in the point cloud (red/blue edge split, glitch bands). Where it walks, nearby dots
 dissolve or scatter as static (the "void pocket"). It cannot be damaged by you: your shots only push it.
 - **Spawns** 80 s into a stage, 45-60 m away. **Prowl** (circles at about 35 m) -> **Stalk** (closes in, weaving) -> **Hunt**
@@ -44,4 +48,4 @@ or being seen by other players. It is a stalker you survive, not one you kill.
 
 ## Config
 `BepInEx\config\com.brokencharacters.surveyor.cfg` (F8 reloads in game). Sections: Minigun, Lance, Slide and Anchor, Shockwave, LiDAR,
-Shimmer Demon, Lost senses. Set `DarkWorld = false` to see the normal game with dots on top, and `Enabled = false` under Shimmer Demon to turn the stalker off.
+Shimmer Demon, Lost senses, Peek and Overdrive. Set `DarkWorld = false` to see the normal game with dots on top, and `Enabled = false` under Shimmer Demon to turn the stalker off.

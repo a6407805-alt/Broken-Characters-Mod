@@ -311,4 +311,52 @@ namespace Surveyor
 
         public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.PrioritySkill; }
     }
+
+    // ================================================================ Utility alt: Peek (visor off)
+
+    public class SvrPeekState : BaseSkillState
+    {
+        public override void OnEnter()
+        {
+            base.OnEnter();
+            Util.PlaySound("Play_commando_R", gameObject);
+            if (isAuthority)
+            {
+                SvrLidar lidar = GetComponent<SvrLidar>();
+                if (lidar) lidar.StartPeek(SvrPlugin.PeekSeconds.Value);
+            }
+        }
+
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+            if (fixedAge >= 0.35f && isAuthority) outer.SetNextStateToMain();
+        }
+
+        public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.Skill; }
+    }
+
+    // ================================================================ Special alt: LiDAR Overdrive (mode chosen with the mode key)
+
+    public class SvrOverdriveState : BaseSkillState
+    {
+        public override void OnEnter()
+        {
+            base.OnEnter();
+            Util.PlaySound("Play_drone_repair", gameObject);
+            if (isAuthority)
+            {
+                SvrLidar lidar = GetComponent<SvrLidar>();
+                if (lidar) lidar.Overdrive(SvrLidar.OdMode);
+            }
+        }
+
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+            if (fixedAge >= 0.3f && isAuthority) outer.SetNextStateToMain();
+        }
+
+        public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.Skill; }
+    }
 }

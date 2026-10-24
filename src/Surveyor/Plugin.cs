@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.2.0";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -43,8 +43,10 @@ namespace Surveyor
         public static ConfigEntry<float> SlideCooldown, SlideSeconds, SlideSpeed, AnchorSeconds, AnchorDamageBonus;
         public static ConfigEntry<float> PulseDamage, PulseRadius, PulseCooldown, PulseForce;
         public static ConfigEntry<bool> DarkWorld;
-        public static ConfigEntry<int> MaxDots, RaysPerFrame;
-        public static ConfigEntry<float> ScanRange, DotLife, DotSize;
+        public static ConfigEntry<int> MaxDots, RaysPerFrame, DotDivider;
+        public static ConfigEntry<float> ScanRange, DotLife;
+        public static ConfigEntry<float> PeekSeconds, PeekCooldown, OverdriveCooldown, SweepSeconds, FocusSeconds, EchoSeconds;
+        public static ConfigEntry<string> ModeKey;
         public static ConfigEntry<bool> DemonEnabled;
         public static ConfigEntry<float> DemonFirstSpawn, DemonProwlSpeed, DemonHuntSpeed, DemonRespawn, DemonContactRange;
         public static ConfigEntry<float> MinigunPushSpool, LanceStagger, PulseStagger, MinigunStagger;
@@ -109,11 +111,19 @@ namespace Surveyor
             PulseForce = Config.Bind("4. Acoustic Shockwave", "Force", 2500f, "Knockback on enemies.");
 
             DarkWorld = Config.Bind("5. LiDAR", "DarkWorld", true, "The world is black and you only see the LiDAR dots. Turn off to see the normal game with the dots on top (handy for testing).");
-            MaxDots = Config.Bind("5. LiDAR", "MaxDots", 3200, "Most dots on screen at once.");
-            RaysPerFrame = Config.Bind("5. LiDAR", "ScanRaysPerFrame", 70, "Rays cast per frame by the always-on scanner.");
+            MaxDots = Config.Bind("5. LiDAR", "MaxDots_v2", 40000, "Most dots kept at once (the point cloud is packed; lower this on a slow PC).");
+            RaysPerFrame = Config.Bind("5. LiDAR", "ScanRaysPerFrame_v2", 170, "Rays cast per frame by the always-on scanner (they spiral over a wide cone so the cloud fills in evenly).");
             ScanRange = Config.Bind("5. LiDAR", "ScanRange", 75f, "Scanner range in metres.");
-            DotLife = Config.Bind("5. LiDAR", "DotSeconds", 4.5f, "How long a dot stays before it fades.");
-            DotSize = Config.Bind("5. LiDAR", "DotSize", 3f, "Dot size in pixels at 1080p.");
+            DotLife = Config.Bind("5. LiDAR", "DotSeconds_v2", 9f, "How long a dot stays before it fades.");
+            DotDivider = Config.Bind("5. LiDAR", "DotResolutionDivider_v1", 2, "The cloud is drawn at screen size divided by this (2 = every dot is a 2x2 block at 1080p; 1 = finest, slowest; 3 = chunkier).");
+
+            PeekSeconds = Config.Bind("8. Peek and Overdrive", "PeekSeconds_v1", 4.5f, "How long the visor stays off.");
+            PeekCooldown = Config.Bind("8. Peek and Overdrive", "PeekCooldown_v1", 16f, "Seconds. Starts when you use it.");
+            OverdriveCooldown = Config.Bind("8. Peek and Overdrive", "OverdriveCooldown_v1", 14f, "Seconds.");
+            SweepSeconds = Config.Bind("8. Peek and Overdrive", "SweepSeconds_v1", 3.2f, "SWEEP mode: seconds for the scan line to spin 360 degrees.");
+            FocusSeconds = Config.Bind("8. Peek and Overdrive", "FocusSeconds_v1", 4f, "FOCUS mode: seconds of the long dense beam.");
+            EchoSeconds = Config.Bind("8. Peek and Overdrive", "EchoSeconds_v1", 8f, "ECHO mode: seconds enemies (and the Shimmer Demon) are lit through walls.");
+            ModeKey = Config.Bind("8. Peek and Overdrive", "ModeKey", "V", "Key that cycles the Overdrive mode: SWEEP, BURST, FOCUS, ECHO.");
 
             DemonEnabled = Config.Bind("6. Shimmer Demon", "Enabled", true, "The Shimmer Demon stalks the Surveyor (only she can see it).");
             DemonFirstSpawn = Config.Bind("6. Shimmer Demon", "FirstSpawnSeconds", 80f, "Seconds into a stage before it appears.");
@@ -154,7 +164,7 @@ namespace Surveyor
             LanguageAPI.Add(T + "SUBTITLE", "Blind Engineer");
             LanguageAPI.Add(T + "DESCRIPTION",
                 "The Surveyor is a blind, heavily armored engineer stranded on Petrichor V. The world is black. She sees only what her scanner paints.<color=#CCD3E0>\r\n\r\n" +
-                "< ! > Your LiDAR draws the world in dots: red is close, yellow is mid, green is far. Shooting and shockwaves paint it fast.\r\n\r\n" +
+                "< ! > Your LiDAR draws the world in dots: red is close, yellow is mid, green is far. Shooting and shockwaves paint it fast. Peek takes the visor off for a blurry, blown-out look at the real world; LiDAR Overdrive has four scan modes.\r\n\r\n" +
                 "< ! > The minigun needs to spool. Hold the trigger and it rises to full fire rate, but you move slower while it is spun up. Anchor to spool faster.\r\n\r\n" +
                 "< ! > Something shimmering follows you. Only you can see it, and you cannot hurt it, but a fully spooled minigun, the Lance and the Shockwave push it back.\r\n\r\n" +
                 "< ! > If it touches you it eats a sense: Hearing, Sight, Touch or Balance, until the stage ends.</color>");
@@ -178,6 +188,12 @@ namespace Surveyor
             LanguageAPI.Add(T + "SPECIAL_NAME", "Acoustic Shockwave");
             LanguageAPI.Add(T + "SPECIAL_DESC", "Slam a pulse out to <style=cIsUtility>" + PulseRadius.Value.ToString("0") + "m</style> for <style=cIsDamage>" + (PulseDamage.Value * 100f).ToString("0") +
                 "% damage</style>. It <style=cIsUtility>lights up all the geometry around you</style>, tags enemies on your scanner for 5s and <style=cIsUtility>throws the Shimmer Demon away</style>.");
+            LanguageAPI.Add(T + "PEEK_NAME", "Peek");
+            LanguageAPI.Add(T + "PEEK_DESC", "Rip off the visor for <style=cIsUtility>" + PeekSeconds.Value.ToString("0.#") + "s</style>. The real world comes back and you see <style=cIsUtility>far beyond the scanner</style>, but it is <style=cDeath>blurry, blown out and jarring</style>, and the LiDAR fades. Replaces Hydraulic Slide.");
+            LanguageAPI.Add(T + "OVERDRIVE_NAME", "LiDAR Overdrive");
+            LanguageAPI.Add(T + "OVERDRIVE_DESC", "Push the scanner past its limits. Press <style=cIsUtility>" + ModeKey.Value.ToUpperInvariant() + "</style> to change the mode, then use the skill: " +
+                "<style=cIsUtility>SWEEP</style> spins a tall scan line around you, <style=cIsUtility>BURST</style> floods the whole sphere at once, <style=cIsUtility>FOCUS</style> fires a very dense long beam, " +
+                "<style=cIsDamage>ECHO</style> lights up every enemy (and the Shimmer Demon) through walls. Replaces Acoustic Shockwave.");
         }
 
         // ---------------------------------------------------------------- body
@@ -291,6 +307,8 @@ namespace Surveyor
             ContentAddition.AddEntityState<SvrSlideState>(out _);
             ContentAddition.AddEntityState<SvrAnchorState>(out _);
             ContentAddition.AddEntityState<SvrPulseState>(out _);
+            ContentAddition.AddEntityState<SvrPeekState>(out _);
+            ContentAddition.AddEntityState<SvrOverdriveState>(out _);
 
             SkillLocator sl = BodyPrefab.GetComponent<SkillLocator>();
             foreach (GenericSkill old in BodyPrefab.GetComponentsInChildren<GenericSkill>(true)) Object.DestroyImmediate(old);
@@ -304,19 +322,24 @@ namespace Surveyor
             SkillDef utility = MakeSkill("UTILITY", typeof(SvrSlideState), "Body", SlideCooldown.Value, true, false, InterruptPriority.PrioritySkill, "utility", true);
             SkillDef special = MakeSkill("SPECIAL", typeof(SvrPulseState), "Weapon", PulseCooldown.Value, true, true, InterruptPriority.Skill, "special", true);
             utility.cancelSprintingOnActivation = false;
+            SkillDef peek = MakeSkill("PEEK", typeof(SvrPeekState), "Body", PeekCooldown.Value, true, false, InterruptPriority.PrioritySkill, "peek", false);
+            peek.cancelSprintingOnActivation = false;
+            SkillDef overdrive = MakeSkill("OVERDRIVE", typeof(SvrOverdriveState), "Weapon", OverdriveCooldown.Value, true, false, InterruptPriority.Skill, "overdrive", false);
 
             sl.primary = Slot("SurveyorPrimary", primary);
             sl.secondary = Slot("SurveyorSecondary", secondary);
-            sl.utility = Slot("SurveyorUtility", utility);
-            sl.special = Slot("SurveyorSpecial", special);
+            sl.utility = Slot("SurveyorUtility", utility, peek);
+            sl.special = Slot("SurveyorSpecial", special, overdrive);
         }
 
-        private static GenericSkill Slot(string family, SkillDef def)
+        private static GenericSkill Slot(string family, params SkillDef[] defs)
         {
             GenericSkill slot = BodyPrefab.AddComponent<GenericSkill>();
             SkillFamily fam = ScriptableObject.CreateInstance<SkillFamily>();
             ((ScriptableObject)fam).name = family;
-            fam.variants = new[] { new SkillFamily.Variant { skillDef = def, unlockableDef = null, viewableNode = new ViewablesCatalog.Node(def.skillNameToken, false, null) } };
+            fam.variants = new SkillFamily.Variant[defs.Length];
+            for (int i = 0; i < defs.Length; i++)
+                fam.variants[i] = new SkillFamily.Variant { skillDef = defs[i], unlockableDef = null, viewableNode = new ViewablesCatalog.Node(defs[i].skillNameToken, false, null) };
             ContentAddition.AddSkillFamily(fam);
             FieldInfo f = typeof(GenericSkill).GetField("_skillFamily", BindingFlags.Instance | BindingFlags.NonPublic);
             if (f != null) f.SetValue(slot, fam);
