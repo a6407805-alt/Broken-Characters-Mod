@@ -730,7 +730,7 @@ namespace BrokenCharactersLauncher
             if (_guide == null) return;
             _guide.Height = ActualHeight > 0 ? ActualHeight : Height;
             _guide.Top = Top;
-            double left = Left - _guide.Width + 12; // tuck slightly under the launcher's rounded edge
+            double left = Left - _guide.Width - 16; // a small gap between the guide and the launcher
             _guide.Left = Math.Max(SystemParameters.VirtualScreenLeft, left);
         }
 
@@ -759,6 +759,19 @@ namespace BrokenCharactersLauncher
         {
             string key = ExtrasKeyBox.Password.Trim();
             if (key.Length == 0) return;
+            if (!KeyVault.LooksLikeKey(key))
+            {
+                // A password: unlock the extras key from the repo (KeyVault.cs).
+                SaveKeyButton.IsEnabled = false;
+                (string? unlocked, string? error) = await KeyVault.UnlockFromRepoAsync(KeyVault.ExtrasPath, key);
+                SaveKeyButton.IsEnabled = true;
+                if (unlocked == null)
+                {
+                    MessageBox.Show(this, error, "Extras", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                key = unlocked;
+            }
             try
             {
                 Directory.CreateDirectory(ExtrasDir);

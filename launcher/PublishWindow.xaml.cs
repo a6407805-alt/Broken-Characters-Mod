@@ -63,6 +63,16 @@ namespace BrokenCharactersLauncher
             SaveKeyButton.IsEnabled = false;
             try
             {
+                if (!KeyVault.LooksLikeKey(key))
+                {
+                    // A password: unlock this creator's key from the repo (KeyVault.cs).
+                    string name = NameBox.Text.Trim();
+                    if (name.Length == 0) { ShowKeyPanel("That's not a key. If it's your password, type your GitHub name above it too."); return; }
+                    KeyError.Visibility = Visibility.Collapsed;
+                    (string? unlocked, string? error) = await KeyVault.UnlockFromRepoAsync(KeyVault.CreatorPath(name), key, _cts.Token);
+                    if (unlocked == null) { ShowKeyPanel(error); return; }
+                    key = unlocked;
+                }
                 Publisher.SaveKey(key);
                 KeyBox.Clear();
                 await SignInAsync(key);
@@ -107,6 +117,12 @@ namespace BrokenCharactersLauncher
             }
             else StatusLine.Text = "Press \"Choose folder...\" and pick the folder your mod is in.";
             UpdatePublishButton();
+        }
+
+        private void Passwords_Click(object sender, RoutedEventArgs e)
+        {
+            if (_pub == null || _busy) return;
+            new KeyPasswordWindow(_pub) { Owner = this }.ShowDialog();
         }
 
         private void ChangeKey_Click(object sender, RoutedEventArgs e)
@@ -187,6 +203,7 @@ namespace BrokenCharactersLauncher
             ChooseFolderButton.IsEnabled = !busy;
             RefreshButton.IsEnabled = !busy;
             ChangeKeyButton.IsEnabled = !busy;
+            PasswordsButton.IsEnabled = !busy;
             PickFilesButton.IsEnabled = !busy;
             QuickCheckButton.IsEnabled = !busy;
             ModList.IsEnabled = !busy;

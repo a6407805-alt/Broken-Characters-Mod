@@ -57,6 +57,8 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - Push once per finished change, then one `gh run watch`; don't poll in loops.
 - Keep replies short; the owner is a visual learner and likes concrete steps.
 - Never print or commit the extras key (a `github_pat_...`).
+  Password-locked copies are fine to commit: `launcher/keys/extras.json`, `launcher/keys/creators/<login>.json`
+  (AES-GCM + PBKDF2, `launcher/KeyVault.cs`); key boxes accept a password instead of a key.
 
 ## Jukebox (src/Jukebox + launcher JUKEBOX window)
 - Songs are Suno links in `launcher/jukebox.json` on main (no audio in the repo). The launcher edits it with the
