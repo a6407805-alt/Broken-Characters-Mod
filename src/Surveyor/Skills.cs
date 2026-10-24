@@ -320,6 +320,7 @@ namespace Surveyor
         {
             base.OnEnter();
             Util.PlaySound("Play_commando_R", gameObject);
+            SvrRigPart.OpenVisor(gameObject, SvrPlugin.PeekSeconds.Value);      // the visor flips up on every client
             if (isAuthority)
             {
                 SvrLidar lidar = GetComponent<SvrLidar>();

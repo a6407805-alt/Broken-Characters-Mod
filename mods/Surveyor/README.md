@@ -7,6 +7,13 @@ Everything about the LiDAR and the Shimmer Demon happens on the Surveyor's own c
 is nothing to sync, so it works in multiplayer without anyone else needing to do anything. Original art and vanilla
 sound events only (no copyrighted files).
 
+## The suit (3D model, v0.3)
+An original heavy-armour space suit on the Commando skeleton (so every Commando animation works): olive plates over a white pressure suit, a
+life-support backpack with a **spinning LiDAR dome** (faster in Overdrive), a rotary minigun whose **barrels spin with the spool**, and a rounded helmet with a
+**flip-up visor**. The visor snaps up (springy hinge) whenever you use **Peek**, on everyone's screen, and shows a pale face with milky blind eyes; on the
+character-select screen it flips up and down by itself. Config `UseCustomModel_v1`, `ModelScale_v1`. Source: `src/Surveyor/Model/build_surveyor.py`
+(pure Python, no Blender; run it and `gzip -9` the result into `mods/Surveyor/surveyor_model.bin.gz`).
+
 ## LiDAR Vision (passive)
 - The screen is black (config `DarkWorld`). An always-on scanner paints the world as a decaying cloud of dots:
   **red = near, yellow = mid, green = far**, walls a bit brighter than floor. Enemies are bright red.
