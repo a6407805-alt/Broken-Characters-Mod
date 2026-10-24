@@ -24,6 +24,8 @@ namespace BrokenCharactersLauncher
         public JukeboxSong Song { get; init; } = new JukeboxSong();
         public bool InGroup { get; init; }
         public bool CanRemove { get; init; }
+        public bool CanShare { get; init; } // an "ONLY ME" Suno song + this PC has a creator key
+        public Visibility ShareVisibility => CanShare && !InGroup && !Loose ? Visibility.Visible : Visibility.Collapsed;
         public string Title => Song.Title;
         public string Artist => Song.Artist;
         public bool Loose => Song.FilePath != null;
@@ -85,7 +87,7 @@ namespace BrokenCharactersLauncher
             foreach (JukeboxSong s in _group.Songs)
                 _rows.Add(new JukeboxRow { Song = s, InGroup = true, CanRemove = canShare });
             foreach (JukeboxSong s in local.Songs.Where(l => !_group.Songs.Any(g => g.Id == l.Id)))
-                _rows.Add(new JukeboxRow { Song = s, InGroup = false, CanRemove = true });
+                _rows.Add(new JukeboxRow { Song = s, InGroup = false, CanRemove = true, CanShare = canShare });
             foreach (JukeboxSong s in JukeboxLibrary.LooseFiles(_rows.Select(r => r.Song).ToList()))
                 _rows.Add(new JukeboxRow { Song = s, InGroup = false, CanRemove = true });
             EmptyText.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -159,6 +161,37 @@ namespace BrokenCharactersLauncher
             catch (GitHubException ex) { Status(ex.Message); }
             catch (System.Net.Http.HttpRequestException ex) { Status("No connection to GitHub: " + ex.Message); }
             catch (IOException ex) { Rebuild(); Status(ex.Message); }
+            catch (OperationCanceledException) { }
+            finally { SetBusy(false); }
+        }
+
+        /// <summary>"Share": moves one of my ONLY ME songs into the group list, so every friend's launcher downloads it.</summary>
+        private async void Share_Click(object sender, RoutedEventArgs e)
+        {
+            if (_busy || string.IsNullOrEmpty(_creatorKey) || (sender as FrameworkElement)?.DataContext is not JukeboxRow row) return;
+            SetBusy(true);
+            try
+            {
+                Status("Sharing \"" + row.Title + "\" with the group...");
+                var pub = new Publisher(_creatorKey!);
+                JukeboxSong song = row.Song;
+                try { song.AddedBy = await pub.SignInAsync(_cts.Token); } catch (GitHubException) { }
+                await pub.UpdateTextFileAsync(JukeboxLibrary.RepoPath, current =>
+                {
+                    JukeboxFile f = JukeboxLibrary.Parse(current);
+                    if (!f.Songs.Any(s => s.Id == song.Id)) f.Songs.Add(song);
+                    _group = f;
+                    return JukeboxLibrary.Serialize(f);
+                }, "Jukebox: add " + song.Title, _cts.Token);
+                JukeboxFile local = JukeboxLibrary.LoadLocal();
+                local.Songs.RemoveAll(s => s.Id == song.Id);
+                JukeboxLibrary.SaveLocal(local);
+                Rebuild();
+                Status("Shared \"" + row.Title + "\". Friends get it next time they open the launcher.");
+            }
+            catch (GitHubException ex) { Status(ex.Message); }
+            catch (System.Net.Http.HttpRequestException ex) { Status("No connection to GitHub: " + ex.Message); }
+            catch (IOException ex) { Status(ex.Message); }
             catch (OperationCanceledException) { }
             finally { SetBusy(false); }
         }

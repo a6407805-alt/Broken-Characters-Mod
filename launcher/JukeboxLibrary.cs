@@ -59,9 +59,12 @@ namespace BrokenCharactersLauncher
         private static HttpClient CreateHttp()
         {
             var c = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-            c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("BrokenCharactersLauncher", "1.0"));
+            // Suno's site and CDN can refuse non-browser clients, so ask like a browser does.
+            c.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", BrowserAgent);
             return c;
         }
+
+        private const string BrowserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
 
         public static string SongPath(string id) => Path.Combine(Folder, id + ".mp3");
         public static bool IsDownloaded(string id) => File.Exists(SongPath(id));
@@ -130,7 +133,8 @@ namespace BrokenCharactersLauncher
                 {
                     using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     cts.CancelAfter(TimeSpan.FromSeconds(15));
-                    using HttpResponseMessage r = await Http.GetAsync(uri, cts.Token); // follows short-link redirects
+                    using var req = new HttpRequestMessage(HttpMethod.Get, uri);
+                    using HttpResponseMessage r = await Http.SendAsync(req, cts.Token); // follows short-link redirects
                     html = await r.Content.ReadAsStringAsync(cts.Token);
                     Match fromUrl = Uuid.Match(r.RequestMessage?.RequestUri?.ToString() ?? "");
                     if (fromUrl.Success) bare = fromUrl;
@@ -172,12 +176,22 @@ namespace BrokenCharactersLauncher
             string dest = SongPath(song.Id), part = dest + ".part";
             var urls = new List<string> { "https://cdn1.suno.ai/" + song.Id + ".mp3" };
             if (!string.IsNullOrEmpty(song.Audio) && !urls.Contains(song.Audio)) urls.Add(song.Audio);
+            try
+            {
+                // The song page names the current audio address; read it fresh in case the CDN moved.
+                JukeboxSong fresh = await ResolveAsync("https://suno.com/song/" + song.Id, ct);
+                if (!string.IsNullOrEmpty(fresh.Audio) && !urls.Contains(fresh.Audio)) urls.Add(fresh.Audio);
+            }
+            catch (InvalidOperationException) { }
+            urls.Add("https://cdn2.suno.ai/" + song.Id + ".mp3");
             Exception? last = null;
             foreach (string url in urls)
             {
                 try
                 {
-                    using HttpResponseMessage r = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+                    using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                    req.Headers.TryAddWithoutValidation("Referer", "https://suno.com/");
+                    using HttpResponseMessage r = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
                     r.EnsureSuccessStatusCode();
                     await using (var outFile = File.Create(part))
                         await r.Content.CopyToAsync(outFile, ct);
@@ -225,14 +239,16 @@ namespace BrokenCharactersLauncher
                 List<JukeboxSong> all = Merge(await FetchGroupAsync(ct), LoadLocal());
                 List<JukeboxSong> missing = all.Where(s => !IsDownloaded(s.Id)).ToList();
                 int failed = 0;
+                string firstError = "";
                 for (int i = 0; i < missing.Count; i++)
                 {
                     progress?.Report("Downloading " + (i + 1) + " of " + missing.Count + ": " + missing[i].Title);
                     try { await DownloadAsync(missing[i], ct); }
-                    catch (IOException ex) { failed++; progress?.Report(ex.Message); }
+                    catch (IOException ex) { failed++; if (firstError.Length == 0) firstError = ex.Message; progress?.Report(ex.Message); }
                 }
                 WritePlaylist(all);
-                progress?.Report(failed == 0 ? all.Count + " song(s) ready for the game." : all.Count - failed + " song(s) ready, " + failed + " couldn't download.");
+                progress?.Report(failed == 0 ? all.Count + " song(s) ready for the game."
+                                             : all.Count - failed + " song(s) ready, " + failed + " couldn't download. " + firstError);
                 return failed;
             }
             finally { SyncLock.Release(); }
