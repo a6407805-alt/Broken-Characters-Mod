@@ -1276,43 +1276,56 @@ namespace Surveyor
             public Vector3 LocalCenter;
             public float Radius;
             public float HalfHeight;
+            public float Height;
             public int Axis; // 0=X, 1=Y, 2=Z
+        }
+
+        public struct RigidAttachment
+        {
+            public Transform Tr;
+            public Vector3[] EdgeA;
+            public Vector3[] EdgeB;
         }
 
         public CharacterBody Body;
         public Transform ModelRoot;
         public SkinnedMeshRenderer PrimarySmr;
-        public readonly List<BoneLink> BoneLinks = new List<BoneLink>(32);
+        public readonly List<BoneLink> Bones = new List<BoneLink>(32);
         public readonly List<LimbVolume> Limbs = new List<LimbVolume>(20);
         public readonly List<Transform> JointNodes = new List<Transform>(24);
-        public float RevealUntil;
-        public float LastSweepTime;
+        public readonly List<SkinnedMeshRenderer> SkinnedMeshes = new List<SkinnedMeshRenderer>(4);
+        public readonly List<RigidAttachment> Attachments = new List<RigidAttachment>(6);
+        public readonly List<Vector3> BakedWorldVerts = new List<Vector3>(96);
+        public float ScannedUntil;
+        public float LastScanHit;
+        public float NextBakeTime;
         public bool Initialized;
 
-        public void Build(CharacterBody body)
+        public static SvrSkeletalRig Build(CharacterBody body)
         {
-            Body = body;
-            Initialized = true;
-            BoneLinks.Clear();
-            Limbs.Clear();
-            JointNodes.Clear();
-            if (!body) return;
+            if (!body) return null;
+            SvrSkeletalRig rig = new SvrSkeletalRig
+            {
+                Body = body,
+                Initialized = true
+            };
 
             ModelLocator ml = body.modelLocator;
-            ModelRoot = ml ? ml.modelTransform : null;
-            if (!ModelRoot) return;
+            rig.ModelRoot = ml ? ml.modelTransform : null;
+            if (!rig.ModelRoot) return rig;
 
             try
             {
                 // 1) Hook active skeletal Transform bones from SkinnedMeshRenderers
-                SkinnedMeshRenderer[] smrs = ModelRoot.GetComponentsInChildren<SkinnedMeshRenderer>(false);
+                SkinnedMeshRenderer[] smrs = rig.ModelRoot.GetComponentsInChildren<SkinnedMeshRenderer>(false);
                 HashSet<Transform> boneSet = new HashSet<Transform>();
                 for (int s = 0; s < smrs.Length; s++)
                 {
                     SkinnedMeshRenderer smr = smrs[s];
                     if (!smr) continue;
-                    if (!PrimarySmr || (smr.bones != null && smr.bones.Length > (PrimarySmr.bones != null ? PrimarySmr.bones.Length : 0)))
-                        PrimarySmr = smr;
+                    rig.SkinnedMeshes.Add(smr);
+                    if (!rig.PrimarySmr || (smr.bones != null && smr.bones.Length > (rig.PrimarySmr.bones != null ? rig.PrimarySmr.bones.Length : 0)))
+                        rig.PrimarySmr = smr;
                     Transform[] bones = smr.bones;
                     if (bones == null) continue;
                     for (int i = 0; i < bones.Length; i++)
@@ -1326,14 +1339,14 @@ namespace Surveyor
                     }
                 }
 
-                // Also include any SvrPart_* rigid bone parts (for Surveyor allies/clones)
+                // Also include any rigid bone parts (for robotic enemies or Surveyor allies/clones)
                 if (boneSet.Count == 0)
                 {
-                    Transform[] all = ModelRoot.GetComponentsInChildren<Transform>(false);
+                    Transform[] all = rig.ModelRoot.GetComponentsInChildren<Transform>(false);
                     for (int i = 0; i < all.Length && boneSet.Count < 36; i++)
                     {
                         Transform t = all[i];
-                        if (t && t != ModelRoot) boneSet.Add(t);
+                        if (t && t != rig.ModelRoot) boneSet.Add(t);
                     }
                 }
 
@@ -1341,30 +1354,30 @@ namespace Surveyor
                 foreach (Transform b in boneSet)
                 {
                     if (!b) continue;
-                    if (JointNodes.Count < 28) JointNodes.Add(b);
+                    if (rig.JointNodes.Count < 28) rig.JointNodes.Add(b);
                     // Walk up up to 2 parents to find the nearest parent bone in the rig
                     Transform p = b.parent;
                     if (p && !boneSet.Contains(p) && p.parent && boneSet.Contains(p.parent))
                         p = p.parent;
-                    if (p && p != ModelRoot && boneSet.Contains(p) && BoneLinks.Count < 42)
+                    if (p && p != rig.ModelRoot && boneSet.Contains(p) && rig.Bones.Count < 42)
                     {
                         float len = Vector3.Distance(b.position, p.position);
                         if (len > 0.04f && len < bodyScale * 3.5f)
                         {
                             float limbRad = Mathf.Clamp(len * 0.24f, 0.05f, bodyScale * 0.42f);
-                            BoneLinks.Add(new BoneLink { A = p, B = b, Radius = limbRad });
+                            rig.Bones.Add(new BoneLink { A = p, B = b, Radius = limbRad });
                         }
                     }
                 }
 
                 // 2) Hook HurtBox anatomical limb colliders (parented directly to active character/monster/boss bones)
-                HurtBoxGroup hbg = ModelRoot.GetComponent<HurtBoxGroup>();
+                HurtBoxGroup hbg = rig.ModelRoot.GetComponent<HurtBoxGroup>();
                 HurtBox[] hbs = (hbg && hbg.hurtBoxes != null && hbg.hurtBoxes.Length > 0)
                     ? hbg.hurtBoxes
-                    : ModelRoot.GetComponentsInChildren<HurtBox>(false);
+                    : rig.ModelRoot.GetComponentsInChildren<HurtBox>(false);
                 if (hbs != null)
                 {
-                    for (int i = 0; i < hbs.Length && Limbs.Count < 22; i++)
+                    for (int i = 0; i < hbs.Length && rig.Limbs.Count < 22; i++)
                     {
                         HurtBox hb = hbs[i];
                         if (!hb) continue;
@@ -1372,42 +1385,72 @@ namespace Surveyor
                         if (!col) continue;
                         if (col is CapsuleCollider cap)
                         {
-                            Limbs.Add(new LimbVolume
+                            float r = Mathf.Max(0.06f, cap.radius);
+                            float hh = Mathf.Max(0.05f, cap.height * 0.5f - r);
+                            rig.Limbs.Add(new LimbVolume
                             {
                                 Tr = cap.transform,
                                 LocalCenter = cap.center,
-                                Radius = Mathf.Max(0.06f, cap.radius),
-                                HalfHeight = Mathf.Max(0.05f, cap.height * 0.5f - cap.radius),
+                                Radius = r,
+                                HalfHeight = hh,
+                                Height = Mathf.Max(r * 2f, cap.height),
                                 Axis = cap.direction
                             });
                         }
                         else if (col is SphereCollider sph)
                         {
-                            Limbs.Add(new LimbVolume
+                            float r = Mathf.Max(0.08f, sph.radius);
+                            rig.Limbs.Add(new LimbVolume
                             {
                                 Tr = sph.transform,
                                 LocalCenter = sph.center,
-                                Radius = Mathf.Max(0.08f, sph.radius),
+                                Radius = r,
                                 HalfHeight = 0f,
+                                Height = r * 2f,
                                 Axis = 1
                             });
                         }
                         else if (col is BoxCollider box)
                         {
                             Vector3 hs = box.size * 0.5f;
-                            Limbs.Add(new LimbVolume
+                            float r = Mathf.Max(0.08f, Mathf.Min(hs.x, hs.z));
+                            rig.Limbs.Add(new LimbVolume
                             {
                                 Tr = box.transform,
                                 LocalCenter = box.center,
-                                Radius = Mathf.Max(0.08f, Mathf.Min(hs.x, hs.z)),
+                                Radius = r,
                                 HalfHeight = Mathf.Max(0.06f, hs.y * 0.7f),
+                                Height = Mathf.Max(r * 2f, box.size.y),
                                 Axis = 1
                             });
                         }
                     }
                 }
+
+                // 3) Hook rigid weapon / armor MeshFilters attached to the character's animated bones
+                MeshFilter[] mfs = rig.ModelRoot.GetComponentsInChildren<MeshFilter>(false);
+                for (int i = 0; i < mfs.Length && rig.Attachments.Count < 6; i++)
+                {
+                    MeshFilter mf = mfs[i];
+                    if (!mf || !mf.sharedMesh) continue;
+                    string gn = mf.gameObject.name.ToLowerInvariant();
+                    if (gn.Contains("area") || gn.Contains("indicator") || gn.Contains("flash") || gn.Contains("glow"))
+                        continue;
+                    SvrLidar.CachedMeshData cmd = SvrLidar.GetCachedMesh(mf.sharedMesh);
+                    if (cmd != null && cmd.EdgeA != null && cmd.EdgeA.Length > 0)
+                    {
+                        rig.Attachments.Add(new RigidAttachment
+                        {
+                            Tr = mf.transform,
+                            EdgeA = cmd.EdgeA,
+                            EdgeB = cmd.EdgeB
+                        });
+                    }
+                }
             }
             catch { }
+
+            return rig;
         }
     }
 
