@@ -711,9 +711,27 @@ namespace BrokenCharactersLauncher
         }
 
         /// <summary>The GUIDE button (title bar, left of STEAM PLAY): opens the install/update/publish guide in its own window inside the launcher.</summary>
+        private GuideWindow? _guide;
+
         private void GuideTab_Click(object sender, RoutedEventArgs e)
         {
-            new GuideWindow { Owner = this }.ShowDialog();
+            if (_guide != null) { _guide.Close(); return; } // the button toggles the panel
+            _guide = new GuideWindow { Owner = this };
+            _guide.Closed += (_, __) => { _guide = null; LocationChanged -= DockGuide; SizeChanged -= DockGuide; };
+            LocationChanged += DockGuide;
+            SizeChanged += DockGuide;
+            DockGuide(this, EventArgs.Empty);
+            _guide.Show();
+        }
+
+        /// <summary>Keeps the guide stuck to the launcher's left side, same height, and follows it when the launcher moves.</summary>
+        private void DockGuide(object? sender, EventArgs e)
+        {
+            if (_guide == null) return;
+            _guide.Height = ActualHeight > 0 ? ActualHeight : Height;
+            _guide.Top = Top;
+            double left = Left - _guide.Width + 12; // tuck slightly under the launcher's rounded edge
+            _guide.Left = Math.Max(SystemParameters.VirtualScreenLeft, left);
         }
 
         /// <summary>Opens the "publish my mod" window (see PublishWindow.xaml.cs / Publisher.cs).</summary>
