@@ -1466,28 +1466,19 @@ namespace Surveyor
             public bool Big;
         }
 
-        // Scan modes, cycled with Q / E. They change the always-on scanner, and the Overdrive skill pushes the current one.
-        public static readonly string[] OdNames = { "CONE", "SWEEP", "WIDE", "FOCUS", "ECHO" };
+        // Scan modes, cycled sequentially by tapping Q (Topography -> Thermal -> Salvage -> Structural).
+        public static readonly string[] OdNames = { "TOPOGRAPHY", "THERMAL", "SALVAGE", "STRUCTURAL" };
         public static readonly string[] OdDescs =
         {
-            "WIDE TACTICAL FLOOD + PROXIMITY SKIRT",
-            "TWIN 360 RADAR WALLS + SONAR FLOOR RINGS",
-            "360 OMNI-DOME + LONG-RANGE LOOT & CHESTS",
-            "LONG-RANGE HIGH-DENSITY SPOTLIGHT + TARGET LOCK",
-            "SEISMIC WALL-SONAR (ENEMIES, BOSSES & DEMON)"
+            "WIDE TERRAIN CONTOUR FLOOD + PROXIMITY SKIRT",
+            "SEISMIC WALL-SONAR — ENEMIES, BOSSES & DEMON",
+            "360 LOOT & HOLOGRAM HUNTER — CHESTS, ITEMS & TECH",
+            "TWIN 360 RADAR WALLS + LONG-RANGE SPOTLIGHT"
         };
-        private static readonly int[] OdKind = { 1, 0, 1, 2, 3 };    // which overdrive each mode becomes: 0 sweep, 1 burst, 2 focus, 3 echo
+        private static readonly int[] OdKind = { 1, 3, 1, 0 };    // which overdrive each mode becomes: 0 sweep, 1 burst, 2 focus, 3 echo
         public static int OdMode;
         private float _scanYaw, _sweepRing, _echoPing, _focusLockNext, _peekReady, _modeFlash;
         private bool _loggedPeekFx, _peekNeedBurst;
-
-        // Middle Mouse Wheel Mode Swapping (Ratchet Click, Radial Snap Dial, Quick-Flip Override)
-        private bool _radialOpen;
-        private Vector2 _radialCursor;
-        private int _radialHoverMode;
-        private float _lastScrollTime = -10f;
-        private int _lastScrollDir;
-        private float _quickFlipBannerUntil = -10f;
         private float _repulsorReadyAt;
 
         // LiDAR-Exclusive Hidden Map Upgrades (Service Panels, Crates, Drop Pods — only visible & interactable via Surveyor LiDAR)
@@ -1597,10 +1588,19 @@ namespace Surveyor
         private int _origMask;
         private CameraClearFlags _origFlags;
         private Color _origBg;
+        private float _origFarClip;
+        private bool _origFog;
+        private FogMode _origFogMode;
+        private float _origFogDensity, _origFogStart, _origFogEnd;
+        private Color _origFogColor, _origAmbientLight;
+        private float _origAmbientIntensity;
+        private Material _origSkyboxMat;
         private Behaviour _dimPpLayer;
         private bool _dimPpOrigEnabled;
         private Camera _dimSkyboxCam;
         private bool _dimSkyboxOrigEnabled;
+        private readonly List<Behaviour> _suppressedStageVolumes = new List<Behaviour>(16);
+        private float _nextFogSweepTime;
         private bool _dimmed;
         private float _nextAudio;
         private GUIStyle _label;
@@ -1661,12 +1661,20 @@ namespace Surveyor
 
         private bool Alive { get { return _body && _body.healthComponent && _body.healthComponent.alive; } }
 
+        // High-contrast tactical LiDAR palette: warm orange/amber at close range & sharp vertical walls -> bright electric cyan at mid range -> crisp deep azure at long range (zero muddy green/yellow haze).
         private static Color Depth(float dist, float range, Vector3 normal)
         {
-            float t = Mathf.Clamp01(dist / (range * 0.7f));
-            Color red = new Color(1f, 0.15f, 0.1f), yellow = new Color(1f, 0.9f, 0.1f), green = new Color(0.2f, 1f, 0.25f);
-            Color c = t < 0.5f ? Color.Lerp(red, yellow, t * 2f) : Color.Lerp(yellow, green, (t - 0.5f) * 2f);
-            c.a = 0.55f + 0.45f * (1f - Mathf.Abs(normal.y));   // walls and edges read brighter than flat floor
+            float t = Mathf.Clamp01(dist / Mathf.Max(10f, range * 0.85f));
+            Color nearOrange = new Color(1f, 0.52f, 0.14f);
+            Color midCyan = new Color(0.18f, 0.94f, 1f);
+            Color farAzure = new Color(0.14f, 0.56f, 0.96f);
+            Color c = t < 0.36f
+                ? Color.Lerp(nearOrange, midCyan, t / 0.36f)
+                : Color.Lerp(midCyan, farAzure, (t - 0.36f) / 0.64f);
+            float wallFactor = 1f - Mathf.Abs(normal.y);
+            if (wallFactor > 0.55f && t < 0.55f)
+                c = Color.Lerp(c, new Color(1f, 0.68f, 0.22f), (wallFactor - 0.55f) * 0.65f);
+            c.a = 0.62f + 0.38f * wallFactor;   // walls and edges read brighter than flat floor
             return c;
         }
 
@@ -2390,7 +2398,8 @@ namespace Surveyor
             _pulseRange = radius * 1.2f;
             _pulseLeft = Mathf.RoundToInt(1500f * SvrSenses.SightMult);
             _demon.Pulse(at, radius);
-            SpawnPulseWave(at, radius * 1.35f, Mathf.Max(36f, radius * 1.6f), new Color(0.28f, 0.96f, 1f, 1f));
+            SuppressStageFogAndColorGrading(true);
+            SpawnPulseWave(at, radius * 1.35f, Mathf.Max(36f, radius * 1.6f), new Color(0.22f, 0.96f, 1f, 1f));
             try
             {
                 SphereSearch s = new SphereSearch { origin = at, radius = radius, mask = LayerIndex.entityPrecise.mask };
@@ -2414,7 +2423,8 @@ namespace Surveyor
             _odActive = kind;
             _odStart = Time.time;
             Vector3 at = _body.corePosition + Vector3.up * 0.8f;
-            SpawnPulseWave(at, 95f * SvrSenses.SightMult, 65f, new Color(0.55f, 1f, 0.45f, 1f));
+            SuppressStageFogAndColorGrading(true);
+            SpawnPulseWave(at, 95f * SvrSenses.SightMult, 65f, mode == 1 ? new Color(1f, 0.45f, 0.16f, 1f) : new Color(0.22f, 0.95f, 1f, 1f));
             switch (kind)
             {
                 case 0:     // SWEEP: a tall scan line spins all the way around her
@@ -2459,7 +2469,10 @@ namespace Surveyor
         private void TriggerModeBurst()
         {
             _modeFlash = Time.time;
+            Util.PlaySound("Play_UI_menuClick", gameObject);
             Util.PlaySound("Play_UI_obj_casinoChest_open", gameObject);
+            if (OdMode == 1) _revealUntil = Mathf.Max(_revealUntil, Time.time + 2.0f);
+            SuppressStageFogAndColorGrading(true);
             _nextPoiRefresh = 0f;
             _nextPoiPaint = 0f;
             Scan(0.32f);
@@ -2467,9 +2480,10 @@ namespace Surveyor
             if (_body)
             {
                 _pulseAt = _body.corePosition;
-                _pulseRange = SvrPlugin.ScanRange.Value * SvrSenses.SightMult * (OdMode == 2 ? 1.35f : (OdMode == 3 ? 1.8f : 1.15f));
+                _pulseRange = SvrPlugin.ScanRange.Value * SvrSenses.SightMult * (OdMode == 2 ? 1.45f : (OdMode == 3 ? 1.8f : 1.2f));
                 _pulseLeft = Mathf.Max(_pulseLeft, Mathf.RoundToInt(950f * SvrSenses.SightMult));
-                SpawnPulseWave(_body.corePosition, _pulseRange * 1.15f, 52f, new Color(0.35f, 0.98f, 0.85f, 1f));
+                Color waveCol = OdMode == 1 ? new Color(1f, 0.45f, 0.16f, 1f) : new Color(0.22f, 0.96f, 1f, 1f);
+                SpawnPulseWave(_body.corePosition, _pulseRange * 1.15f, 52f, waveCol);
             }
         }
 
@@ -2613,10 +2627,10 @@ namespace Surveyor
             // Periodic expanding LiDAR discovery pulse wave so nearby chests, shrines, hidden caches, and moving enemies materialize when the wave washes over them
             if (now >= _nextAutoWave && _peekK < 0.65f)
             {
-                float interval = OdMode == 1 ? 2.2f : (OdMode == 2 ? 2.6f : (OdMode == 4 ? 1.8f : 3.2f));
+                float interval = OdMode == 1 ? 1.8f : (OdMode == 2 ? 2.4f : (OdMode == 3 ? 2.2f : 3.0f));
                 _nextAutoWave = now + interval;
-                float maxR = SvrPlugin.ScanRange.Value * sight * (OdMode == 2 ? 1.65f : (OdMode == 4 ? 1.45f : 1.15f));
-                Color wc = OdMode == 4 ? new Color(1f, 0.38f, 0.2f, 1f) : new Color(0.28f, 0.96f, 0.88f, 1f);
+                float maxR = SvrPlugin.ScanRange.Value * sight * (OdMode == 2 ? 1.65f : (OdMode == 1 ? 1.45f : 1.2f));
+                Color wc = OdMode == 1 ? new Color(1f, 0.45f, 0.16f, 1f) : new Color(0.22f, 0.96f, 1f, 1f);
                 SpawnPulseWave(_body.corePosition, maxR, Mathf.Max(34f, maxR * 0.85f), wc);
             }
 
@@ -2677,8 +2691,8 @@ namespace Surveyor
             try
             {
                 var bodies = CharacterBody.readOnlyInstancesList;
-                float coneRange = baseRange * (OdMode == 3 ? 2.2f : (OdMode == 2 || OdMode == 4 ? 1.55f : 1.25f));
-                float maxAngle = OdMode == 3 ? 24f : (OdMode == 0 ? 68f : 180f);
+                float coneRange = baseRange * (OdMode == 3 ? 2.1f : (OdMode == 1 || OdMode == 2 ? 1.6f : 1.3f));
+                float maxAngle = OdMode == 0 ? 68f : 180f;
                 for (int bIdx = 0; bIdx < bodies.Count; bIdx++)
                 {
                     CharacterBody cb = bodies[bIdx];
@@ -2699,7 +2713,7 @@ namespace Surveyor
                 if (!p.Target || !p.Tr) continue;
                 Vector3 toP = p.Pos - aimOrigin;
                 float d = toP.magnitude;
-                if (d < 14f || (d < baseRange * 1.25f && Vector3.Angle(aimDir, toP) < (OdMode == 3 ? 22f : 55f)))
+                if (d < 14f || (d < baseRange * 1.25f && Vector3.Angle(aimDir, toP) < 55f))
                     p.Target.OnWaveWash(2.6f, 0.92f);
             }
             for (int cIdx = 0; cIdx < _techCaches.Count; cIdx++)
@@ -2718,76 +2732,20 @@ namespace Surveyor
             if (!_body) return;
             _local = IsLocal();
             if (!_local) { RestoreCamera(); return; }
-            if (!Alive) { _radialOpen = false; return; }
+            if (!Alive) return;
 
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
             if (!_techSpawned && Time.timeSinceLevelLoad > 2.5f) SpawnFieldTechCaches();
 
-            KeyCode next, prev, peek, trapKey, repKey, minKey, cashKey;
+            // Tapping Q sequentially rolls through the 4 modes (TOPOGRAPHY -> THERMAL -> SALVAGE -> STRUCTURAL) with a snappy audio cue
+            KeyCode next, peek, trapKey, repKey, minKey, cashKey;
             int n0 = OdNames.Length;
-            if (TryKey(SvrPlugin.ScanNextKey.Value, out next) && Input.GetKeyDown(next)) { OdMode = (OdMode + 1) % n0; TriggerModeBurst(); }
-            if (TryKey(SvrPlugin.ScanPrevKey.Value, out prev) && Input.GetKeyDown(prev)) { OdMode = (OdMode + n0 - 1) % n0; TriggerModeBurst(); }
-
-            // ---- Middle Mouse Wheel Mode Swapping (Ratchet Click, Radial Snap Dial, Quick-Flip Override) ----
-            if (Input.GetMouseButtonDown(2))
+            if (TryKey(SvrPlugin.ScanNextKey.Value, out next) && Input.GetKeyDown(next))
             {
-                _radialOpen = true;
-                _radialCursor = Vector2.zero;
-                _radialHoverMode = OdMode;
-                Util.PlaySound("Play_UI_menuClick", gameObject);
-            }
-            else if (_radialOpen && Input.GetMouseButton(2))
-            {
-                _radialCursor.x += Input.GetAxisRaw("Mouse X") * 14f;
-                _radialCursor.y -= Input.GetAxisRaw("Mouse Y") * 14f;
-                if (_radialCursor.magnitude > 90f) _radialCursor = _radialCursor.normalized * 90f;
-                if (_radialCursor.magnitude > 16f)
-                {
-                    float ang = Mathf.Atan2(_radialCursor.y, _radialCursor.x) * Mathf.Rad2Deg; // -180..180, -90 is top
-                    float norm = (ang + 90f + 360f) % 360f;
-                    int idx = Mathf.RoundToInt(norm / (360f / n0)) % n0;
-                    if (idx != _radialHoverMode)
-                    {
-                        _radialHoverMode = idx;
-                        Util.PlaySound("Play_UI_menuClick", gameObject);
-                    }
-                }
-            }
-            else if (_radialOpen && !Input.GetMouseButton(2))
-            {
-                _radialOpen = false;
-                if (_radialHoverMode != OdMode)
-                {
-                    OdMode = _radialHoverMode;
-                    TriggerModeBurst();
-                }
-            }
-
-            float scroll = Input.mouseScrollDelta.y;
-            if (!_radialOpen && Mathf.Abs(scroll) > 0.05f && !Cursor.visible)
-            {
-                int dir = scroll > 0f ? -1 : 1;
-                bool hardFlick = Mathf.Abs(scroll) >= 2.2f || (dir == _lastScrollDir && (Time.unscaledTime - _lastScrollTime) < 0.16f);
-                _lastScrollTime = Time.unscaledTime;
-                _lastScrollDir = dir;
-
-                if (hardFlick)
-                {
-                    // Quick-Flip Override: hard scroll flick snaps directly to combat/thermal ECHO mode!
-                    OdMode = 4;
-                    _quickFlipBannerUntil = Time.time + 1.8f;
-                    _revealUntil = Mathf.Max(_revealUntil, Time.time + 2.5f);
-                    TriggerModeBurst();
-                }
-                else
-                {
-                    // Stepped Ratchet Click
-                    OdMode = (OdMode + dir + n0) % n0;
-                    Util.PlaySound("Play_UI_menuClick", gameObject);
-                    TriggerModeBurst();
-                }
+                OdMode = (OdMode + 1) % n0;
+                TriggerModeBurst();
             }
 
             // Peek on its own key, whatever is in the utility slot. It runs the Peek state on the Body machine,
@@ -2940,7 +2898,7 @@ namespace Surveyor
                 _pulseLeft -= n;
             }
 
-            int per = (_odActive == 3 && OverdriveOn) ? 14 : (OdMode == 4 ? 9 : 6);
+            int per = (_odActive == 3 && OverdriveOn) ? 14 : (OdMode == 1 ? 9 : 6);
             for (int i = _tracked.Count - 1; i >= 0; i--)
             {
                 HealthComponent hc = _tracked[i];
@@ -2963,7 +2921,7 @@ namespace Surveyor
         {
             _pois.Clear();
             Vector3 me = _body.corePosition;
-            float maxDist = SvrPlugin.ScanRange.Value * SvrSenses.SightMult * (OdMode == 2 || OdMode == 4 ? 2.2f : 1.35f);
+            float maxDist = SvrPlugin.ScanRange.Value * SvrSenses.SightMult * (OdMode == 2 || OdMode == 1 ? 2.2f : 1.45f);
             float maxDistSqr = maxDist * maxDist;
 
             try
@@ -3147,7 +3105,7 @@ namespace Surveyor
 
             Vector3 me = _body.corePosition;
             float baseRange = SvrPlugin.ScanRange.Value * SvrSenses.SightMult;
-            float maxRange = baseRange * (OdMode == 2 ? 2.0f : (OdMode == 4 ? 1.55f : 1.25f));
+            float maxRange = baseRange * (OdMode == 2 ? 2.0f : (OdMode == 1 ? 1.55f : 1.35f));
             int mult = (burst ? 3 : 1) * (OdMode == 2 ? 2 : 1);
             float life = SvrPlugin.DotLife.Value * 0.58f;
 
@@ -3249,7 +3207,7 @@ namespace Surveyor
             }
         }
 
-        // The always-on scanner. Each mode (Q / E) has a distinct, high-impact geometry and range profile.
+        // The always-on scanner. Each mode cycled by Q (0=TOPOGRAPHY, 1=THERMAL, 2=SALVAGE, 3=STRUCTURAL) has a distinct geometry and range profile.
         private void Scan(float dt)
         {
             if (!_input) return;
@@ -3262,43 +3220,47 @@ namespace Surveyor
             Vector3 o = _input.aimOrigin;
             Vector3 aim = _input.aimDirection;
             float life = SvrPlugin.DotLife.Value * (sight < 1f ? 0.7f : 1f);
-            switch (OdMode)
+            switch (OdMode % 4)
             {
-                case 1:     // SWEEP: Twin opposing 360 radar walls + expanding ground sonar ring + forward cone
+                case 1:     // THERMAL: Wide cone + seismic ground rings + 115m wall-penetrating enemy/boss/demon sonar
                 {
-                    int rays = Mathf.RoundToInt(baseRays * 1.55f);
-                    _scanYaw += 310f * dt;
-                    _sweepRing = (_sweepRing + dt * 0.85f) % 1f;
-                    float ringYawBase = Time.time * 90f;
+                    int rays = Mathf.RoundToInt(baseRays * 1.5f);
                     for (int i = 0; i < rays; i++)
                     {
                         _spin++;
-                        int mod = i % 5;
-                        if (mod == 0)
+                        if (i % 4 == 0)
                         {
-                            // Forward awareness cone
-                            float f0 = ((_spin % 257) + Random.value) / 257f;
-                            Cast(o, Cone(aim, 38f * Mathf.Sqrt(f0), _spin * 2.39996f), range * 1.25f, life, false);
+                            // Seismic ground/wall ring
+                            float yaw = (_spin * 9.7f) % 360f;
+                            float pitch = Random.Range(-35f, 25f);
+                            Cast(o, Quaternion.Euler(-pitch, yaw, 0f) * Vector3.forward, range * 1.2f, life, false);
+                            continue;
                         }
-                        else if (mod == 1)
+                        float f2 = ((_spin % 257) + Random.value) / 257f;
+                        Cast(o, Cone(aim, 56f * Mathf.Sqrt(f2), _spin * 2.39996f), range * 1.15f, life, false);
+                    }
+                    if (Time.time >= _echoPing)
+                    {
+                        _echoPing = Time.time + 0.50f;
+                        _revealUntil = Mathf.Max(_revealUntil, Time.time + 0.75f); // THERMAL also reveals the Shimmer Demon through walls
+                        try
                         {
-                            // Expanding horizontal sonar floor/wall ring sweeping outward
-                            float rYaw = ringYawBase + (i / (float)rays) * 360f + Random.Range(-4f, 4f);
-                            float rPitch = Mathf.Lerp(-48f, 18f, _sweepRing) + Random.Range(-3f, 3f);
-                            Cast(o, Quaternion.Euler(-rPitch, rYaw, 0f) * Vector3.forward, range * 1.45f, life * 1.25f, true);
+                            SphereSearch s = new SphereSearch { origin = _body.corePosition, radius = 115f * sight, mask = LayerIndex.entityPrecise.mask };
+                            s.RefreshCandidates();
+                            s.FilterCandidatesByHurtBoxTeam(TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex));
+                            s.FilterCandidatesByDistinctHurtBoxEntities();
+                            foreach (HurtBox hb in s.GetHurtBoxes())
+                                if (hb && hb.healthComponent && hb.healthComponent.alive && !_tracked.Contains(hb.healthComponent) && _tracked.Count < 45)
+                                {
+                                    _tracked.Add(hb.healthComponent);
+                                    _trackedUntil.Add(Time.time + 0.75f);
+                                }
                         }
-                        else
-                        {
-                            // Twin opposing vertical radar walls (front wall + rear wall 180 deg apart)
-                            float wallOffset = (i & 1) == 0 ? 0f : 180f;
-                            float yaw = _scanYaw + wallOffset + Random.Range(-3.5f, 3.5f);
-                            float pitch = Mathf.Lerp(-65f, 72f, Random.value);
-                            Cast(o, Quaternion.Euler(-pitch, yaw, 0f) * Vector3.forward, range * 1.5f, life * 1.35f, false);
-                        }
+                        catch { }
                     }
                     break;
                 }
-                case 2:     // WIDE: Massive 360 omni-dome + concentric latitude bands + long-range loot hunter
+                case 2:     // SALVAGE: Massive 360 omni-dome + concentric latitude bands + long-range loot & hologram hunter
                 {
                     int rays = Mathf.RoundToInt(baseRays * 1.65f);
                     for (int i = 0; i < rays; i++)
@@ -3306,31 +3268,53 @@ namespace Surveyor
                         _spin++;
                         if (i % 3 == 0)
                         {
-                            // Structured 360 horizontal & dome bands so walls and rooms read crisply all around her
+                            // Structured 360 horizontal & dome bands so walls, rooms, and chests read crisply all around her
                             float bandYaw = (_spin * 7.13f) % 360f;
                             float bandPitch = Mathf.Lerp(-50f, 55f, ((_spin / 36) % 12) / 11f) + Random.Range(-3f, 3f);
-                            Cast(o, Quaternion.Euler(-bandPitch, bandYaw, 0f) * Vector3.forward, range * 1.2f, life * 1.15f, false);
+                            Cast(o, Quaternion.Euler(-bandPitch, bandYaw, 0f) * Vector3.forward, range * 1.3f, life * 1.15f, false);
                         }
                         else
                         {
                             Vector3 d = Random.onUnitSphere;
                             d.y *= 0.72f;
-                            Cast(o, d.normalized, range * 1.15f, life, false);
+                            Cast(o, d.normalized, range * 1.2f, life, false);
                         }
                     }
                     break;
                 }
-                case 3:     // FOCUS: Ultra-long high-density spotlight + outer halo + automatic long-range target lock
+                case 3:     // STRUCTURAL: Twin opposing 360 radar walls + expanding sonar floor ring + long-range spotlight & target lock
                 {
-                    int rays = Mathf.RoundToInt(baseRays * 1.75f);
+                    int rays = Mathf.RoundToInt(baseRays * 1.7f);
+                    _scanYaw += 310f * dt;
+                    _sweepRing = (_sweepRing + dt * 0.85f) % 1f;
+                    float ringYawBase = Time.time * 90f;
                     for (int i = 0; i < rays; i++)
                     {
                         _spin++;
-                        float f1 = ((_spin % 257) + Random.value) / 257f;
-                        // 70% ultra-tight 14-deg sniper core (2.4x range), 30% 34-deg mid halo (1.5x range)
-                        float spread = (i % 10 < 7) ? 14f * Mathf.Sqrt(f1) : 34f * Mathf.Sqrt(f1);
-                        float r = (i % 10 < 7) ? range * 2.4f : range * 1.5f;
-                        Cast(o, Cone(aim, spread, _spin * 2.39996f), r, life * 1.35f, i % 6 == 0);
+                        int mod = i % 5;
+                        if (mod == 0 || mod == 2)
+                        {
+                            // Ultra-long forward structural spotlight (2.2x range)
+                            float f1 = ((_spin % 257) + Random.value) / 257f;
+                            float spread = (mod == 0) ? 16f * Mathf.Sqrt(f1) : 36f * Mathf.Sqrt(f1);
+                            float r = (mod == 0) ? range * 2.2f : range * 1.5f;
+                            Cast(o, Cone(aim, spread, _spin * 2.39996f), r, life * 1.35f, i % 6 == 0);
+                        }
+                        else if (mod == 1)
+                        {
+                            // Expanding horizontal sonar floor/wall ring sweeping outward
+                            float rYaw = ringYawBase + (i / (float)rays) * 360f + Random.Range(-4f, 4f);
+                            float rPitch = Mathf.Lerp(-48f, 18f, _sweepRing) + Random.Range(-3f, 3f);
+                            Cast(o, Quaternion.Euler(-rPitch, rYaw, 0f) * Vector3.forward, range * 1.55f, life * 1.25f, true);
+                        }
+                        else
+                        {
+                            // Twin opposing vertical radar walls (front wall + rear wall 180 deg apart)
+                            float wallOffset = (i & 1) == 0 ? 0f : 180f;
+                            float yaw = _scanYaw + wallOffset + Random.Range(-3.5f, 3.5f);
+                            float pitch = Mathf.Lerp(-65f, 72f, Random.value);
+                            Cast(o, Quaternion.Euler(-pitch, yaw, 0f) * Vector3.forward, range * 1.6f, life * 1.35f, false);
+                        }
                     }
                     if (Time.time >= _focusLockNext)
                     {
@@ -3359,47 +3343,9 @@ namespace Surveyor
                     }
                     break;
                 }
-                case 4:     // ECHO: Wide cone + seismic ground rings + 110m wall-penetrating enemy/boss/demon sonar
+                default:    // TOPOGRAPHY: Wide 65-degree high-density terrain contour flood ahead + 360 proximity skirt
                 {
-                    int rays = Mathf.RoundToInt(baseRays * 1.45f);
-                    for (int i = 0; i < rays; i++)
-                    {
-                        _spin++;
-                        if (i % 4 == 0)
-                        {
-                            // Seismic ground/wall ring
-                            float yaw = (_spin * 9.7f) % 360f;
-                            float pitch = Random.Range(-35f, 25f);
-                            Cast(o, Quaternion.Euler(-pitch, yaw, 0f) * Vector3.forward, range * 1.15f, life, false);
-                            continue;
-                        }
-                        float f2 = ((_spin % 257) + Random.value) / 257f;
-                        Cast(o, Cone(aim, 56f * Mathf.Sqrt(f2), _spin * 2.39996f), range * 1.1f, life, false);
-                    }
-                    if (Time.time >= _echoPing)
-                    {
-                        _echoPing = Time.time + 0.55f;
-                        _revealUntil = Mathf.Max(_revealUntil, Time.time + 0.7f); // ECHO also reveals the Shimmer Demon through walls
-                        try
-                        {
-                            SphereSearch s = new SphereSearch { origin = _body.corePosition, radius = 110f * sight, mask = LayerIndex.entityPrecise.mask };
-                            s.RefreshCandidates();
-                            s.FilterCandidatesByHurtBoxTeam(TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex));
-                            s.FilterCandidatesByDistinctHurtBoxEntities();
-                            foreach (HurtBox hb in s.GetHurtBoxes())
-                                if (hb && hb.healthComponent && hb.healthComponent.alive && !_tracked.Contains(hb.healthComponent) && _tracked.Count < 45)
-                                {
-                                    _tracked.Add(hb.healthComponent);
-                                    _trackedUntil.Add(Time.time + 0.75f);
-                                }
-                        }
-                        catch { }
-                    }
-                    break;
-                }
-                default:    // CONE: Wide 65-degree high-density tactical flood ahead + 360 proximity skirt
-                {
-                    int rays = Mathf.RoundToInt(baseRays * 1.45f);
+                    int rays = Mathf.RoundToInt(baseRays * 1.5f);
                     for (int i = 0; i < rays; i++)
                     {
                         _spin++;
@@ -3408,11 +3354,11 @@ namespace Surveyor
                             // 360 close-range room/foot skirt so walls and ledges beside her are always painted
                             Vector3 d = Random.onUnitSphere;
                             d.y *= 0.65f;
-                            Cast(o, d.normalized, range * 0.6f, life, false);
+                            Cast(o, d.normalized, range * 0.65f, life, false);
                             continue;
                         }
                         float f = ((_spin % 257) + Random.value) / 257f;
-                        Cast(o, Cone(aim, 65f * Mathf.Sqrt(f), _spin * 2.39996f), range * 1.25f, life, false);
+                        Cast(o, Cone(aim, 65f * Mathf.Sqrt(f), _spin * 2.39996f), range * 1.3f, life, false);
                     }
                     break;
                 }
@@ -3509,10 +3455,11 @@ namespace Surveyor
                 ApplyPeekFx(cam, 0f);
             }
 
-            if (!SvrPlugin.DarkWorld.Value) { RestoreCamera(); return; }
+            if (!SvrPlugin.DarkWorld.Value) { RestoreDim(); SuppressStageFogAndColorGrading(false); return; }
+            SuppressStageFogAndColorGrading(false);
             if (!_dimmed || _dimCam != cam)
             {
-                RestoreCamera();
+                RestoreDim();
                 _dimCam = cam;
                 _origMask = cam.cullingMask;
                 _origFlags = cam.clearFlags;
@@ -3561,6 +3508,149 @@ namespace Surveyor
         }
 
         private void RestoreCamera()
+        {
+            RestoreDim();
+            RestoreStageFog();
+        }
+
+        // Scan-mode accent colors for the HUD (high-contrast cyan / orange / amber / azure — no green).
+        private static Color ModeAccent(int mode)
+        {
+            switch (mode % 4)
+            {
+                case 1: return new Color(1f, 0.5f, 0.16f, 0.95f);    // THERMAL: hot orange
+                case 2: return new Color(1f, 0.78f, 0.25f, 0.95f);   // SALVAGE: amber
+                case 3: return new Color(0.4f, 0.72f, 1f, 0.95f);    // STRUCTURAL: azure
+                default: return new Color(0.22f, 0.95f, 1f, 0.95f);  // TOPOGRAPHY: electric cyan
+            }
+        }
+
+        private bool _fogSuppressed;
+        private Camera _fogCam;
+        private static Type _tPpVolume, _tWeather, _tHookLighting;
+        private static bool _fogTypesResolved;
+
+        private static Type FindTypeByName(string fullName)
+        {
+            foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                Type t = null;
+                try { t = a.GetType(fullName, false); } catch { }
+                if (t != null) return t;
+            }
+            return null;
+        }
+
+        // While the LiDAR visor is down, banish the stage's fog, mist and color grading (Wetland Aspect / Distant Roost green haze):
+        // scene PostProcessVolumes (RampFog, ColorGrading), SceneWeatherController, HookLightingIntoPostProcessVolume,
+        // Unity RenderSettings fog/ambient, and push the camera far clip out so distant wireframes never fade into horizon fog.
+        private void SuppressStageFogAndColorGrading(bool forceSweep)
+        {
+            if (!_local || Peeking || _peekK > 0.02f) return;
+            Camera cam = Cam();
+            if (!cam) return;
+
+            try
+            {
+                if (!_fogSuppressed)
+                {
+                    _origFog = RenderSettings.fog;
+                    _origFogMode = RenderSettings.fogMode;
+                    _origFogDensity = RenderSettings.fogDensity;
+                    _origFogStart = RenderSettings.fogStartDistance;
+                    _origFogEnd = RenderSettings.fogEndDistance;
+                    _origFogColor = RenderSettings.fogColor;
+                    _origAmbientLight = RenderSettings.ambientLight;
+                    _origAmbientIntensity = RenderSettings.ambientIntensity;
+                    _origSkyboxMat = RenderSettings.skybox;
+                    _fogCam = cam;
+                    _origFarClip = cam.farClipPlane;
+                    _fogSuppressed = true;
+                    forceSweep = true;
+                }
+                else if (_fogCam != cam)
+                {
+                    if (_fogCam) _fogCam.farClipPlane = _origFarClip;
+                    _fogCam = cam;
+                    _origFarClip = cam.farClipPlane;
+                }
+                ApplyFogOverrides(cam);
+            }
+            catch { }
+
+            if (!forceSweep && Time.unscaledTime < _nextFogSweepTime) return;
+            _nextFogSweepTime = Time.unscaledTime + 1.5f;
+
+            if (!_fogTypesResolved)
+            {
+                _fogTypesResolved = true;
+                _tPpVolume = PT("PostProcessVolume");
+                _tWeather = FindTypeByName("RoR2.SceneWeatherController");
+                _tHookLighting = FindTypeByName("RoR2.HookLightingIntoPostProcessVolume");
+            }
+            SuppressAllOfType(_tPpVolume, true);
+            SuppressAllOfType(_tWeather, false);
+            SuppressAllOfType(_tHookLighting, false);
+        }
+
+        private void SuppressAllOfType(Type t, bool isVolume)
+        {
+            if (t == null) return;
+            try
+            {
+                UnityEngine.Object[] found = FindObjectsOfType(t);
+                for (int i = 0; i < found.Length; i++)
+                {
+                    Behaviour b = found[i] as Behaviour;
+                    if (!b || !b.enabled) continue;
+                    if (isVolume && (b.gameObject.name == "SvrPeekVolume" || (_ppVol && b == _ppVol))) continue;
+                    b.enabled = false;
+                    if (!_suppressedStageVolumes.Contains(b)) _suppressedStageVolumes.Add(b);
+                }
+            }
+            catch { }
+        }
+
+        private void ApplyFogOverrides(Camera cam)
+        {
+            RenderSettings.fog = false;
+            RenderSettings.fogDensity = 0f;
+            RenderSettings.fogStartDistance = 10000f;
+            RenderSettings.fogEndDistance = 20000f;
+            RenderSettings.fogColor = Color.black;
+            RenderSettings.ambientLight = Color.black;
+            RenderSettings.ambientIntensity = 0f;
+            if (cam) cam.farClipPlane = Mathf.Max(_origFarClip, 6000f);
+        }
+
+        private void RestoreStageFog()
+        {
+            if (!_fogSuppressed) return;
+            _fogSuppressed = false;
+            try
+            {
+                RenderSettings.fog = _origFog;
+                RenderSettings.fogMode = _origFogMode;
+                RenderSettings.fogDensity = _origFogDensity;
+                RenderSettings.fogStartDistance = _origFogStart;
+                RenderSettings.fogEndDistance = _origFogEnd;
+                RenderSettings.fogColor = _origFogColor;
+                RenderSettings.ambientLight = _origAmbientLight;
+                RenderSettings.ambientIntensity = _origAmbientIntensity;
+                if (_origSkyboxMat) RenderSettings.skybox = _origSkyboxMat;
+            }
+            catch { }
+            try { if (_fogCam) _fogCam.farClipPlane = _origFarClip; } catch { }
+            _fogCam = null;
+            for (int i = 0; i < _suppressedStageVolumes.Count; i++)
+            {
+                try { if (_suppressedStageVolumes[i]) _suppressedStageVolumes[i].enabled = true; } catch { }
+            }
+            _suppressedStageVolumes.Clear();
+            _nextFogSweepTime = 0f;
+        }
+
+        private void RestoreDim()
         {
             if (_dimmed && _dimCam)
             {
@@ -3727,6 +3817,11 @@ namespace Surveyor
         // The lens pulses and rolls while the visor is off (applied right before the camera renders, undone right after).
         private void PreCull(Camera c)
         {
+            // Keep the stage fog / horizon fade banished right before the LiDAR camera renders (RoR2 can rewrite RenderSettings mid-frame).
+            if (_local && _fogSuppressed && c == _fogCam && _peekK < 0.02f)
+            {
+                try { ApplyFogOverrides(c); } catch { }
+            }
             if (!_local || c != _peekCam || _peekK < 0.02f) return;
             try
             {
@@ -3907,7 +4002,7 @@ namespace Surveyor
             float now = Time.time;
             Vector3 me = _body.corePosition;
             float baseRange = SvrPlugin.ScanRange.Value * SvrSenses.SightMult;
-            float maxDrawRange = baseRange * (OdMode == 2 ? 1.95f : (OdMode == 4 ? 1.5f : 1.25f));
+            float maxDrawRange = baseRange * (OdMode == 2 ? 1.95f : (OdMode == 1 ? 1.5f : 1.3f));
             int drawn = 0;
 
             for (int i = 0; i < _pois.Count; i++)
@@ -4046,7 +4141,7 @@ namespace Surveyor
             Texture2D white = Texture2D.whiteTexture;
             float now = Time.time;
             Vector3 me = _body.corePosition;
-            float maxRange = SvrPlugin.ScanRange.Value * SvrSenses.SightMult * (OdMode == 3 ? 2.3f : (OdMode == 4 ? 1.85f : 1.45f));
+            float maxRange = SvrPlugin.ScanRange.Value * SvrSenses.SightMult * (OdMode == 3 ? 2.2f : (OdMode == 1 ? 1.85f : 1.45f));
 
             int drawnRigs = 0;
             foreach (KeyValuePair<int, SvrSkeletalRig> kv in _skeletalRigs)
@@ -4386,12 +4481,15 @@ namespace Surveyor
             }
         }
 
-        // Draws one of the five tactical LiDAR scanner mode icons (0=CONE, 1=SWEEP, 2=WIDE, 3=FOCUS, 4=ECHO)
+        // Draws one of the four tactical LiDAR scanner mode icons (0=TOPOGRAPHY, 1=THERMAL, 2=SALVAGE, 3=STRUCTURAL)
         private static void DrawModeIcon(Vector2 center, float r, int mode, Color col, float scale, Texture2D white)
         {
             GUI.color = col;
             float t = Mathf.Max(1.5f, 2f * scale);
-            switch (mode % 5)
+            // Map scan mode -> icon glyph: TOPOGRAPHY = flood wedge, THERMAL = sonar chevrons, SALVAGE = omni diamond, STRUCTURAL = radar rotor
+            int glyph;
+            switch (mode % 4) { case 1: glyph = 4; break; case 2: glyph = 2; break; case 3: glyph = 1; break; default: glyph = 0; break; }
+            switch (glyph)
             {
                 case 0: // CONE: wide 65-deg flood wedge + base dot
                     DrawScreenLine(center + new Vector2(0f, r * 0.7f), center + new Vector2(-r * 0.85f, -r * 0.65f), t, white);
@@ -4525,21 +4623,23 @@ namespace Surveyor
             SkillLocator skl = _body.skillLocator;
             bool hasOd = skl && skl.special && skl.special.skillDef && skl.special.skillDef.skillName == SvrPlugin.T + "OVERDRIVE";
             {
-                // scan mode readout (always): tactical mode icon, name, subtitle, five pips, the keys; flashes when changed
+                // scan mode readout (always): tactical mode icon, name, subtitle, four pips, the Q key; flashes when changed
                 int mIdx = OdMode % OdNames.Length;
                 float sinceSwitch = Time.time - _modeFlash;
                 bool flash = sinceSwitch < 0.75f;
                 float sx = Screen.width * 0.03f, sy = Screen.height * 0.692f;
-                Color modeCol = flash ? new Color(1f, 1f, 1f, 1f) : (OverdriveOn ? new Color(1f, 0.9f, 0.3f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.95f));
+                Color accent = ModeAccent(mIdx);
+                Color modeCol = flash ? new Color(1f, 1f, 1f, 1f) : (OverdriveOn ? new Color(1f, 0.62f, 0.2f, 0.95f) : accent);
                 DrawModeIcon(new Vector2(sx + 10f * scale, sy + 12f * scale), 9f * scale, mIdx, modeCol, scale, white);
                 GUI.color = modeCol;
-                string keys = "[MMB-WHEEL / " + SvrPlugin.ScanPrevKey.Value.ToUpperInvariant() + "/" + SvrPlugin.ScanNextKey.Value.ToUpperInvariant() + "]";
+                string keys = "[" + SvrPlugin.ScanNextKey.Value.ToUpperInvariant() + " = NEXT MODE]";
                 GUI.Label(new Rect(sx + 26f * scale, sy, 520f * scale, 24f * scale), "SCAN: " + OdNames[mIdx] + "  " + keys + (hasOd ? "   R = OVERDRIVE" : ""), _label);
-                GUI.color = new Color(0.75f, 0.98f, 0.85f, 0.85f);
+                GUI.color = new Color(0.78f, 0.93f, 1f, 0.85f);
                 GUI.Label(new Rect(sx + 26f * scale, sy + 18f * scale, 520f * scale, 22f * scale), OdDescs[mIdx], _label);
                 for (int i = 0; i < OdNames.Length; i++)
                 {
-                    GUI.color = i == mIdx ? new Color(0.6f, 1f, 0.4f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.25f);
+                    Color pc = ModeAccent(i);
+                    GUI.color = i == mIdx ? new Color(pc.r, pc.g, pc.b, 0.95f) : new Color(pc.r, pc.g, pc.b, 0.22f);
                     GUI.DrawTexture(new Rect(sx + i * 18f * scale, sy - 8f * scale, 14f * scale, 5f * scale), white);
                 }
                 float pr = _peekReady - Time.time;
@@ -4564,52 +4664,19 @@ namespace Surveyor
                     GUI.Label(new Rect(sx + 275f * scale, sy + 36f * scale, 420f * scale, 24f * scale), "TRAP [" + trapKeyStr + "]" + trapSub, _label);
                 }
 
-                // Middle-Mouse Radial Crosshair Dial (when holding Middle Mouse Button — circular vector ring, no square backdrop box)
-                if (_radialOpen)
-                {
-                    Vector2 center = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
-                    float dialRad = 115f * scale;
-                    GUI.color = new Color(0.28f, 0.96f, 0.85f, 0.45f);
-                    Vector2 prevRing = Vector2.zero;
-                    for (int r = 0; r <= 24; r++)
-                    {
-                        float rAng = (r % 24) * (6.2831853f / 24f);
-                        Vector2 curRing = center + new Vector2(Mathf.Cos(rAng), Mathf.Sin(rAng)) * dialRad;
-                        if (r > 0) DrawScreenLine(prevRing, curRing, 1.5f * scale, white);
-                        prevRing = curRing;
-                    }
-                    for (int i = 0; i < OdNames.Length; i++)
-                    {
-                        float angDeg = -90f + i * (360f / OdNames.Length);
-                        float angRad = angDeg * Mathf.Deg2Rad;
-                        Vector2 node = center + new Vector2(Mathf.Cos(angRad), Mathf.Sin(angRad)) * dialRad;
-                        bool sel = i == _radialHoverMode;
-                        Color nc = sel ? new Color(1f, 0.88f, 0.25f, 1f) : new Color(0.45f, 0.95f, 0.65f, 0.85f);
-                        DrawModeIcon(node + new Vector2(0f, -6f * scale), (sel ? 12f : 9.5f) * scale, i, nc, scale, white);
-                        GUI.color = nc;
-                        GUI.Label(new Rect(node.x - 32f * scale, node.y + 6f * scale, 76f * scale, 20f * scale), OdNames[i], _label);
-                    }
-                    // Needle from center toward cursor
-                    GUI.color = new Color(1f, 0.88f, 0.25f, 0.95f);
-                    DrawScreenLine(center, center + _radialCursor * scale, 2.5f * scale, white);
-                    GUI.Label(new Rect(center.x - 95f * scale, center.y + dialRad + 28f * scale, 240f * scale, 22f * scale), "RADIAL SNAP: " + OdNames[_radialHoverMode], _label);
-                }
-
-                // Top-center banner when Q / E or Scroll Wheel switches scanner mode
+                // Top-center banner when tapping Q switches scanner mode
                 if (sinceSwitch < 1.35f)
                 {
                     float bAlpha = Mathf.Clamp01(1.35f - sinceSwitch);
                     float bw = 480f * scale, bh = 46f * scale;
                     float bx = Screen.width * 0.5f - bw * 0.5f, by = Screen.height * 0.16f;
-                    bool isQuickFlip = Time.time < _quickFlipBannerUntil;
                     GUI.color = new Color(0f, 0f, 0f, 0.75f * bAlpha);
                     GUI.DrawTexture(new Rect(bx, by, bw, bh), white);
-                    GUI.color = isQuickFlip ? new Color(1f, 0.45f, 0.15f, 0.98f * bAlpha) : new Color(0.6f, 1f, 0.4f, 0.95f * bAlpha);
+                    GUI.color = new Color(accent.r, accent.g, accent.b, 0.96f * bAlpha);
                     GUI.DrawTexture(new Rect(bx, by, bw, 2.5f * scale), white);
                     DrawModeIcon(new Vector2(bx + 20f * scale, by + 23f * scale), 11f * scale, mIdx, GUI.color, scale, white);
-                    string bannerHdr = isQuickFlip ? "QUICK-FLIP OVERRIDE -> THERMAL ECHO!" : ("SCANNER MODE: " + OdNames[mIdx]);
-                    GUI.Label(new Rect(bx + 38f * scale, by + 4f * scale, bw - 44f * scale, 22f * scale), bannerHdr, _label);
-                    GUI.color = new Color(0.85f, 1f, 0.9f, 0.9f * bAlpha);
+                    GUI.Label(new Rect(bx + 38f * scale, by + 4f * scale, bw - 44f * scale, 22f * scale), "SCANNER MODE: " + OdNames[mIdx] + "  (" + (mIdx + 1) + "/" + OdNames.Length + ")", _label);
+                    GUI.color = new Color(0.82f, 0.95f, 1f, 0.9f * bAlpha);
                     GUI.Label(new Rect(bx + 38f * scale, by + 22f * scale, bw - 44f * scale, 22f * scale), OdDescs[mIdx], _label);
                 }
 

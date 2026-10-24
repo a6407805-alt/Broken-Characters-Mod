@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.5.1";
+        public const string PluginVersion = "0.5.2";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -46,7 +46,7 @@ namespace Surveyor
         public static ConfigEntry<int> MaxDots, RaysPerFrame, DotDivider;
         public static ConfigEntry<float> ScanRange, DotLife;
         public static ConfigEntry<float> PeekSeconds, PeekCooldown, OverdriveCooldown, SweepSeconds, FocusSeconds, EchoSeconds;
-        public static ConfigEntry<string> ScanNextKey, ScanPrevKey, PeekKey, TrapKey, RepulsorKey, MinionKey, CashInKey;
+        public static ConfigEntry<string> ScanNextKey, PeekKey, TrapKey, RepulsorKey, MinionKey, CashInKey;
         public static ConfigEntry<float> TrapCooldown, TrapDuration, TrapPullSeconds;
         public static ConfigEntry<bool> UseCustomModel;
         public static ConfigEntry<float> ModelScale, HeavyStepShake;
@@ -138,8 +138,7 @@ namespace Surveyor
             ModelScale = Config.Bind("9. Model", "ModelScale_v1", 1.08f, "Size of the armoured suit on the Commando skeleton (1 = fitted to the skeleton).");
             HeavyMotion = Config.Bind("9. Model", "HeavyMotion_v1", true, "Heavy-gunner body language: both hands on the gun, gun lag, lean, sway, recoil.");
             HeavyStepShake = Config.Bind("9. Model", "StepShake_v1", 1f, "Camera thud on each heavy step and landing (0 = off).");
-            ScanNextKey = Config.Bind("8. Peek and Overdrive", "ScanNextKey_v1", "E", "Next scan mode: CONE, SWEEP, WIDE, FOCUS, ECHO. Also scroll the Middle Mouse Wheel (hold MMB for Radial Dial, flick wheel for Thermal Echo override).");
-            ScanPrevKey = Config.Bind("8. Peek and Overdrive", "ScanPrevKey_v1", "Q", "Previous scan mode.");
+            ScanNextKey = Config.Bind("8. Peek and Overdrive", "ScanModeKey_v2", "Q", "Tap to cycle scan modes: TOPOGRAPHY -> THERMAL -> SALVAGE -> STRUCTURAL. (E stays free for the game's Interact key.)");
             PeekKey = Config.Bind("8. Peek and Overdrive", "PeekKey_v1", "F", "Peek (visor off) on its own key, whatever skill is in the utility slot.");
             TrapKey = Config.Bind("6. Shimmer Demon", "TrapKey_v1", "G", "Throw out a Ghost-Trap Containment Box. Hold M1 or M2 on the Shimmer Demon and counter-steer with WASD to capture it and restore a lost sense.");
             RepulsorKey = Config.Bind("6. Shimmer Demon", "RepulsorBlowKey_v1", "V", "Reverse-Flow Repulsor ('Blow' function): blast away swarms and reflect projectiles.");
@@ -189,7 +188,7 @@ namespace Surveyor
             LanguageAPI.Add(T + "SUBTITLE", "Blind Engineer");
             LanguageAPI.Add(T + "DESCRIPTION",
                 "The Surveyor is a blind, heavily armored engineer in a white, orange, and blue EVA rig. The world is black. She sees only what her LiDAR scanner paints.<color=#CCD3E0>\r\n\r\n" +
-                "< ! > Scroll the Middle Mouse Wheel (or Q / E) for stepped ratchet mode swaps, hold Middle Mouse for the Radial Crosshair Dial, or flick the wheel hard to snap straight to Thermal Echo mode. Press F to Peek.\r\n\r\n" +
+                "< ! > Tap Q to cycle scan modes (Topography, Thermal, Salvage, Structural). Press F to Peek.\r\n\r\n" +
                 "< ! > Scan the map to uncover LiDAR-Exclusive Hidden Tech Caches (Depleted-Uranium Slugs, Cryo-Quench Jacket, Plasma-Accelerator, Singularity Core, Reverse-Flow Repulsor [V], Aether-Leech, Spectral Compression Press).\r\n\r\n" +
                 "< ! > Press G to deploy a Ghost-Trap, lock your Proton Tether (M1/M2) onto the Shimmer Demon or weakened Elites/Bosses, and counter-steer with WASD to slam them into the containment cube—restoring a lost sense!\r\n\r\n" +
                 "< ! > Press H to redeploy a captured spirit as a 30s Spectral Hologram Guardian, or press B at the Teleporter to cash it in for Gold and Item Scrap!</color>");
@@ -199,7 +198,7 @@ namespace Surveyor
 
             LanguageAPI.Add(T + "PASSIVE_NAME", "LiDAR Vision");
             LanguageAPI.Add(T + "PASSIVE_DESC",
-                "The screen is dark. An always-on scanner paints the world as a <style=cIsUtility>decaying point cloud</style> (red near, yellow mid, green far). Bullets, the Lance and the Shockwave leave bright dots. " +
+                "The screen is dark. An always-on scanner paints the world as a <style=cIsUtility>decaying point cloud</style> (orange near, cyan mid, azure far). Bullets, the Lance and the Shockwave leave bright dots. " +
                 "<style=cDeath>A Shimmer Demon stalks you</style> and only you can see it: close in, your suit's HUD and scanner start to fail, and if it touches you it steals a sense for the stage.");
             LanguageAPI.Add(T + "PRIMARY_NAME", "Rotary Survey Gun");
             LanguageAPI.Add(T + "PRIMARY_DESC", "Hold to spool the barrels up over <style=cIsUtility>" + SpoolSeconds.Value.ToString("0.0#") + "s</style>, then fire up to <style=cIsDamage>" + MaxRate.Value.ToString("0") + " shots per second</style> for <style=cIsDamage>" +
@@ -216,9 +215,9 @@ namespace Surveyor
             LanguageAPI.Add(T + "PEEK_NAME", "Peek");
             LanguageAPI.Add(T + "PEEK_DESC", "Rip off the visor for <style=cIsUtility>" + PeekSeconds.Value.ToString("0.#") + "s</style>. The real world comes back and you see <style=cIsUtility>far beyond the scanner</style>, but it is <style=cDeath>blurry, blown out and jarring</style>, and the LiDAR fades. Replaces Hydraulic Slide.");
             LanguageAPI.Add(T + "OVERDRIVE_NAME", "LiDAR Overdrive");
-            LanguageAPI.Add(T + "OVERDRIVE_DESC", "Push the scanner past its limits. Pick a scan mode with <style=cIsUtility>" + ScanPrevKey.Value.ToUpperInvariant() + "/" + ScanNextKey.Value.ToUpperInvariant() + "</style>, then use the skill to overdrive it: " +
-                "<style=cIsUtility>SWEEP</style> spins a tall scan line around you, <style=cIsUtility>BURST</style> floods the whole sphere at once, <style=cIsUtility>FOCUS</style> fires a very dense long beam, " +
-                "<style=cIsDamage>ECHO</style> lights up every enemy (and the Shimmer Demon) through walls. Replaces Acoustic Shockwave.");
+            LanguageAPI.Add(T + "OVERDRIVE_DESC", "Push the scanner past its limits. Pick a scan mode by tapping <style=cIsUtility>" + ScanNextKey.Value.ToUpperInvariant() + "</style>, then use the skill to overdrive it: " +
+                "<style=cIsUtility>TOPOGRAPHY</style> and <style=cIsUtility>SALVAGE</style> flood the whole sphere at once, <style=cIsUtility>STRUCTURAL</style> spins a tall scan line around you, " +
+                "<style=cIsDamage>THERMAL</style> lights up every enemy (and the Shimmer Demon) through walls. Replaces Acoustic Shockwave.");
         }
 
         // ---------------------------------------------------------------- body
