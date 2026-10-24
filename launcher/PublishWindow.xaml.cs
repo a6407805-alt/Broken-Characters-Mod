@@ -69,13 +69,8 @@ namespace BrokenCharactersLauncher
             {
                 if (!KeyVault.LooksLikeKey(key))
                 {
-                    // A password: unlock this creator's key from the repo (KeyVault.cs).
-                    string name = NameBox.Text.Trim();
-                    if (name.Length == 0) { ShowKeyPanel("That's not a key. If it's your password, type your GitHub name above it too."); return; }
-                    KeyError.Visibility = Visibility.Collapsed;
-                    (string? unlocked, string? error) = await KeyVault.UnlockFromRepoAsync(KeyVault.CreatorPath(name), key, _cts.Token);
-                    if (unlocked == null) { ShowKeyPanel(error); return; }
-                    key = unlocked;
+                    ShowKeyPanel("That doesn't look like a creator key (they start with ghp_ or github_pat_). No key yet? Use the \"Create a creator key\" link.");
+                    return;
                 }
                 Publisher.SaveKey(key);
                 KeyBox.Clear();
@@ -125,10 +120,12 @@ namespace BrokenCharactersLauncher
             UpdatePublishButton();
         }
 
-        private void Passwords_Click(object sender, RoutedEventArgs e)
+        /// <summary>"Create a creator key on GitHub": opens GitHub's new-token page with the right box (public_repo) ticked.</summary>
+        private void CreateToken_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
         {
-            if (_pub == null || _busy) return;
-            new KeyPasswordWindow(_pub) { Owner = this }.ShowDialog();
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); }
+            catch (System.ComponentModel.Win32Exception) { }
+            e.Handled = true;
         }
 
         private void ChangeKey_Click(object sender, RoutedEventArgs e)
@@ -209,7 +206,6 @@ namespace BrokenCharactersLauncher
             ChooseFolderButton.IsEnabled = !busy;
             RefreshButton.IsEnabled = !busy;
             ChangeKeyButton.IsEnabled = !busy;
-            PasswordsButton.IsEnabled = !busy;
             PickFilesButton.IsEnabled = !busy;
             QuickCheckButton.IsEnabled = !busy;
             ModList.IsEnabled = !busy;

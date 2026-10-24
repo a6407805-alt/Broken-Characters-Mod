@@ -115,26 +115,20 @@
                 <StackPanel>
                     <TextBlock Text="SIGN IN (ONCE)" Foreground="{StaticResource Accent}" FontSize="14" FontWeight="Black" />
                     <TextBlock Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,8"
-                               Text="Paste your creator key, or type your GitHub name + key password. Then Pick files and Publish below unlock. Just here to play? Close this." />
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="150" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                            <TextBlock Text="GitHub name (if password)" Foreground="White" FontSize="11" Margin="0,0,0,3" />
-                            <TextBox x:Name="NameBox" Height="32" FontSize="14" VerticalContentAlignment="Center" Padding="6,0"
-                                     Background="#30FFFFFF" Foreground="White" CaretBrush="White" BorderBrush="#60FFFFFF" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="Key or password" Foreground="White" FontSize="11" Margin="0,0,0,3" />
-                            <PasswordBox x:Name="KeyBox" Height="32" FontSize="14" VerticalContentAlignment="Center"
-                                         Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" />
-                        </StackPanel>
-                        <Button Grid.Column="2" x:Name="SaveKeyButton" Content="SIGN IN" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
-                                VerticalAlignment="Bottom" Height="32" Click="SaveKey_Click" />
-                    </Grid>
+                               Text="Paste your creator key (the long text starting with ghp_ or github_pat_). Then Pick files and Publish below unlock. Just here to play? Close this." />
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" x:Name="SaveKeyButton" Content="SIGN IN" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
+                                Height="32" Click="SaveKey_Click" />
+                        <PasswordBox x:Name="KeyBox" Height="32" FontSize="14" VerticalContentAlignment="Center"
+                                     Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" />
+                    </DockPanel>
+                    <TextBlock Margin="0,8,0,0" FontSize="13" TextWrapping="Wrap" Foreground="{StaticResource TextDim}">
+                        <Run Text="No key yet? " />
+                        <Hyperlink NavigateUri="https://github.com/settings/tokens/new?scopes=public_repo&amp;description=Broken%20Characters%20creator%20key" RequestNavigate="CreateToken_RequestNavigate" Foreground="{StaticResource Accent}">
+                            <Run Text="Create a creator key on GitHub" FontWeight="Bold" />
+                        </Hyperlink>
+                        <Run Text=" (sign in to GitHub, scroll down, press Generate token, copy it, paste it here). The pack owner must add you to the repo first." />
+                    </TextBlock>
                     <TextBlock x:Name="KeyError" Foreground="#FF9A8C" FontSize="13" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed" />
                 </StackPanel>
             </Border>
@@ -226,8 +220,6 @@
                     <TextBlock x:Name="ResultText" Foreground="White" FontSize="14" TextWrapping="Wrap" Margin="0,4,0,0" />
                     <DockPanel Margin="0,8,0,0">
                         <Button DockPanel.Dock="Right" x:Name="ChangeKeyButton" Content="Change key" Style="{StaticResource GhostButton}" Padding="10,4" FontSize="11" Click="ChangeKey_Click" />
-                        <Button DockPanel.Dock="Right" x:Name="PasswordsButton" Content="Key passwords..." Style="{StaticResource GhostButton}" Padding="10,4" FontSize="11" Margin="0,0,8,0" Click="Passwords_Click"
-                                ToolTip="Lock a key with a password, so people type the password instead of the long key" />
                         <Button x:Name="CopyErrorsButton" Content="Copy errors for Claude" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Visibility="Collapsed" Click="CopyErrors_Click" />
                     </DockPanel>
                 </StackPanel>

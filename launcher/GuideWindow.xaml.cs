@@ -57,6 +57,13 @@ namespace BrokenCharactersLauncher
             catch (System.Runtime.InteropServices.COMException) { RevealBox.SelectAll(); RevealBox.Focus(); } // clipboard busy: select it for Ctrl+C
         }
 
+        private void CreateToken_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            try { Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); }
+            catch (System.ComponentModel.Win32Exception) { }
+            e.Handled = true;
+        }
+
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ButtonState == MouseButtonState.Pressed) DragMove();
