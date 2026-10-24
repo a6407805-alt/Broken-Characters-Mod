@@ -1,6 +1,6 @@
 {
   "name": "Surveyor",
-  "version_number": "0.4.0",
+  "version_number": "0.4.1",
   "website_url": "",
   "description": "The Surveyor: a blind, armored engineer who sees only through a LiDAR point cloud, with a rotary minigun and a Shimmer Demon that steals her senses. Personal use.",
   "dependencies": [

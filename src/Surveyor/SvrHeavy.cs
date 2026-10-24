@@ -22,6 +22,36 @@ namespace Surveyor
         private float _lagYaw, _lagYawV, _lagPitch, _lagPitchV, _lastYaw, _lastPitch;
         private bool _init, _wasGrounded = true;
 
+        // Every bone we touch is put back to its own pose before we touch it again, so nothing can pile up
+        // (the lobby display, or a culled Animator, does not rewrite bones every frame: that made the model spin).
+        private class Bone
+        {
+            public Transform T;
+            private Quaternion _baseR, _wroteR;
+            private Vector3 _baseP, _wroteP;
+            private bool _has;
+            public Bone(Transform t) { T = t; }
+            public void Begin()
+            {
+                if (!T) return;
+                if (_has && T.localRotation == _wroteR && (T.localPosition - _wroteP).sqrMagnitude < 1e-10f)
+                {
+                    T.localRotation = _baseR;
+                    T.localPosition = _baseP;
+                }
+                _baseR = T.localRotation;
+                _baseP = T.localPosition;
+            }
+            public void End()
+            {
+                if (!T) return;
+                _wroteR = T.localRotation;
+                _wroteP = T.localPosition;
+                _has = true;
+            }
+        }
+        private Bone[] _bones;
+
         public void Setup(Dictionary<string, Transform> game, Transform grip)
         {
             game.TryGetValue("hips", out _hips);
@@ -36,8 +66,10 @@ namespace Surveyor
 
         private void Start()
         {
+            _bones = new[] { new Bone(_hips), new Bone(_chest), new Bone(_uaR), new Bone(_faR), new Bone(_uaL), new Bone(_faL), new Bone(_hL) };
             _spool = GetComponentInParent<SvrSpool>();
             _body = GetComponentInParent<CharacterBody>();
+            if (!_body) { enabled = false; return; }       // character-select display: keep the plain pose
             if (_body)
             {
                 _motor = _body.characterMotor;
@@ -47,9 +79,14 @@ namespace Surveyor
 
         private void LateUpdate()
         {
-            if (!SvrPlugin.HeavyMotion.Value) return;
-            float dt = Time.deltaTime;
-            if (dt <= 0f) return;
+            if (_bones == null) return;
+            foreach (Bone b in _bones) b.Begin();
+            if (SvrPlugin.HeavyMotion.Value && Time.deltaTime > 0f) Pose(Time.deltaTime);
+            foreach (Bone b in _bones) b.End();
+        }
+
+        private void Pose(float dt)
+        {
             Transform m = transform;
             Vector3 up = m.up, right = m.right, fwd = m.forward;
             float spool = _spool ? _spool.Spool : 0f;
