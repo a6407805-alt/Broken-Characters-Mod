@@ -123,8 +123,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.5.4",
-      "note": "Active WIP (v0.5.4): Wireframes removed (lag eliminated), weapon swap on R (Minigun <-> Lance), 10s Peek visor visibility, horizon flat plane eliminated, authentic 3D survivor portraits loaded"
+      "version": "0.5.5",
+      "note": "Active WIP (v0.5.5): M2 Poltergust Vacuum completely overhauled (zero-lag CharacterBody and POI queries, continuous vortex suction pulling enemies & dropped items into player, shredding damage), horizon flat plane eliminated (PreCull cullingMask/solid-color enforcement, RampFog PostProcessVolume suppressed, skybox nulled)"
     }
   ]
 }

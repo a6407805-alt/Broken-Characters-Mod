@@ -527,57 +527,54 @@ namespace Surveyor
                 }
             }
 
-            // 2) Sucks dropped items and pickups directly toward the player's feet (range 35m)
+            // 2) Vacuum suction pull on nearby enemies in the forward cone (zero-allocation via CharacterBody.readOnlyInstancesList)
             try
             {
-                GenericPickupController[] gpcs = UnityEngine.Object.FindObjectsOfType<GenericPickupController>();
-                for (int i = 0; i < gpcs.Length; i++)
+                TeamIndex myTeam = body.teamComponent ? body.teamComponent.teamIndex : TeamIndex.Player;
+                int bodyCount = CharacterBody.readOnlyInstancesList.Count;
+                for (int i = 0; i < bodyCount; i++)
                 {
-                    GenericPickupController gpc = gpcs[i];
-                    if (!gpc || !gpc.gameObject.activeInHierarchy) continue;
-                    Vector3 toItem = gpc.transform.position - origin;
-                    float dItem = toItem.magnitude;
-                    if (dItem < 35f && (Vector3.Angle(fwd, toItem) < 55f || dItem < 8f))
-                    {
-                        gpc.transform.position = Vector3.MoveTowards(gpc.transform.position, body.footPosition + Vector3.up * 0.5f, 26f * dt);
-                    }
-                }
-                PickupPickerController[] ppcs = UnityEngine.Object.FindObjectsOfType<PickupPickerController>();
-                for (int i = 0; i < ppcs.Length; i++)
-                {
-                    PickupPickerController ppc = ppcs[i];
-                    if (!ppc || !ppc.gameObject.activeInHierarchy) continue;
-                    Vector3 toItem = ppc.transform.position - origin;
-                    float dItem = toItem.magnitude;
-                    if (dItem < 35f && (Vector3.Angle(fwd, toItem) < 55f || dItem < 8f))
-                    {
-                        ppc.transform.position = Vector3.MoveTowards(ppc.transform.position, body.footPosition + Vector3.up * 0.5f, 26f * dt);
-                    }
-                }
-            }
-            catch { }
+                    CharacterBody eb = CharacterBody.readOnlyInstancesList[i];
+                    if (!eb || eb == body || !eb.healthComponent || !eb.healthComponent.alive) continue;
+                    if (eb.teamComponent && eb.teamComponent.teamIndex == myTeam) continue;
 
-            // 3) Vacuum suction pull on nearby enemies in the forward cone
-            try
-            {
-                BullseyeSearch bs = new BullseyeSearch
-                {
-                    searchOrigin = origin,
-                    searchDirection = fwd,
-                    maxDistanceFilter = 34f,
-                    maxAngleFilter = 48f,
-                    teamMaskFilter = TeamMask.GetEnemyTeams(body.teamComponent.teamIndex),
-                    filterByLoS = false
-                };
-                bs.RefreshCandidates();
-                foreach (HurtBox hb in bs.GetResults())
-                {
-                    HealthComponent hc = hb ? hb.healthComponent : null;
-                    CharacterBody eb = hc ? hc.body : null;
-                    if (!eb || eb == body) continue;
-                    Vector3 pull = (origin - eb.corePosition).normalized;
-                    if (eb.characterMotor) eb.characterMotor.ApplyForce(pull * (1200f * dt), true, false);
-                    else if (eb.rigidbody) eb.rigidbody.AddForce(pull * (1200f * dt), ForceMode.Acceleration);
+                    Vector3 toEnemy = eb.corePosition - origin;
+                    float dist = toEnemy.magnitude;
+                    if (dist > 38f) continue;
+
+                    float angle = dist > 0.5f ? Vector3.Angle(fwd, toEnemy) : 0f;
+                    if (angle > 52f && dist > 8f) continue;
+
+                    // Suction vector pulling enemy directly toward the vacuum vortex point in front of Surveyor
+                    Vector3 suctionTarget = origin + fwd * 2.2f;
+                    Vector3 pull = (suctionTarget - eb.corePosition).normalized;
+                    float pullSpeed = Mathf.Lerp(34f, 16f, dist / 38f);
+
+                    // Apply continuous vacuum suction velocity directly to motor/rigidbody
+                    if (eb.characterMotor)
+                    {
+                        eb.characterMotor.velocity = Vector3.MoveTowards(eb.characterMotor.velocity, pull * pullSpeed, 50f * dt);
+                        eb.characterMotor.rootMotion += pull * (pullSpeed * 0.45f * dt);
+                    }
+                    else if (eb.rigidbody)
+                    {
+                        eb.rigidbody.velocity = Vector3.MoveTowards(eb.rigidbody.velocity, pull * pullSpeed, 50f * dt);
+                    }
+
+                    // Vacuum shredding damage & micro-stun ticks
+                    if (dist < 18f && UnityEngine.Networking.NetworkServer.active)
+                    {
+                        DamageInfo di = new DamageInfo
+                        {
+                            attacker = body.gameObject,
+                            inflictor = body.gameObject,
+                            damage = body.damage * 0.75f * dt,
+                            damageType = DamageType.Stun1s,
+                            position = eb.corePosition,
+                            procCoefficient = 0.2f * dt
+                        };
+                        eb.healthComponent.TakeDamage(di);
+                    }
                 }
             }
             catch { }
@@ -1734,22 +1731,70 @@ namespace Surveyor
         public bool Peeking { get { return Time.time < _peekUntil; } }
         public bool OverdriveOn { get { return _odActive >= 0 && Time.time < _odUntil; } }
         public SvrDemon Demon { get { return _demon; } }
+        private static readonly Collider[] _colHits = new Collider[48];
 
         public void VacuumHold(Ray aim, float dt, CharacterBody body)
         {
-            if (_demon == null) return;
-            _demon.VacuumHold(body, aim, dt);
-
-            // Emit swirling vacuum suction dots in the point cloud flowing inward into the nozzle
-            Vector3 nozzle = aim.origin + transform.right * 0.35f - transform.up * 0.15f;
-            for (int i = 0; i < 6; i++)
+            if (_demon != null)
             {
-                float d = Random.Range(3f, 22f);
-                float spread = Random.Range(4f, 32f);
-                Vector3 dir = Cone(aim.direction, spread, Time.time * 24f + i * 1.57f);
-                Vector3 dotPos = nozzle + dir * d;
-                Color dotCol = (i & 1) == 0 ? new Color(0.22f, 0.95f, 1f, 1f) : new Color(1f, 0.75f, 0.2f, 1f);
-                AddDot(dotPos, dotCol, 0.18f, true);
+                _demon.VacuumHold(body, aim, dt);
+            }
+
+            // 1) Sucks dropped items and pickups directly toward the player's feet (zero-lag from pre-scanned _pois)
+            Vector3 foot = body ? (body.footPosition + Vector3.up * 0.5f) : (aim.origin - Vector3.up * 0.5f);
+            for (int i = 0; i < _pois.Count; i++)
+            {
+                Poi p = _pois[i];
+                if (p.Kind != 3 || !p.Tr || !p.Tr.gameObject.activeInHierarchy) continue;
+                Vector3 toItem = p.Tr.position - aim.origin;
+                float dItem = toItem.magnitude;
+                if (dItem < 38f && (Vector3.Angle(aim.direction, toItem) < 55f || dItem < 8f))
+                {
+                    p.Tr.position = Vector3.MoveTowards(p.Tr.position, foot, 30f * dt);
+                    Rigidbody rb = p.Tr.GetComponent<Rigidbody>();
+                    if (rb) rb.velocity = (foot - p.Tr.position).normalized * 30f;
+                }
+            }
+
+            // Also suction any physics pickup colliders via fast non-alloc layer query (0.001ms)
+            try
+            {
+                int pLayer = LayerMask.NameToLayer("Pickup");
+                int pickupMask = pLayer >= 0 ? ((1 << pLayer) | LayerIndex.defaultLayer.mask) : LayerIndex.defaultLayer.mask;
+                int hitCount = Physics.OverlapSphereNonAlloc(aim.origin, 35f, _colHits, pickupMask);
+                for (int i = 0; i < hitCount; i++)
+                {
+                    Collider c = _colHits[i];
+                    if (!c) continue;
+                    bool isPickup = c.GetComponent<GenericPickupController>() || c.GetComponent<PickupPickerController>() ||
+                                    c.GetComponentInParent<GenericPickupController>() || c.GetComponentInParent<PickupPickerController>();
+                    if (!isPickup) continue;
+                    Transform tr = c.transform;
+                    Vector3 toItem = tr.position - aim.origin;
+                    float dItem = toItem.magnitude;
+                    if (dItem < 38f && (Vector3.Angle(aim.direction, toItem) < 55f || dItem < 8f))
+                    {
+                        tr.position = Vector3.MoveTowards(tr.position, foot, 30f * dt);
+                        Rigidbody rb = c.attachedRigidbody;
+                        if (rb) rb.velocity = (foot - tr.position).normalized * 30f;
+                    }
+                }
+            }
+            catch { }
+
+            // 2) Swirling inward vacuum vortex dots in the point cloud flowing inward into the nozzle
+            Vector3 nozzle = aim.origin + transform.right * 0.35f - transform.up * 0.15f;
+            float t = Time.time * 20f;
+            for (int i = 0; i < 16; i++)
+            {
+                float prog = (Time.time * 2.5f + i * 0.0625f) % 1.0f; // 0 (far) -> 1 (nozzle)
+                float d = Mathf.Lerp(28f, 0.28f, prog);
+                float radius = Mathf.Lerp(3.2f, 0.08f, prog);
+                float angle = t + i * 0.3927f + prog * 10f;
+                Vector3 radial = (transform.right * Mathf.Cos(angle) + transform.up * Mathf.Sin(angle)) * radius;
+                Vector3 dotPos = nozzle + aim.direction * d + radial;
+                Color dotCol = (i & 1) == 0 ? new Color(0.2f, 0.95f, 1f, 1f) : new Color(1f, 0.65f, 0.15f, 1f);
+                AddDot(dotPos, dotCol, 0.14f, true);
             }
         }
         // ---------------------------------------------------------------- helpers
@@ -3621,7 +3666,8 @@ namespace Surveyor
                 _tWeather = FindTypeByName("RoR2.SceneWeatherController");
                 _tHookLighting = FindTypeByName("RoR2.HookLightingIntoPostProcessVolume");
             }
-            // Keep PostProcessVolumes active so camera pipeline and UI passes function cleanly
+            // Suppress stage PostProcessVolumes (RampFog, ColorGrading) so no horizon fog plane can render
+            SuppressAllOfType(_tPpVolume, true);
             SuppressAllOfType(_tWeather, false);
             SuppressAllOfType(_tHookLighting, false);
         }
@@ -3653,6 +3699,7 @@ namespace Surveyor
             RenderSettings.fogColor = Color.black;
             RenderSettings.ambientLight = Color.black;
             RenderSettings.ambientIntensity = 0f;
+            RenderSettings.skybox = null;
             if (cam) cam.farClipPlane = Mathf.Max(_origFarClip, 6000f);
         }
 
@@ -3847,13 +3894,25 @@ namespace Surveyor
             _lastPpWeight = -1f;
         }
 
-        // The lens pulses and rolls while the visor is off (applied right before the camera renders, undone right after).
+        // Enforce dark world culling, black background, and zero fog right as the camera renders
         private void PreCull(Camera c)
         {
-            // Keep the stage fog / horizon fade banished right before the LiDAR camera renders (RoR2 can rewrite RenderSettings mid-frame).
-            if (_local && _fogSuppressed && c == _fogCam && _peekK < 0.02f)
+            if (_local && SvrPlugin.DarkWorld.Value && !Peeking && _peekK < 0.02f)
             {
-                try { ApplyFogOverrides(c); } catch { }
+                try
+                {
+                    ApplyFogOverrides(c);
+                    int uiLayer = LayerMask.NameToLayer("UI");
+                    int uiMask = uiLayer >= 0 ? (1 << uiLayer) : (1 << 5);
+                    int uiObj = LayerMask.NameToLayer("UIObject");
+                    if (uiObj >= 0) uiMask |= (1 << uiObj);
+                    c.cullingMask = uiMask;
+                    c.clearFlags = CameraClearFlags.SolidColor;
+                    c.backgroundColor = Color.black;
+                    if (_dimPpLayer) _dimPpLayer.enabled = false;
+                    if (_dimSkyboxCam) _dimSkyboxCam.enabled = false;
+                }
+                catch { }
             }
             if (!_local || c != _peekCam || _peekK < 0.02f) return;
             try

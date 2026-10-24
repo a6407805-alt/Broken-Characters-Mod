@@ -291,8 +291,8 @@ namespace Surveyor
             base.OnEnter();
             _lidar = GetComponent<SvrLidar>();
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
-            Util.PlaySound("Play_drone_repair", gameObject);
-            _soundTimer = 0.25f;
+            Util.PlaySound("Play_engi_M2_throw", gameObject);
+            _soundTimer = 0.22f;
         }
 
         public override void FixedUpdate()
@@ -310,8 +310,8 @@ namespace Surveyor
             _soundTimer -= Time.fixedDeltaTime;
             if (_soundTimer <= 0f)
             {
-                _soundTimer = 0.35f;
-                Util.PlaySound("Play_drone_repair", gameObject);
+                _soundTimer = 0.32f;
+                Util.PlaySound("Play_commando_R", gameObject);
             }
 
             if (isAuthority)
@@ -329,6 +329,7 @@ namespace Surveyor
             {
                 _lidar.Demon.TetherActive = false;
             }
+            Util.PlaySound("Play_drone_repair", gameObject);
             base.OnExit();
         }
 
