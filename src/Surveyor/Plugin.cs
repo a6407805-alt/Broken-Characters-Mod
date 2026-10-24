@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.2.0";
+        public const string PluginVersion = "0.3.0";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -47,6 +47,8 @@ namespace Surveyor
         public static ConfigEntry<float> ScanRange, DotLife;
         public static ConfigEntry<float> PeekSeconds, PeekCooldown, OverdriveCooldown, SweepSeconds, FocusSeconds, EchoSeconds;
         public static ConfigEntry<string> ModeKey;
+        public static ConfigEntry<bool> UseCustomModel;
+        public static ConfigEntry<float> ModelScale;
         public static ConfigEntry<bool> DemonEnabled;
         public static ConfigEntry<float> DemonFirstSpawn, DemonProwlSpeed, DemonHuntSpeed, DemonRespawn, DemonContactRange;
         public static ConfigEntry<float> MinigunPushSpool, LanceStagger, PulseStagger, MinigunStagger;
@@ -123,6 +125,8 @@ namespace Surveyor
             SweepSeconds = Config.Bind("8. Peek and Overdrive", "SweepSeconds_v1", 3.2f, "SWEEP mode: seconds for the scan line to spin 360 degrees.");
             FocusSeconds = Config.Bind("8. Peek and Overdrive", "FocusSeconds_v1", 4f, "FOCUS mode: seconds of the long dense beam.");
             EchoSeconds = Config.Bind("8. Peek and Overdrive", "EchoSeconds_v1", 8f, "ECHO mode: seconds enemies (and the Shimmer Demon) are lit through walls.");
+            UseCustomModel = Config.Bind("9. Model", "UseCustomModel_v1", true, "Use the Surveyor's own 3D model (surveyor_model.bin.gz next to the dll). Off = Commando with a green tint.");
+            ModelScale = Config.Bind("9. Model", "ModelScale_v1", 1.08f, "Size of the armoured suit on the Commando skeleton (1 = fitted to the skeleton).");
             ModeKey = Config.Bind("8. Peek and Overdrive", "ModeKey", "V", "Key that cycles the Overdrive mode: SWEEP, BURST, FOCUS, ECHO.");
 
             DemonEnabled = Config.Bind("6. Shimmer Demon", "Enabled", true, "The Shimmer Demon stalks the Surveyor (only she can see it).");
@@ -229,7 +233,7 @@ namespace Surveyor
             BodyPrefab.AddComponent<SvrSpool>();
             BodyPrefab.AddComponent<SvrLidar>();
             Transform model = Model(BodyPrefab);
-            if (model) { model.gameObject.AddComponent<SvrLook>(); AddSkin(model); }
+            if (model) { model.gameObject.AddComponent<SvrLook>(); model.gameObject.AddComponent<SvrCustomModel>(); AddSkin(model); }
             ContentAddition.AddBody(BodyPrefab);
 
             GameObject display = LegacyResourcesAPI.Load<GameObject>("Prefabs/CharacterDisplays/CommandoDisplay");
@@ -237,6 +241,7 @@ namespace Surveyor
             CharacterModel dcm = DisplayPrefab.GetComponentInChildren<CharacterModel>(true);
             Transform dm = dcm ? dcm.transform : DisplayPrefab.transform;
             dm.gameObject.AddComponent<SvrLook>();
+            dm.gameObject.AddComponent<SvrCustomModel>();
         }
 
         // The loadout screen wants a skin entry; Commando's own would show Commando's names, so she gets one entry
