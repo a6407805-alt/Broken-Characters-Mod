@@ -102,7 +102,7 @@ namespace BrokenCharactersLauncher
             try
             {
                 var progress = new Progress<string>(line => { Status(line); foreach (var r in _rows) r.Refresh(); });
-                await JukeboxLibrary.SyncAsync(progress, _cts.Token);
+                await JukeboxLibrary.SyncAsync(progress, _cts.Token, _group);
             }
             catch (OperationCanceledException) { }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { Status("Couldn't save the songs: " + ex.Message); }
@@ -224,6 +224,7 @@ namespace BrokenCharactersLauncher
                     _group = g;
                     return JukeboxLibrary.Serialize(g);
                 }, "Jukebox: share " + add.Count + " song(s)", _cts.Token);
+                await JukeboxLibrary.PublishGroupCopyAsync(pub, _group, _cts.Token);
                 local.Songs.RemoveAll(s => add.Any(a => a.Id == s.Id));
                 JukeboxLibrary.SaveLocal(local);
                 if (add.Count > 0) Status("Shared " + add.Count + " song(s) with everyone.");
@@ -262,6 +263,7 @@ namespace BrokenCharactersLauncher
                         _group = f;
                         return JukeboxLibrary.Serialize(f);
                     }, "Jukebox: remove " + row.Title, _cts.Token);
+                    await JukeboxLibrary.PublishGroupCopyAsync(pub, _group, _cts.Token);
                 }
                 JukeboxFile local = JukeboxLibrary.LoadLocal();
                 local.Songs.RemoveAll(s => s.Id == row.Song.Id);

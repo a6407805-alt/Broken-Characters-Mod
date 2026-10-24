@@ -103,6 +103,23 @@ namespace BrokenCharactersLauncher
         }
 
         /// <summary>The group list from GitHub (raw file, no API limit); falls back to the last copy we saw.</summary>
+        private const string ReleaseCopyUrl = "https://github.com/" + Publisher.Repo + "/releases/download/jukebox/jukebox.json";
+
+        /// <summary>After any change to the song list: put a copy on the jukebox release too (see FetchGroupAsync).</summary>
+        public static async Task PublishGroupCopyAsync(Publisher pub, JukeboxFile group, CancellationToken ct = default)
+        {
+            try
+            {
+                Directory.CreateDirectory(Folder);
+                string text = Serialize(group);
+                File.WriteAllText(SharedCache, text);
+                string tmp = Path.Combine(Folder, "jukebox-upload.json");
+                File.WriteAllText(tmp, text);
+                await pub.UploadReleaseFileAsync("jukebox", "jukebox.json", tmp, "application/json", ct);
+            }
+            catch (Exception ex) when (ex is GitHubException || ex is HttpRequestException || ex is IOException) { } // the repo copy still has it
+        }
+
         public static async Task<JukeboxFile> FetchGroupAsync(CancellationToken ct = default)
         {
             try
@@ -112,6 +129,16 @@ namespace BrokenCharactersLauncher
                 // The GitHub API gives the list as it is right now. The raw file (the fallback, when the API's hourly
                 // limit is used up) can be several minutes old, which once made just-shared songs look unshared.
                 string? text = null;
+                // 1. The copy on the jukebox release: always fresh and no hourly limit (written on every change).
+                try
+                {
+                    using HttpResponseMessage rel = await Http.GetAsync(ReleaseCopyUrl + "?t=" + DateTime.UtcNow.Ticks, cts.Token);
+                    if (rel.IsSuccessStatusCode) text = await rel.Content.ReadAsStringAsync(cts.Token);
+                    if (text != null && !text.TrimStart().StartsWith("{", StringComparison.Ordinal)) text = null;
+                }
+                catch (HttpRequestException) { }
+                // 2. The GitHub API (fresh, but 60 checks an hour without a key). 3. The raw file (can be minutes old).
+                if (text == null)
                 try
                 {
                     using var api = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/repos/" + Publisher.Repo + "/contents/" + RepoPath + "?ref=main");
@@ -267,7 +294,7 @@ namespace BrokenCharactersLauncher
         /// Fetches the group list, downloads every song this PC is missing and rewrites playlist.json.
         /// Reports progress lines; returns how many songs failed. Safe to call at launcher start (quiet on errors).
         /// </summary>
-        public static async Task<int> SyncAsync(IProgress<string>? progress = null, CancellationToken ct = default)
+        public static async Task<int> SyncAsync(IProgress<string>? progress = null, CancellationToken ct = default, JukeboxFile? known = null)
         {
             await SyncLock.WaitAsync(ct);
             try
@@ -279,6 +306,12 @@ namespace BrokenCharactersLauncher
                     return 0;
                 }
                 JukeboxFile group = await FetchGroupAsync(ct);
+                if (known != null)
+                {
+                    // The jukebox window may know songs a slow copy of the list doesn't have yet: use both.
+                    foreach (string gone in known.Removed) if (!group.Removed.Contains(gone)) group.Removed.Add(gone);
+                    foreach (JukeboxSong s in known.Songs) if (!group.Songs.Any(g => g.Id == s.Id)) group.Songs.Add(s);
+                }
                 foreach (string gone in group.Removed) DeleteSongFile(gone); // someone pressed Remove: drop our copy too
                 JukeboxFile mine = LoadLocal();
                 if (mine.Songs.RemoveAll(s => group.Removed.Contains(s.Id)) > 0) SaveLocal(mine);
