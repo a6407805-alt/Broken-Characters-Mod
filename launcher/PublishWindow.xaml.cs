@@ -255,7 +255,8 @@ namespace BrokenCharactersLauncher
                 Bar.Value = 0;
                 StatusLine.Text = "";
                 ResultText.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x8C));
-                ResultText.Text = "Couldn't publish: " + ex.Message + "\nNothing was changed online. Try again in a minute.";
+                string why = ex.InnerException != null ? ex.Message + " (" + ex.InnerException.Message + ")" : ex.Message;
+                ResultText.Text = "Couldn't publish: " + why + "\nNothing was changed online. Try again in a minute.";
             }
             finally { SetBusy(false); }
 
