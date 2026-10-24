@@ -1,8 +1,8 @@
 {
   "name": "Surveyor",
-  "version_number": "0.5.0",
+  "version_number": "0.5.1",
   "website_url": "",
-  "description": "The Surveyor: blind heavy EVA engineer with middle-mouse LiDAR mode wheel/radial dial, 8 hidden LiDAR map upgrades, and Ghostbusters/Luigi's Mansion Proton Tether & Ghost-Trap capture. Personal use.",
+  "description": "The Surveyor: blind heavy EVA engineer with real-time animated skeletal LiDAR wireframes, 3D hologram discovery loop (SvrLiDARScanTarget), and Ghostbusters/Luigi's Mansion Demon capture. Personal use.",
   "dependencies": [
     "bbepis-BepInExPack-5.4.2121",
     "RiskofThunder-R2API_Core-5.3.0",
