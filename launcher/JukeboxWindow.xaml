@@ -122,7 +122,9 @@
                 <CheckBox x:Name="ShareBox" Margin="0,10,0,0" IsChecked="True">
                     <TextBlock x:Name="ShareText" Text="Add it for the whole group (everyone's launcher downloads it)" Foreground="White" FontSize="13" Margin="4,0,0,0" />
                 </CheckBox>
-                <TextBlock Text="Songs" Foreground="White" FontSize="18" FontWeight="Bold" Margin="0,18,0,8" />
+                <TextBlock Text="Songs" Foreground="White" FontSize="18" FontWeight="Bold" Margin="0,18,0,2" />
+                <TextBlock Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
+                           Text="You can also drop MP3 files into the folder (Open folder), then press Refresh." />
             </StackPanel>
 
             <!-- the list -->
@@ -161,7 +163,7 @@
                 <TextBlock Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0"
                            Text="In game: a song vote opens each stage and when a song ends. Press 7 / 8 / 9 to vote, J for a vote now, Shift + / - for volume. The host can stop the music with K." />
                 <DockPanel Margin="0,10,0,0">
-                    <Button DockPanel.Dock="Right" x:Name="SyncButton" Content="&#x21BB; Download all" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="Sync_Click" />
+                    <Button DockPanel.Dock="Right" x:Name="SyncButton" Content="&#x21BB; Refresh" ToolTip="Show songs you added to the folder and download new group songs" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="Sync_Click" />
                     <Button DockPanel.Dock="Right" Content="Open folder" Style="{StaticResource GhostButton}" Click="OpenFolder_Click" />
                     <TextBlock />
                 </DockPanel>

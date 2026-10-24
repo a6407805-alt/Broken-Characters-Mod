@@ -26,10 +26,12 @@ namespace BrokenCharactersLauncher
         public bool CanRemove { get; init; }
         public string Title => Song.Title;
         public string Artist => Song.Artist;
-        public string Where => InGroup ? "GROUP" : "ONLY ME";
+        public bool Loose => Song.FilePath != null;
+        public string Where => Loose ? "IN FOLDER" : InGroup ? "GROUP" : "ONLY ME";
+        public string FilePath => Song.FilePath ?? JukeboxLibrary.SongPath(Song.Id);
         public Visibility RemoveVisibility => CanRemove ? Visibility.Visible : Visibility.Collapsed;
-        public bool CanPlay => JukeboxLibrary.IsDownloaded(Song.Id);
-        public string Status => CanPlay ? "downloaded" : "not downloaded yet";
+        public bool CanPlay => File.Exists(FilePath);
+        public string Status => Loose ? "ready" : CanPlay ? "downloaded" : "not downloaded yet";
 
         private bool _playing;
         public bool Playing { get => _playing; set { _playing = value; Changed(nameof(PlayText)); } }
@@ -83,6 +85,8 @@ namespace BrokenCharactersLauncher
             foreach (JukeboxSong s in _group.Songs)
                 _rows.Add(new JukeboxRow { Song = s, InGroup = true, CanRemove = canShare });
             foreach (JukeboxSong s in local.Songs.Where(l => !_group.Songs.Any(g => g.Id == l.Id)))
+                _rows.Add(new JukeboxRow { Song = s, InGroup = false, CanRemove = true });
+            foreach (JukeboxSong s in JukeboxLibrary.LooseFiles(_rows.Select(r => r.Song).ToList()))
                 _rows.Add(new JukeboxRow { Song = s, InGroup = false, CanRemove = true });
             EmptyText.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -165,6 +169,13 @@ namespace BrokenCharactersLauncher
             if (MessageBox.Show(this, "Remove \"" + row.Title + "\"" + (row.InGroup ? " for everyone?" : "?"), "Jukebox",
                     MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             if (_playingRow == row) StopPreview();
+            if (row.Loose)
+            {
+                try { File.Delete(row.FilePath); Status("Removed \"" + row.Title + "\"."); }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { Status("Couldn't remove it: " + ex.Message); }
+                Rebuild();
+                return;
+            }
             SetBusy(true);
             try
             {
@@ -201,8 +212,8 @@ namespace BrokenCharactersLauncher
             if ((sender as FrameworkElement)?.DataContext is not JukeboxRow row) return;
             bool wasThis = _playingRow == row;
             StopPreview();
-            if (wasThis || !JukeboxLibrary.IsDownloaded(row.Song.Id)) return;
-            _player.Open(new Uri(JukeboxLibrary.SongPath(row.Song.Id)));
+            if (wasThis || !row.CanPlay) return;
+            _player.Open(new Uri(row.FilePath));
             _player.Volume = 0.6;
             _player.Play();
             _playingRow = row;

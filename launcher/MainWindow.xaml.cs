@@ -676,6 +676,7 @@ namespace BrokenCharactersLauncher
             {
                 Task roster = RefreshRosterFromGitHubAsync();
                 Task changelog = LoadChangelogAsync();
+                _ = SyncJukeboxQuietlyAsync();
                 if (await TrySelfUpdateAsync(fromRefresh: true)) return; // restarting into the new launcher
                 await CheckAndUpdateAsync();
                 await roster;

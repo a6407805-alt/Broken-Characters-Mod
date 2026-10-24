@@ -31,6 +31,9 @@ namespace BrokenCharactersLauncher
         [JsonPropertyName("audio")] public string? Audio { get; set; }
         [JsonPropertyName("added")] public string? Added { get; set; }
         [JsonPropertyName("addedBy")] public string? AddedBy { get; set; }
+
+        /// <summary>Set for an MP3/WAV the player dropped into the Jukebox folder themselves (not in any list).</summary>
+        [JsonIgnore] public string? FilePath { get; set; }
     }
 
     public sealed class JukeboxFile
@@ -233,6 +236,23 @@ namespace BrokenCharactersLauncher
                 return failed;
             }
             finally { SyncLock.Release(); }
+        }
+
+        /// <summary>MP3/WAV files dropped into the Jukebox folder by hand (named after the file, like the mod does).</summary>
+        public static List<JukeboxSong> LooseFiles(IEnumerable<JukeboxSong> known)
+        {
+            var ids = new HashSet<string>(known.Select(k => k.Id), StringComparer.OrdinalIgnoreCase);
+            var list = new List<JukeboxSong>();
+            if (!Directory.Exists(Folder)) return list;
+            foreach (string f in Directory.GetFiles(Folder).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            {
+                string ext = Path.GetExtension(f).ToLowerInvariant();
+                if (ext != ".mp3" && ext != ".wav") continue;
+                string id = Path.GetFileNameWithoutExtension(f);
+                if (ids.Contains(id)) continue;
+                list.Add(new JukeboxSong { Id = id, Title = id.Replace('_', ' '), FilePath = f });
+            }
+            return list;
         }
 
         public static void DeleteSongFile(string id)
