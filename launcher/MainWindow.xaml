@@ -555,6 +555,26 @@
                     <Button Grid.Column="2" x:Name="PlayButton" Content="PLAY" Style="{StaticResource PlayButton}" IsEnabled="False" Click="PlayButton_Click" />
                 </Grid>
             </Grid>
+
+            <!-- Right-edge tab: opens the install & update guide (PDF) in the browser -->
+            <Button x:Name="GuideTabButton" Click="GuideTab_Click" HorizontalAlignment="Right" VerticalAlignment="Center"
+                    Width="26" Height="68" Margin="0,0,-13,0" Cursor="Hand" Panel.ZIndex="50"
+                    ToolTip="Open the install &amp; update guide (PDF)">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" CornerRadius="13" Background="#D8101420" BorderBrush="{StaticResource Accent}" BorderThickness="1">
+                            <TextBlock x:Name="Arrow" Text="&#10095;" Foreground="{StaticResource Accent}" FontSize="13" FontWeight="Bold"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,5,0" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource Accent}" />
+                                <Setter TargetName="Arrow" Property="Foreground" Value="#1A1205" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
         </Grid>
     </Border>
 </Window>

@@ -710,6 +710,18 @@ namespace BrokenCharactersLauncher
             LaunchGame();
         }
 
+        /// <summary>The right-edge tab: opens the install &amp; update guide (docs/, committed next to the launcher) in the browser.</summary>
+        private void GuideTab_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(
+                    "https://github.com/" + Repo + "/blob/main/docs/Broken%20Characters%20-%20Install%20Guide.pdf")
+                { UseShellExecute = true });
+            }
+            catch (System.ComponentModel.Win32Exception ex) { Debug.WriteLine("Could not open the guide: " + ex.Message); }
+        }
+
         /// <summary>Opens the "publish my mod" window (see PublishWindow.xaml.cs / Publisher.cs).</summary>
         private void Creator_Click(object sender, RoutedEventArgs e)
         {
