@@ -343,9 +343,9 @@ namespace Jukebox
         /// </summary>
         private static void PlaceBelowDifficulty(float s, out float x, out float y, out float w)
         {
-            w = 340f * s;
+            w = 270f * s;
             x = Screen.width - w - 22f * s;
-            y = 215f * s;
+            y = 225f * s;
             try
             {
                 if ((!_hud || !_hud.gameObject.activeInHierarchy || !_diffRt) && Time.unscaledTime >= _nextHudScan)
@@ -365,23 +365,31 @@ namespace Jukebox
                 }
 
                 float bottom = 0f;
-                if (ScreenRect(_diffRt, out Rect dr) && dr.width > 80f)
-                {
-                    w = Mathf.Clamp(dr.width, 280f * s, 440f * s);
-                    x = Mathf.Clamp(dr.xMax - w, 8f * s, Screen.width - w - 8f * s);
-                    bottom = Mathf.Max(bottom, dr.yMax);
-                }
+                bool matchedWidth = false;
 
-                // Step below the objective panel and all active objective rows so we never overlap them.
+                // Match the Objective panel's exact left & right edges first (and step below all objective rows).
                 if (_objPanel && _objPanel.gameObject.activeInHierarchy)
                 {
-                    if (ScreenRect(_objPanel.gameObject.transform as RectTransform, out Rect or) && or.height > 4f && or.yMax < Screen.height * 0.75f)
-                        bottom = Mathf.Max(bottom, or.yMax);
+                    if (ScreenRect(_objPanel.gameObject.transform as RectTransform, out Rect or) && or.width > 120f)
+                    {
+                        w = Mathf.Clamp(or.width, 220f * s, 420f * s);
+                        x = Mathf.Clamp(or.xMax - w, 8f * s, Screen.width - w - 8f * s);
+                        matchedWidth = true;
+                        if (or.yMax < Screen.height * 0.75f) bottom = Mathf.Max(bottom, or.yMax);
+                    }
                     RectTransform box = _objPanel.objectiveTrackerContainer;
                     if (box && box.gameObject.activeInHierarchy)
                     {
                         if (ScreenRect(box, out Rect br) && br.height > 2f && br.yMax < Screen.height * 0.75f)
+                        {
+                            if (!matchedWidth && br.width > 120f)
+                            {
+                                w = Mathf.Clamp(br.width, 220f * s, 420f * s);
+                                x = Mathf.Clamp(br.xMax - w, 8f * s, Screen.width - w - 8f * s);
+                                matchedWidth = true;
+                            }
                             bottom = Mathf.Max(bottom, br.yMax);
+                        }
                         for (int i = 0; i < box.childCount; i++)
                         {
                             RectTransform child = box.GetChild(i) as RectTransform;
@@ -391,7 +399,17 @@ namespace Jukebox
                     }
                 }
 
-                if (bottom > 20f) y = bottom + 8f * s;
+                if (ScreenRect(_diffRt, out Rect dr) && dr.width > 80f)
+                {
+                    if (!matchedWidth)
+                    {
+                        w = Mathf.Clamp(dr.width, 220f * s, 420f * s);
+                        x = Mathf.Clamp(dr.xMax - w, 8f * s, Screen.width - w - 8f * s);
+                    }
+                    bottom = Mathf.Max(bottom, dr.yMax);
+                }
+
+                if (bottom > 20f) y = bottom + 6f * s;
             }
             catch { }
         }
@@ -418,18 +436,18 @@ namespace Jukebox
 
         private GUIStyle _hdrStyle, _subStyle, _rowStyle, _rightStyle, _chipStyle;
 
-        // RoR2 HUD palette: dark slate backdrop, subtle 1px frame, warm header band, gold/cyan accents.
-        private static readonly Color BgDark = new Color(0.05f, 0.06f, 0.08f, 0.84f);
-        private static readonly Color HeaderBand = new Color(0.13f, 0.16f, 0.21f, 0.92f);
-        private static readonly Color StripBg = new Color(0.10f, 0.12f, 0.16f, 0.78f);
-        private static readonly Color StripHover = new Color(0.17f, 0.20f, 0.27f, 0.90f);
-        private static readonly Color StripMine = new Color(0.24f, 0.21f, 0.11f, 0.92f);
-        private static readonly Color BorderCol = new Color(0.38f, 0.43f, 0.50f, 0.52f);
-        private static readonly Color Gold = new Color(0.95f, 0.78f, 0.26f, 1f);
-        private static readonly Color Cyan = new Color(0.46f, 0.80f, 0.96f, 1f);
-        private static readonly Color TextBright = new Color(0.93f, 0.95f, 0.98f, 1f);
-        private static readonly Color TextMuted = new Color(0.62f, 0.68f, 0.76f, 1f);
-        private static readonly Color TextWarn = new Color(1f, 0.55f, 0.50f, 1f);
+        // RoR2 HUD palette: icy steel-blue backdrop matching the Difficulty & Objective panel.
+        private static readonly Color BgDark = new Color(0.28f, 0.36f, 0.44f, 0.86f);
+        private static readonly Color HeaderBand = new Color(0.20f, 0.27f, 0.34f, 0.94f);
+        private static readonly Color StripBg = new Color(0.14f, 0.19f, 0.25f, 0.85f);
+        private static readonly Color StripHover = new Color(0.22f, 0.30f, 0.38f, 0.94f);
+        private static readonly Color StripMine = new Color(0.28f, 0.27f, 0.16f, 0.94f);
+        private static readonly Color BorderCol = new Color(0.68f, 0.80f, 0.90f, 0.58f);
+        private static readonly Color Gold = new Color(1.00f, 0.84f, 0.32f, 1f);
+        private static readonly Color Cyan = new Color(0.56f, 0.86f, 1.00f, 1f);
+        private static readonly Color TextBright = new Color(0.96f, 0.98f, 1.00f, 1f);
+        private static readonly Color TextMuted = new Color(0.78f, 0.86f, 0.93f, 1f);
+        private static readonly Color TextWarn = new Color(1f, 0.58f, 0.52f, 1f);
 
         private void InitStyles(float s)
         {
@@ -489,15 +507,17 @@ namespace Jukebox
         private void OnGUI()
         {
             if (!ShowHud.Value || Run.instance == null) return;
+            bool paused = false;
+            try { paused = PauseScreenController.pauseScreenUp || PauseScreenController.instancesList.Count > 0; } catch { }
             // Hide while the scoreboard (Tab) is held unless the pause menu is open so it never clashes with the inventory overlay.
-            if (!PauseScreenController.paused && _hud && _hud.scoreboardPanel && _hud.scoreboardPanel.activeInHierarchy) return;
+            if (!paused && _hud && _hud.scoreboardPanel && _hud.scoreboardPanel.activeInHierarchy) return;
 
             float s = Mathf.Max(0.65f, Screen.height / 1080f);
             InitStyles(s);
             PlaceBelowDifficulty(s, out float x, out float y, out float w);
 
             Event ev = Event.current;
-            bool canClick = Cursor.visible || PauseScreenController.paused;
+            bool canClick = Cursor.visible || paused;
             if (!canClick || ev.type == EventType.MouseUp) _draggingVolume = false;
 
             float pad = 8f * s;
