@@ -556,10 +556,10 @@
                 </Grid>
             </Grid>
 
-            <!-- Left-edge tab: opens the install & update guide (PDF) in the browser -->
+            <!-- Left-edge tab: opens the install/update/publish guide in its own window -->
             <Button x:Name="GuideTabButton" Click="GuideTab_Click" HorizontalAlignment="Left" VerticalAlignment="Center"
                     Width="110" Height="40" Margin="-13,0,0,0" Cursor="Hand" Panel.ZIndex="50"
-                    ToolTip="Open the install &amp; update guide (PDF)">
+                    ToolTip="Open the install, update &amp; publish guide">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Bg" CornerRadius="10" Background="#D8101420" BorderBrush="{StaticResource Accent}" BorderThickness="1">
