@@ -114,7 +114,7 @@ namespace CharacterStatus
                     string baseText = Language.GetString(orig);
                     if (string.IsNullOrEmpty(baseText) || baseText == orig) continue;
 
-                    string key = (sd.bodyPrefab ? sd.bodyPrefab.name : sd.name) ?? "unknown";
+                    string key = (sd.bodyPrefab ? sd.bodyPrefab.name : sd.cachedName) ?? "unknown";
                     Entry e = Find(sd);
                     string line = e != null ? StatusLine(e.status) : null;
                     if (line == null)
