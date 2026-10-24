@@ -2,6 +2,7 @@
 # Packages the Broken Characters Mod zip on GitHub's build servers.
 set -euo pipefail
 mod="$(cd "$(dirname "$0")/.." && pwd)"
+python3 "$mod/release/sync_status.py"
 duelist="$mod/src/Duelist"   # the Duelist character (its own folder in the pack)
 dll="$(find "$duelist/bin/Release" -name DuelistMod.dll | head -1)"
 stage="$mod/release/stage"

@@ -29,17 +29,45 @@ namespace BrokenCharactersLauncher
         public bool IsNew { get; set; }
         public Visibility NewBadgeVisibility => IsNew ? Visibility.Visible : Visibility.Collapsed;
 
-        /// <summary>"green" (complete), "yellow" (in progress) or "red" (early / untested). Empty = no tag.</summary>
+        /// <summary>"green" (complete — only when declared done), "active" (actively working right now), "yellow" (in progress) or "red" (early / untested). Empty = no tag.</summary>
         public string Status { get; init; } = "";
-        public string StatusText => Status.ToLowerInvariant() switch { "green" => "COMPLETE", "yellow" => "IN PROGRESS", "red" => "EARLY", _ => "" };
+        public string Version { get; init; } = "";
+        public string Note { get; init; } = "";
+
+        public string StatusText
+        {
+            get
+            {
+                string ver = string.IsNullOrWhiteSpace(Version) ? "" : " · v" + Version.TrimStart('v', 'V');
+                return Status.ToLowerInvariant() switch
+                {
+                    "green" => "COMPLETE" + ver,
+                    "active" or "working" => "ACTIVE WIP" + ver,
+                    "yellow" => "IN PROGRESS" + (string.IsNullOrWhiteSpace(Version) ? "" : " v" + Version.TrimStart('v', 'V')),
+                    "red" => "EARLY" + ver,
+                    _ => ""
+                };
+            }
+        }
+
         public Brush StatusBrush => Status.ToLowerInvariant() switch
         {
             "green" => new SolidColorBrush(Color.FromRgb(0x4C, 0xD9, 0x64)),
+            "active" or "working" => new SolidColorBrush(Color.FromRgb(0x00, 0xE5, 0xFF)),
             "yellow" => new SolidColorBrush(Color.FromRgb(0xFF, 0xD2, 0x2E)),
             "red" => new SolidColorBrush(Color.FromRgb(0xFF, 0x4D, 0x4D)),
             _ => Brushes.Transparent
         };
         public Visibility StatusVisibility => StatusText.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        public string CardTooltip
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(Note)) return Tagline;
+                return string.IsNullOrWhiteSpace(Tagline) ? Note : Tagline + "\n" + Note;
+            }
+        }
     }
 
     /// <summary>One map or game mode thumbnail.</summary>
@@ -79,6 +107,8 @@ namespace BrokenCharactersLauncher
                         Portrait = Image(Str(c, "image"), imageBase),
                         AccentColor = ParseColor(Str(c, "accent")),
                         Status = Str(c, "status"),
+                        Version = Str(c, "version"),
+                        Note = Str(c, "note"),
                         IsNew = c.TryGetProperty("new", out JsonElement n) && n.ValueKind == JsonValueKind.True
                     });
                 }

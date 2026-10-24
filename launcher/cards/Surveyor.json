@@ -5,7 +5,9 @@
       "tagline": "Blind. Armored. Something follows.",
       "added": "2026-10-24T10:06:00-04:00",
       "accent": "#7AD33A",
-      "status": "red",
+      "status": "active",
+      "version": "0.5.0",
+      "note": "Active WIP (v0.5.0): MMB mode wheel/radial dial, 8 hidden LiDAR map upgrades, Proton Tether & Ghost-Trap spirit capture, 3D mesh item/chest outlines, smooth Peek fade",
       "image": "Assets/Roster/Surveyor.png"
     }
   ]

@@ -5,7 +5,8 @@
       "status": "yellow",
       "match": [
         "carmax"
-      ]
+      ],
+      "version": "1.0.0"
     },
     {
       "name": "AUDI TECHNICIAN",
@@ -13,7 +14,8 @@
       "match": [
         "auditechnician",
         "auditech"
-      ]
+      ],
+      "version": "1.0.1"
     },
     {
       "name": "BILLY BIGSUITS",
@@ -21,14 +23,16 @@
       "match": [
         "billybigsuits",
         "billy"
-      ]
+      ],
+      "version": "1.0.2"
     },
     {
       "name": "WILBUR",
       "status": "yellow",
       "match": [
         "wilbur"
-      ]
+      ],
+      "version": "1.0.0"
     },
     {
       "name": "BROTHER",
@@ -36,21 +40,24 @@
       "match": [
         "oatsbrother",
         "brother"
-      ]
+      ],
+      "version": "1.0.2"
     },
     {
       "name": "ASHWING DRAKE",
-      "status": "red",
+      "status": "yellow",
       "match": [
         "ashwing"
-      ]
+      ],
+      "version": "1.8.4"
     },
     {
       "name": "NIDUS",
       "status": "yellow",
       "match": [
         "nidus"
-      ]
+      ],
+      "version": "1.0.9"
     },
     {
       "name": "PHANTOM ASSASSIN",
@@ -58,21 +65,24 @@
       "match": [
         "phantomassassin",
         "phantom"
-      ]
+      ],
+      "version": "1.0.3"
     },
     {
       "name": "INFESTED GENERAL",
       "status": "yellow",
       "match": [
         "infestedgeneral"
-      ]
+      ],
+      "version": "1.1.11"
     },
     {
       "name": "GRAVITOS",
-      "status": "red",
+      "status": "yellow",
       "match": [
         "gravitos"
-      ]
+      ],
+      "version": "1.2.0"
     },
     {
       "name": "CLAY REBEL",
@@ -80,35 +90,41 @@
       "match": [
         "clayrebel",
         "rebel"
-      ]
+      ],
+      "version": "1.0.1"
     },
     {
       "name": "EMBERWARDEN",
       "status": "yellow",
       "match": [
         "emberwarden"
-      ]
+      ],
+      "version": "1.0.0"
     },
     {
       "name": "REAPER",
       "status": "green",
       "match": [
         "reaper"
-      ]
+      ],
+      "version": "1.0.0"
     },
     {
       "name": "THE DUELIST",
       "status": "yellow",
       "match": [
         "duelist"
-      ]
+      ],
+      "version": "1.0.0"
     },
     {
       "name": "THE SURVEYOR",
-      "status": "red",
+      "status": "active",
       "match": [
         "surveyor"
-      ]
+      ],
+      "version": "0.5.0",
+      "note": "Active WIP (v0.5.0): MMB mode wheel/radial dial, 8 hidden LiDAR map upgrades, Proton Tether & Ghost-Trap spirit capture, 3D mesh item/chest outlines, smooth Peek fade"
     }
   ]
 }

@@ -169,7 +169,7 @@
              other way so they stay upright while being clipped by the slanted frame. -->
         <DataTemplate x:Key="CharacterCard">
             <Grid x:Name="Card" Width="176" Height="292" Margin="-4,0,-4,0" Cursor="Hand" RenderTransformOrigin="0.5,0.5"
-                  ToolTip="{Binding Tagline}">
+                  ToolTip="{Binding CardTooltip}">
                 <Grid.RenderTransform>
                     <TransformGroup>
                         <ScaleTransform ScaleX="1" ScaleY="1" />

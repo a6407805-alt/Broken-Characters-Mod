@@ -45,7 +45,7 @@
       "tagline": "Frost dragon, ground and air.",
       "added": "2026-10-19T22:05:41-04:00",
       "accent": "#6FC8F0",
-      "status": "red",
+      "status": "yellow",
       "image": "Assets/Roster/AshwingDrake.png"
     },
     {
@@ -77,7 +77,7 @@
       "tagline": "Lift, slam, black hole.",
       "added": "2026-10-19T22:05:37-04:00",
       "accent": "#5A50D8",
-      "status": "red",
+      "status": "yellow",
       "image": "Assets/Roster/Gravitos.png"
     },
     {

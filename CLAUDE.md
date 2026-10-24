@@ -37,14 +37,22 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - Never run the installer on the owner's PC yourself. Game log for bugs: `BepInEx\LogOutput.log` (stage it, grep for
   the mod's namespace and "Exception").
 
-## Character status (green / yellow / red)
-- Every roster entry/card has `"status"`: `green` = complete, `yellow` = in progress, `red` = early / untested. The launcher
-  card shows it as a tag and `src/CharacterStatus/` adds a status line to each survivor's description in game.
-- The owner sets statuses by clicking answers in the chat (AskUserQuestion). To change one: edit `"status"` in
-  `launcher/roster.json` (existing characters) or `launcher/cards/<Mod>.json` (new ones; ALWAYS give a new card a status),
-  run `python3 release/sync_status.py` (rewrites `mods/CharacterStatus/status.json`; add a MATCH entry there for new names), commit both.
-- Current: green Billy Bigsuits, Brother, Clay Rebel, Reaper; yellow CarMax, Audi Technician, Wilbur, Nidus, Phantom Assassin,
-  Infested General, Emberwarden, Duelist; red Surveyor, Ashwing Drake, Gravitos.
+## Character status & Active Work Tracker (green / active / yellow / red)
+- Every roster entry/card has `"status"`, `"version"`, and optional `"note"`:
+  - `green` (`COMPLETE`, `#4CD964`): **ONLY assigned when the owner explicitly states they are done with the character.** Never auto-assign `green`.
+  - `active` (`ACTIVE WIP · vX.Y.Z` on Launcher card in Cyan `#00E5FF` / `STATUS: ACTIVELY WORKING (vX.Y.Z)` in-game): Assigned to the character(s) currently being actively developed right now, along with `"version"` and `"note"` describing what is being built/tested.
+  - `yellow` (`IN PROGRESS vX.Y.Z`, `#FFD22E`): Auto-assigned once a character's version climbs to `>= 0.3.0` (via `release/sync_status.py` and `release/merge_roster.py`), or when active work shifts to another character before this one is declared `green`.
+  - `red` (`EARLY · vX.Y.Z`, `#FF4D4D`): Early / untested stub (`< 0.3.0`).
+- **Rule when working on any character or mod**:
+  1. As you bump a mod's version (`PluginVersion` + `mods/<Mod>/manifest.json`), update its card (`launcher/cards/<Mod>.json` or `launcher/roster.json`) with `"status": "active"`, `"version": "<new_version>"`, and `"note": "<what is currently being worked on>"`.
+  2. Update `mods/CharacterStatus/status.json` (and the Active Work table below) so both the Launcher and in-game Character Select show the live version and active work status. (CI also runs `python3 release/sync_status.py` automatically on every build.)
+  3. Only switch a character to `"green"` when the owner explicitly states it is finished.
+- **Current Status & Active Work Log**:
+  - **Actively Working (`active`)**:
+    - **The Surveyor** (`v0.5.0`): MMB mode wheel/radial dial, 8 hidden LiDAR map upgrades, Proton Tether & Ghost-Trap spirit capture, 3D mesh item/chest/teleporter outlines, smooth Peek dot fade, heavy motion fix.
+    - **Jukebox** (`v1.1.3`, utility mod): RoR2-styled HUD panel under objective box, keys 1/2 volume boost, Vote to Skip (`0`).
+  - **Complete (`green` — owner confirmed done)**: Billy Bigsuits (`v1.0.2`), Brother (`v1.0.2`), Clay Rebel (`v1.0.1`), Reaper (`v1.0.0`).
+  - **In Progress (`yellow` — `>= 0.3.0`, not yet declared done)**: CarMax Specialist (`v1.0.0`), Audi Technician (`v1.0.1`), Wilbur (`v1.0.0`), Ashwing Drake (`v1.8.4`), Nidus (`v1.0.9`), Phantom Assassin (`v1.0.3`), Infested General (`v1.1.11`), Gravitos (`v1.2.0`), Emberwarden (`v1.0.0`), The Duelist (`v1.0.0`).
 
 ## Dev branch (optional, for risky experiments)
 - Owner's rule (Oct 24 2026): PLAY and TEST LEVEL load EVERY character, finished or not. Unfinished characters go to `main`

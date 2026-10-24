@@ -22,10 +22,10 @@ namespace CharacterStatus
     {
         public const string PluginGUID = "com.brokencharacters.characterstatus";
         public const string PluginName = "Character Status";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "1.1.0";
         private const string Prefix = "BC_STATUS_DESC_";
 
-        [Serializable] private class Entry { public string name; public string status; public string[] match; }
+        [Serializable] private class Entry { public string name; public string status; public string version; public string note; public string[] match; }
         [Serializable] private class FileData { public Entry[] characters; }
 
         private static ManualLogSource _log;
@@ -73,14 +73,24 @@ namespace CharacterStatus
             return null;
         }
 
-        private static string StatusLine(string status)
+        private static string StatusLine(Entry e)
         {
-            switch ((status ?? "").ToLowerInvariant())
+            if (e == null) return null;
+            string ver = !string.IsNullOrEmpty(e.version) ? " (v" + e.version.TrimStart('v', 'V') + ")" : "";
+            string note = !string.IsNullOrEmpty(e.note) ? " — " + e.note : "";
+            switch ((e.status ?? "").ToLowerInvariant())
             {
-                case "green": return "<color=#4CD964><b>STATUS: COMPLETE</b></color> Finished and working.";
-                case "yellow": return "<color=#FFD22E><b>STATUS: IN PROGRESS</b></color> Playable, but expect rough edges and changes.";
-                case "red": return "<color=#FF4D4D><b>STATUS: EARLY</b></color> Early or untested. It may be unfinished or broken.";
-                default: return null;
+                case "green":
+                    return "<color=#4CD964><b>STATUS: COMPLETE" + ver + "</b></color> Finished and working." + note;
+                case "active":
+                case "working":
+                    return "<color=#00E5FF><b>STATUS: ACTIVELY WORKING" + ver + "</b></color> Currently in active development" + (note.Length > 0 ? note + "." : ".");
+                case "yellow":
+                    return "<color=#FFD22E><b>STATUS: IN PROGRESS" + ver + "</b></color> Playable, but expect rough edges and changes" + (note.Length > 0 ? note + "." : ".");
+                case "red":
+                    return "<color=#FF4D4D><b>STATUS: EARLY" + ver + "</b></color> Early or untested. It may be unfinished or broken" + (note.Length > 0 ? note + "." : ".");
+                default:
+                    return null;
             }
         }
 
@@ -116,7 +126,7 @@ namespace CharacterStatus
 
                     string key = (sd.bodyPrefab ? sd.bodyPrefab.name : sd.cachedName) ?? "unknown";
                     Entry e = Find(sd);
-                    string line = e != null ? StatusLine(e.status) : null;
+                    string line = StatusLine(e);
                     if (line == null)
                     {
                         if (Reported.Add(key)) _log.LogInfo("No status for survivor '" + key + "' (" + Language.GetString(sd.displayNameToken) + ").");
