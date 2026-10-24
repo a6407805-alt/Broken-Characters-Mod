@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.4.3";
+        public const string PluginVersion = "0.4.4";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -46,7 +46,8 @@ namespace Surveyor
         public static ConfigEntry<int> MaxDots, RaysPerFrame, DotDivider;
         public static ConfigEntry<float> ScanRange, DotLife;
         public static ConfigEntry<float> PeekSeconds, PeekCooldown, OverdriveCooldown, SweepSeconds, FocusSeconds, EchoSeconds;
-        public static ConfigEntry<string> ScanNextKey, ScanPrevKey, PeekKey;
+        public static ConfigEntry<string> ScanNextKey, ScanPrevKey, PeekKey, TrapKey;
+        public static ConfigEntry<float> TrapCooldown, TrapDuration, TrapPullSeconds;
         public static ConfigEntry<bool> UseCustomModel;
         public static ConfigEntry<float> ModelScale, HeavyStepShake;
         public static ConfigEntry<bool> HeavyMotion;
@@ -133,6 +134,10 @@ namespace Surveyor
             ScanNextKey = Config.Bind("8. Peek and Overdrive", "ScanNextKey_v1", "E", "Next scan mode: CONE, SWEEP, WIDE, FOCUS, ECHO. (E is also the game's interact key; change it here if that clashes.)");
             ScanPrevKey = Config.Bind("8. Peek and Overdrive", "ScanPrevKey_v1", "Q", "Previous scan mode. (Q is also the game's equipment key.)");
             PeekKey = Config.Bind("8. Peek and Overdrive", "PeekKey_v1", "F", "Peek (visor off) on its own key, whatever skill is in the utility slot.");
+            TrapKey = Config.Bind("6. Shimmer Demon", "TrapKey_v1", "G", "Throw out a Ghost-Trap Containment Box. Hold M1 or M2 on the Shimmer Demon to tether and reel it into the trap to restore a lost sense.");
+            TrapCooldown = Config.Bind("6. Shimmer Demon", "TrapCooldown_v1", 20f, "Seconds between containment trap deployments.");
+            TrapDuration = Config.Bind("6. Shimmer Demon", "TrapDuration_v1", 14f, "Seconds the containment trap stays open on the ground.");
+            TrapPullSeconds = Config.Bind("6. Shimmer Demon", "TrapCaptureSeconds_v1", 2.2f, "Seconds of Proton-Tether beam & vacuum pull needed to slam the Shimmer Demon into the trap.");
 
             DemonEnabled = Config.Bind("6. Shimmer Demon", "Enabled", true, "The Shimmer Demon stalks the Surveyor (only she can see it).");
             DemonFirstSpawn = Config.Bind("6. Shimmer Demon", "FirstSpawnSeconds", 80f, "Seconds into a stage before it appears.");
@@ -176,7 +181,7 @@ namespace Surveyor
                 "< ! > Your LiDAR draws the world in dots: red is close, yellow is mid, green is far. Shooting and shockwaves paint it fast. Press Q / E to switch how the scanner sweeps (Cone, Sweep, Wide, Focus, Echo). Press F to Peek: the visor lifts for a blurry, blown-out look at the real world.\r\n\r\n" +
                 "< ! > The minigun needs to spool. Hold the trigger and it rises to full fire rate, but you move slower while it is spun up. Anchor to spool faster.\r\n\r\n" +
                 "< ! > Something shimmering follows you. Only you can see it, and you cannot hurt it, but a fully spooled minigun, the Lance and the Shockwave push it back.\r\n\r\n" +
-                "< ! > If it touches you it eats a sense: Hearing, Sight, Touch or Balance, until the stage ends.</color>");
+                "< ! > If it touches you it eats a sense: Hearing, Sight, Touch or Balance. Press G to throw a Ghost-Trap Containment Box and hold your weapon on the Demon to tether and vacuum-capture it—restoring your stolen sense!</color>");
             LanguageAPI.Add(T + "OUTRO", "..and so she left, still hearing the scanner ping.");
             LanguageAPI.Add(T + "FAIL", "..and so she vanished, and the dots went dark.");
             LanguageAPI.Add(T + "SKIN_DEFAULT", "Survey Plate");

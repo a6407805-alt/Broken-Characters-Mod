@@ -39,7 +39,7 @@ namespace Jukebox
         public static ConfigEntry<int> Volume;
         public static ConfigEntry<bool> MuteGameMusic, VoteOnStageStart, VoteWhenSongEnds, ShowHud;
         public static ConfigEntry<float> VoteSeconds;
-        public static ConfigEntry<KeyCode> Vote1Key, Vote2Key, Vote3Key, StartVoteKey, StopKey, VolumeUpKey, VolumeDownKey;
+        public static ConfigEntry<KeyCode> Vote1Key, Vote2Key, Vote3Key, StartVoteKey, SkipKey, StopKey, VolumeUpKey, VolumeDownKey;
 
         // ---- shared state (every machine) ----
         public static string[] VoteIds = new string[0], VoteTitles = new string[0];
@@ -49,12 +49,15 @@ namespace Jukebox
         public static int MyVote = -1;
         public static string NowPlayingId = "", NowPlayingTitle = "";
         public static bool NowPlayingMissing, NowPlayingBroken;
+        public static int SkipCount, SkipNeeded;
+        public static bool MySkipVote;
         private static float _nowPlayingShownAt = -100f;
         private static string _toast = "";
         private static float _toastUntil;
 
         // ---- host only ----
         private static readonly Dictionary<uint, int> Ballots = new Dictionary<uint, int>();
+        private static readonly HashSet<uint> SkipBallots = new HashSet<uint>();
         private static bool _hostWasPlaying;
         private static float _nextVoteAllowed;
 
@@ -76,6 +79,7 @@ namespace Jukebox
             Vote2Key = Config.Bind("Keys", "Vote2", KeyCode.Alpha8, "Vote for the second song.");
             Vote3Key = Config.Bind("Keys", "Vote3", KeyCode.Alpha9, "Vote for the third song.");
             StartVoteKey = Config.Bind("Keys", "StartVote", KeyCode.J, "Ask for a song vote now.");
+            SkipKey = Config.Bind("Keys", "Skip", KeyCode.N, "Vote to skip the current song.");
             StopKey = Config.Bind("Keys", "Stop", KeyCode.K, "Host: stop the music for everyone.");
             VolumeUpKey = Config.Bind("Keys", "VolumeUp", KeyCode.Equals, "Jukebox volume up (hold Shift).");
             VolumeDownKey = Config.Bind("Keys", "VolumeDown", KeyCode.Minus, "Jukebox volume down (hold Shift).");
@@ -86,6 +90,8 @@ namespace Jukebox
             NetworkingAPI.RegisterMessageType<JbTallyMessage>();
             NetworkingAPI.RegisterMessageType<JbPlayMessage>();
             NetworkingAPI.RegisterMessageType<JbRequestMessage>();
+            NetworkingAPI.RegisterMessageType<JbSkipBallotMessage>();
+            NetworkingAPI.RegisterMessageType<JbSkipTallyMessage>();
 
             Stage.onServerStageBegin += OnServerStageBegin;
             Run.onRunDestroyGlobal += _ => ResetAll();
@@ -106,7 +112,10 @@ namespace Jukebox
             GameMusic.Restore();
             VoteOpen = false;
             NowPlayingId = NowPlayingTitle = "";
+            SkipCount = SkipNeeded = 0;
+            MySkipVote = false;
             Ballots.Clear();
+            SkipBallots.Clear();
             _hostWasPlaying = false;
         }
 
@@ -131,6 +140,7 @@ namespace Jukebox
                     else if (Input.GetKeyDown(Vote3Key.Value)) CastVote(2);
                 }
                 if (Input.GetKeyDown(StartVoteKey.Value)) RequestVote();
+                if (Input.GetKeyDown(SkipKey.Value)) CastSkipVote();
                 if (Input.GetKeyDown(StopKey.Value)) StopPressed();
                 bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
                 if (shift && Input.GetKeyDown(VolumeUpKey.Value)) Volume.Value = Mathf.Min(100, Volume.Value + 10);
@@ -246,10 +256,36 @@ namespace Jukebox
         public static void HostPlay(string id, string title)
         {
             if (!NetworkServer.active) return;
+            SkipBallots.Clear();
             var msg = new JbPlayMessage { Id = id ?? "", Title = title ?? "" };
             msg.Handle();
             try { msg.Send(NetworkDestination.Clients); } catch { }
             _hostWasPlaying = MciPlayer.Busy;
+        }
+
+        public static void HostReceiveSkip(uint voter)
+        {
+            if (!NetworkServer.active || NowPlayingId.Length == 0) return;
+            SkipBallots.Add(voter);
+            int players = Mathf.Max(1, NetworkUser.readOnlyInstancesList.Count);
+            int needed = Mathf.Max(1, (players + 1) / 2);
+            var tally = new JbSkipTallyMessage { Count = SkipBallots.Count, Needed = needed };
+            tally.Handle();
+            try { tally.Send(NetworkDestination.Clients); } catch { }
+
+            if (SkipBallots.Count >= needed)
+            {
+                SkipBallots.Clear();
+                if (!VoteOpen)
+                {
+                    _nextVoteAllowed = 0f;
+                    HostStartVote();
+                }
+                else
+                {
+                    HostPlay("", "");
+                }
+            }
         }
 
         // ================================================================== client side
@@ -261,6 +297,23 @@ namespace Jukebox
             uint me = LocalVoterId();
             if (NetworkServer.active) HostReceiveBallot(me, choice);
             else try { new JbBallotMessage { Voter = me, Choice = choice }.Send(NetworkDestination.Server); } catch { }
+        }
+
+        private static void CastSkipVote()
+        {
+            if (NowPlayingId.Length == 0)
+            {
+                RequestVote();
+                return;
+            }
+            MySkipVote = true;
+            uint me = LocalVoterId();
+            if (NetworkServer.active) HostReceiveSkip(me);
+            else
+            {
+                try { new JbSkipBallotMessage { Voter = me }.Send(NetworkDestination.Server); } catch { }
+                Toast("Voted to skip the current song.");
+            }
         }
 
         private static void RequestVote()
@@ -299,6 +352,8 @@ namespace Jukebox
         {
             VoteOpen = false;
             MyVote = -1;
+            MySkipVote = false;
+            SkipCount = SkipNeeded = 0;
             MciPlayer.Stop();
             NowPlayingId = id ?? "";
             NowPlayingTitle = title ?? "";
@@ -547,22 +602,33 @@ namespace Jukebox
             Fill(hdr, HeaderBand);
             Fill(new Rect(hdr.x, hdr.y, 3f * s, hdr.height), Gold);
             Fill(new Rect(hdr.x, hdr.yMax - 1f, hdr.width, 1f), new Color(1f, 1f, 1f, 0.08f));
-            ShadowLabel(new Rect(hdr.x + 9f * s, hdr.y, hdr.width * 0.5f, hdr.height), "♫  JUKEBOX", _hdrStyle, Gold);
+            ShadowLabel(new Rect(hdr.x + 9f * s, hdr.y, hdr.width * 0.45f, hdr.height), "♫ JUKEBOX", _hdrStyle, Gold);
 
-            // Action chips on the right of the header ([J] VOTE, [K] STOP)
+            // Action chips on the right of the header ([N] SKIP, [J] VOTE, [K] STOP)
             float chipH = hdrH - 4f * s;
-            float rightX = hdr.xMax - 5f * s;
+            float rightX = hdr.xMax - 4f * s;
             if (NowPlayingId.Length > 0 && NetworkServer.active)
             {
-                float stopW = 58f * s;
+                float stopW = 54f * s;
                 rightX -= stopW;
                 if (ChipButton(new Rect(rightX, hdr.y + 2f * s, stopW, chipH), "[" + KeyName(StopKey.Value) + "] STOP", TextWarn, canClick, ev))
                     StopPressed();
-                rightX -= 4f * s;
+                rightX -= 3f * s;
             }
-            if (!VoteOpen)
+            if (NowPlayingId.Length > 0)
             {
-                float voteW = 62f * s;
+                string skipLabel = SkipCount > 0 && SkipNeeded > 1
+                    ? "[" + KeyName(SkipKey.Value) + "] SKIP " + SkipCount + "/" + SkipNeeded
+                    : "[" + KeyName(SkipKey.Value) + "] SKIP";
+                float skipW = (SkipCount > 0 && SkipNeeded > 1 ? 74f : 56f) * s;
+                rightX -= skipW;
+                if (ChipButton(new Rect(rightX, hdr.y + 2f * s, skipW, chipH), skipLabel, MySkipVote ? Gold : Cyan, canClick, ev))
+                    CastSkipVote();
+                rightX -= 3f * s;
+            }
+            else if (!VoteOpen)
+            {
+                float voteW = 58f * s;
                 rightX -= voteW;
                 if (ChipButton(new Rect(rightX, hdr.y + 2f * s, voteW, chipH), "[" + KeyName(StartVoteKey.Value) + "] VOTE", Cyan, canClick, ev))
                     RequestVote();

@@ -39,6 +39,24 @@ namespace Surveyor
             return pick;
         }
 
+        /// <summary>Restores one stolen sense (when the Shimmer Demon is vacuum-captured in the Ghost-Trap). Returns its name, or null if none were lost.</summary>
+        public static string RestoreOne()
+        {
+            List<string> stolen = new List<string>();
+            if (Touch) stolen.Add("TOUCH");
+            if (Sight) stolen.Add("SIGHT");
+            if (Hearing) stolen.Add("HEARING");
+            if (Balance) stolen.Add("BALANCE");
+            if (stolen.Count == 0) return null;
+            string pick = stolen[Random.Range(0, stolen.Count)];
+            if (pick == "HEARING") { Hearing = false; SvrAudio.Muffle(false); }
+            else if (pick == "SIGHT") Sight = false;
+            else if (pick == "TOUCH") Touch = false;
+            else Balance = false;
+            Version++;
+            return pick;
+        }
+
         public static void ResetStage()
         {
             bool any = Hearing || Sight || Touch || Balance;
@@ -119,6 +137,15 @@ namespace Surveyor
         private float _gait, _speedNow, _stagT, _lungeT;
         private Vector3 _lastPos;
         private static readonly Vector3[] Sph = BuildSphere();
+
+        // Ghostbusters / Luigi's Mansion containment trap + proton tether state
+        public bool TrapActive;
+        public Vector3 TrapPos;
+        public float TrapUntil, TrapReadyAt;
+        public float CaptureProgress; // 0 .. 1
+        public bool TetherActive;
+        public string LastRestoredSense;
+        public float LastRestoredUntil;
 
         public bool Active { get { return State != Mode.Dormant && State != Mode.Gone; } }
         public Vector3 Center { get { return _center; } }
@@ -255,16 +282,17 @@ namespace Surveyor
             }
         }
 
-        /// <summary>Its points in world space for this frame (posed, breathing, shaking when staggered).</summary>
+        /// <summary>Its points in world space for this frame (posed, breathing, shaking when staggered, shrinking when vacuum-trapped).</summary>
         public void FillWorld(List<Vector3> into, float t)
         {
             into.Clear();
             BuildPose(t);
             Quaternion q = Quaternion.Euler(0f, Yaw, 0f);
-            float shake = State == Mode.Stagger ? 0.07f : 0.012f;
+            float shake = (State == Mode.Stagger || TetherActive) ? 0.08f : 0.012f;
+            float shrink = TrapActive && CaptureProgress > 0.15f ? Mathf.Lerp(1.15f, 0.28f, Mathf.SmoothStep(0f, 1f, CaptureProgress)) : 1.15f;
             for (int i = 0; i < _local.Count; i++)
             {
-                Vector3 w = _local[i] * 1.15f;
+                Vector3 w = _local[i] * shrink;
                 w.x += (Random.value - 0.5f) * shake;
                 w.z += (Random.value - 0.5f) * shake;
                 into.Add(Pos + q * w);
@@ -328,7 +356,51 @@ namespace Surveyor
 
         public void LanceHit(Ray aim)
         {
-            if (Active && Near(aim, 150f)) Knock(aim.origin, 10f, SvrPlugin.LanceStagger.Value);
+            if (!Active) return;
+            if (TrapActive && Near(aim, 150f))
+            {
+                // When a Ghost-Trap is open, a Lance hit reels the Demon straight toward the trap and adds capture progress!
+                Vector3 toTrap = TrapPos - Pos;
+                toTrap.y = 0f;
+                if (toTrap.sqrMagnitude > 0.01f) Pos += toTrap.normalized * Mathf.Min(12f, toTrap.magnitude * 0.65f);
+                _stagger = Mathf.Max(_stagger, SvrPlugin.LanceStagger.Value);
+                State = Mode.Stagger;
+                CaptureProgress = Mathf.Clamp01(CaptureProgress + 0.35f);
+                return;
+            }
+            if (Near(aim, 150f)) Knock(aim.origin, 10f, SvrPlugin.LanceStagger.Value);
+        }
+
+        public void DeployTrap(CharacterBody body, InputBankTest input)
+        {
+            Vector3 fwd = input ? input.aimDirection : body.gameObject.transform.forward;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward;
+            fwd.Normalize();
+            Vector3 p = body.footPosition + fwd * 8.5f;
+            p.y = GroundY(p, body.footPosition.y);
+            TrapPos = p;
+            TrapActive = true;
+            TrapUntil = Time.time + SvrPlugin.TrapDuration.Value;
+            TrapReadyAt = Time.time + SvrPlugin.TrapCooldown.Value;
+            CaptureProgress = 0f;
+            TetherActive = false;
+            Util.PlaySound("Play_engi_M2_throw", body.gameObject);
+
+            // If the Demon isn't currently on the field (and we have a stolen sense to recover, or want to bust it),
+            // the Ghost-Trap's ectoplasmic lure immediately draws the Demon out nearby!
+            if (!Active)
+            {
+                float a = Random.value * 6.28f;
+                Vector3 sp = p + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * Random.Range(16f, 24f);
+                sp.y = GroundY(sp, body.footPosition.y);
+                Pos = sp;
+                _lastPos = sp;
+                State = Mode.Stalk;
+                _modeTimer = 14f;
+                _chain = 0f;
+                _center = Pos + Vector3.up * 1.4f;
+            }
         }
 
         public void Pulse(Vector3 at, float radius)
@@ -367,23 +439,83 @@ namespace Surveyor
             _center = Pos + Vector3.up * 1.4f;
         }
 
-        public void Tick(float dt, CharacterBody body)
+        public void Tick(float dt, CharacterBody body, InputBankTest input)
         {
-            if (!SvrPlugin.DemonEnabled.Value) { State = Mode.Dormant; return; }
+            if (TrapActive && Time.time >= TrapUntil)
+            {
+                TrapActive = false;
+                TetherActive = false;
+                CaptureProgress = 0f;
+            }
+
+            if (!SvrPlugin.DemonEnabled.Value) { State = Mode.Dormant; TetherActive = false; return; }
             _stageTime += dt;
             if (_chainT > 0f) { _chainT -= dt; if (_chainT <= 0f) _chain = 0f; }
             Vector3 pp = body.footPosition;
 
             if (State == Mode.Dormant)
             {
+                TetherActive = false;
                 if (_stageTime >= SvrPlugin.DemonFirstSpawn.Value) Spawn(pp);
                 return;
             }
             if (State == Mode.Gone)
             {
+                TetherActive = false;
                 _goneTimer -= dt;
                 if (_goneTimer <= 0f && SvrSenses.Lost < SvrPlugin.MaxSensesLost.Value) Spawn(pp);
                 return;
+            }
+
+            // Ghostbusters Proton-Tether & Luigi's Mansion Vacuum Trap logic:
+            // When the Ghost-Trap is active on the ground, aiming near the Demon while holding M1 or M2 fires the
+            // Proton Tether stream, dragging the struggling Demon into the trap's vortex cone.
+            TetherActive = false;
+            float trapDist = TrapActive ? Vector3.Distance(new Vector3(Pos.x, TrapPos.y, Pos.z), TrapPos) : 999f;
+            if (TrapActive && input != null)
+            {
+                Ray aim = new Ray(input.aimOrigin, input.aimDirection);
+                Vector3 toDemon = _center - aim.origin;
+                float dDemon = toDemon.magnitude;
+                float angle = dDemon > 0.1f ? Vector3.Angle(aim.direction, toDemon) : 0f;
+                bool firing = input.skill1.down || input.skill2.down;
+                if (firing && dDemon < 65f && angle < 24f)
+                {
+                    TetherActive = true;
+                    State = Mode.Stagger;
+                    _stagger = Mathf.Max(_stagger, 0.45f);
+                }
+            }
+
+            if (TrapActive && (TetherActive || trapDist < 9.5f))
+            {
+                Vector3 toTrap = TrapPos - Pos;
+                Vector3 flatTrap = new Vector3(toTrap.x, 0f, toTrap.z);
+                float td = flatTrap.magnitude;
+                // Spiral vortex pull into the trap
+                Vector3 pullDir = td > 0.05f ? flatTrap / td : Vector3.zero;
+                Vector3 swirl = new Vector3(-pullDir.z, 0f, pullDir.x);
+                float pullSpeed = (TetherActive ? 13.5f : 5.5f) + CaptureProgress * 7f;
+                Pos += (pullDir + swirl * (TetherActive ? 0.38f : 0.2f)) * pullSpeed * dt;
+                Yaw += (TetherActive ? 540f : 220f) * dt;
+
+                float pullDur = Mathf.Max(0.8f, SvrPlugin.TrapPullSeconds.Value);
+                float rate = (TetherActive ? 1f : 0.35f) * (td < 4.5f ? 1.35f : 0.85f) / pullDur;
+                CaptureProgress = Mathf.Clamp01(CaptureProgress + rate * dt);
+
+                Pos.y = Mathf.MoveTowards(Pos.y, TrapPos.y + (1f - CaptureProgress) * 0.6f, 12f * dt);
+                _center = Pos + Vector3.up * Mathf.Lerp(1.4f, 0.35f, CaptureProgress);
+                Animate(dt);
+
+                if (CaptureProgress >= 1f || (td < 1.35f && CaptureProgress > 0.65f))
+                {
+                    CaptureDemon(body);
+                }
+                return;
+            }
+            else if (TrapActive && CaptureProgress > 0f)
+            {
+                CaptureProgress = Mathf.Max(0f, CaptureProgress - dt * 0.25f);
             }
 
             Vector3 to = pp - Pos;
@@ -437,6 +569,34 @@ namespace Surveyor
             if (State != Mode.Stagger && Vector3.Distance(body.corePosition, _center) < SvrPlugin.DemonContactRange.Value + 0.6f) Feed();
         }
 
+        private void CaptureDemon(CharacterBody body)
+        {
+            TrapActive = false;
+            TetherActive = false;
+            CaptureProgress = 0f;
+            State = Mode.Gone;
+            _goneTimer = SvrPlugin.DemonRespawn.Value * 1.25f;
+            Util.PlaySound("Play_UI_obj_casinoChest_open", body.gameObject);
+            try
+            {
+                GameObject fx = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/OmniEffect/OmniExplosionVFX");
+                if (fx) EffectManager.SpawnEffect(fx, new EffectData { origin = TrapPos + Vector3.up * 0.5f, scale = 5f }, false);
+            }
+            catch { }
+
+            string restored = SvrSenses.RestoreOne();
+            LastRestoredSense = restored ?? "ALL SENSES";
+            LastRestoredUntil = Time.time + 3.5f;
+            if (restored != null)
+            {
+                try { Chat.AddMessage("<color=#58ff8a>SHIMMER DEMON CONTAINED! Restored lost sense: " + restored + ".</color>"); } catch { }
+            }
+            else
+            {
+                try { Chat.AddMessage("<color=#58ff8a>SHIMMER DEMON CONTAINED! Ectoplasmic trap sealed.</color>"); } catch { }
+            }
+        }
+
         private void Feed()
         {
             string sense = SvrSenses.TakeRandom();
@@ -478,6 +638,23 @@ namespace Surveyor
         private bool _loggedPeekFx, _peekNeedBurst;
 
         // Tracked stage gameplay objects (chests, shrines, shops, barrels, dropped items, teleporter)
+        private class CachedMeshData
+        {
+            public Vector3[] Verts;
+            public Vector3[] EdgeA;
+            public Vector3[] EdgeB;
+        }
+        private class MeshPart
+        {
+            public Transform Tr;
+            public CachedMeshData Data;
+        }
+        private class PoiOutline
+        {
+            public float NextCheck;
+            public bool Complete;
+            public readonly List<MeshPart> Parts = new List<MeshPart>(4);
+        }
         private struct Poi
         {
             public Transform Tr;
@@ -486,10 +663,15 @@ namespace Surveyor
             public Color Col;
             public string Tag;
             public int Kind; // 0 = chest/shop, 1 = shrine/drone, 2 = barrel, 3 = item/pickup, 4 = teleporter
+            public PoiOutline Outline;
         }
         private readonly List<Poi> _pois = new List<Poi>(64);
+        private static readonly Dictionary<int, CachedMeshData> _meshCache = new Dictionary<int, CachedMeshData>(128);
+        private readonly Dictionary<int, PoiOutline> _poiOutlines = new Dictionary<int, PoiOutline>(128);
+        private readonly List<Vector2> _hullPts = new List<Vector2>(48);
+        private readonly List<Vector2> _hullOut = new List<Vector2>(24);
         private float _nextPoiRefresh, _nextPoiPaint;
-        private static FieldInfo _fiPurchaseAvail, _fiChestOpened, _fiBarrelOpened, _fiShopPurchased;
+        private static FieldInfo _fiPurchaseAvail, _fiChestOpened, _fiBarrelOpened, _fiShopPurchased, _fiGpcPickup;
         private static bool _fiResolved;
 
         private Dot[] _dots;
@@ -609,6 +791,309 @@ namespace Surveyor
             try { _fiChestOpened = typeof(ChestBehavior).GetField("isChestOpened", flags); } catch { }
             try { _fiBarrelOpened = typeof(BarrelInteraction).GetField("opened", flags); } catch { }
             try { _fiShopPurchased = typeof(ShopTerminalBehavior).GetField("hasBeenPurchased", flags); } catch { }
+            try { _fiGpcPickup = typeof(GenericPickupController).GetField("pickupIndex", flags); } catch { }
+        }
+
+        private static void ResolvePickupDisplay(GameObject go, ref string tag, ref Color col)
+        {
+            if (!go) return;
+            try
+            {
+                PickupIndex idx = PickupIndex.none;
+                PickupDisplay pd = go.GetComponentInChildren<PickupDisplay>();
+                if (pd) idx = pd.GetPickupIndex();
+                if (idx == PickupIndex.none)
+                {
+                    EnsureFields();
+                    GenericPickupController gpc = go.GetComponent<GenericPickupController>();
+                    if (gpc && _fiGpcPickup != null)
+                    {
+                        object v = _fiGpcPickup.GetValue(gpc);
+                        if (v is PickupIndex pi) idx = pi;
+                    }
+                }
+                if (idx != PickupIndex.none)
+                {
+                    PickupDef def = PickupCatalog.GetPickupDef(idx);
+                    if (def != null)
+                    {
+                        if (!string.IsNullOrEmpty(def.nameToken))
+                        {
+                            string loc = Language.GetString(def.nameToken);
+                            if (!string.IsNullOrEmpty(loc) && loc != def.nameToken)
+                                tag = loc.ToUpperInvariant();
+                        }
+                        Color bc = def.baseColor;
+                        float maxC = Mathf.Max(bc.r, Mathf.Max(bc.g, bc.b));
+                        if (maxC > 0.05f)
+                        {
+                            // Boost brightness/saturation slightly so white/green/red/yellow/lunar/void tiers pop on black LiDAR
+                            col = Color.Lerp(bc * (1f / Mathf.Max(0.45f, maxC)), Color.white, 0.18f);
+                            col.a = 1f;
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static CachedMeshData GetCachedMesh(Mesh m)
+        {
+            if (!m) return null;
+            int id = m.GetInstanceID();
+            CachedMeshData data;
+            if (_meshCache.TryGetValue(id, out data)) return data;
+
+            data = new CachedMeshData();
+            List<Vector3> vList = new List<Vector3>(180);
+            List<Vector3> eaList = new List<Vector3>(120);
+            List<Vector3> ebList = new List<Vector3>(120);
+
+            try
+            {
+                if (m.isReadable)
+                {
+                    Vector3[] verts = m.vertices;
+                    if (verts != null && verts.Length > 0)
+                    {
+                        int vStep = Mathf.Max(1, verts.Length / 150);
+                        for (int i = 0; i < verts.Length && vList.Count < 160; i += vStep)
+                            vList.Add(verts[i]);
+
+                        int[] tris = m.triangles;
+                        if (tris != null && tris.Length >= 3)
+                        {
+                            int triCount = tris.Length / 3;
+                            int tStep = Mathf.Max(1, triCount / 90);
+                            for (int t = 0; t < triCount && eaList.Count < 110; t += tStep)
+                            {
+                                int b = t * 3;
+                                Vector3 v0 = verts[tris[b]];
+                                Vector3 v1 = verts[tris[b + 1]];
+                                Vector3 v2 = verts[tris[b + 2]];
+                                // Pick the longest edge of this triangle to emphasize structural silhouette lines
+                                float d01 = (v0 - v1).sqrMagnitude;
+                                float d12 = (v1 - v2).sqrMagnitude;
+                                float d20 = (v2 - v0).sqrMagnitude;
+                                if (d01 >= d12 && d01 >= d20) { eaList.Add(v0); ebList.Add(v1); }
+                                else if (d12 >= d01 && d12 >= d20) { eaList.Add(v1); ebList.Add(v2); }
+                                else { eaList.Add(v2); ebList.Add(v0); }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // If mesh.isReadable is false on a cooked asset-bundle mesh, raycast against an isolated MeshCollider
+            // from a 160-direction Fibonacci sphere to capture the exact 3D triangle surface contour of the item/chest!
+            if (vList.Count < 12)
+            {
+                GameObject probe = null;
+                try
+                {
+                    Bounds b = m.bounds;
+                    float rad = Mathf.Max(0.15f, b.extents.magnitude * 1.45f);
+                    probe = new GameObject("SvrMeshProbe");
+                    probe.transform.position = new Vector3(0f, -9500f, 0f);
+                    MeshCollider mc = probe.AddComponent<MeshCollider>();
+                    mc.sharedMesh = m;
+
+                    Vector3 worldCenter = probe.transform.position + b.center;
+                    Vector3 prevHit = Vector3.zero;
+                    bool hasPrev = false;
+                    const int rays = 160;
+                    for (int i = 0; i < rays; i++)
+                    {
+                        float y = 1f - 2f * (i + 0.5f) / rays;
+                        float r = Mathf.Sqrt(Mathf.Max(0f, 1f - y * y));
+                        float phi = i * 2.3999632f;
+                        Vector3 dir = new Vector3(Mathf.Cos(phi) * r, y, Mathf.Sin(phi) * r);
+                        Ray ray = new Ray(worldCenter + dir * rad, -dir);
+                        RaycastHit hit;
+                        if (mc.Raycast(ray, out hit, rad * 2.1f))
+                        {
+                            Vector3 localPt = hit.point - probe.transform.position;
+                            vList.Add(localPt);
+                            if (hasPrev && (localPt - prevHit).sqrMagnitude < (b.extents.sqrMagnitude * 0.45f) && eaList.Count < 110)
+                            {
+                                eaList.Add(prevHit);
+                                ebList.Add(localPt);
+                            }
+                            prevHit = localPt;
+                            hasPrev = true;
+                        }
+                        else
+                        {
+                            hasPrev = false;
+                        }
+                    }
+                }
+                catch { }
+                finally
+                {
+                    if (probe) DestroyImmediate(probe);
+                }
+            }
+
+            // Final fallback: trace the mesh's local sub-bounds silhouette (octagonal prism + contour ribs) so it is never a plain cube
+            if (vList.Count < 8)
+            {
+                Bounds b = m.bounds;
+                Vector3 c = b.center;
+                Vector3 e = Vector3.Max(b.extents, new Vector3(0.08f, 0.08f, 0.08f));
+                for (int ring = 0; ring < 5; ring++)
+                {
+                    float yf = Mathf.Lerp(-0.92f, 0.92f, ring / 4f);
+                    float pinch = 1f - 0.22f * Mathf.Abs(yf);
+                    Vector3 prev = Vector3.zero;
+                    for (int k = 0; k <= 12; k++)
+                    {
+                        float ang = (k % 12) * (6.2831853f / 12f);
+                        Vector3 pt = c + new Vector3(Mathf.Cos(ang) * e.x * pinch, yf * e.y, Mathf.Sin(ang) * e.z * pinch);
+                        if (k < 12) vList.Add(pt);
+                        if (k > 0) { eaList.Add(prev); ebList.Add(pt); }
+                        prev = pt;
+                    }
+                }
+            }
+
+            data.Verts = vList.ToArray();
+            data.EdgeA = eaList.ToArray();
+            data.EdgeB = ebList.ToArray();
+            _meshCache[id] = data;
+            return data;
+        }
+
+        private PoiOutline GetOrBuildOutline(Transform root, int kind)
+        {
+            if (!root) return null;
+            int id = root.GetInstanceID();
+            PoiOutline outline;
+            if (_poiOutlines.TryGetValue(id, out outline))
+            {
+                if (outline.Complete || Time.time < outline.NextCheck) return outline;
+            }
+            else
+            {
+                outline = new PoiOutline();
+                _poiOutlines[id] = outline;
+            }
+
+            outline.Parts.Clear();
+            outline.NextCheck = Time.time + 0.35f;
+
+            try
+            {
+                // For dropped items, prefer the PickupDisplay's actual 3D item model hierarchy (so we don't sample outer trigger spheres)
+                Transform searchRoot = root;
+                if (kind == 3)
+                {
+                    PickupDisplay pd = root.GetComponentInChildren<PickupDisplay>();
+                    if (pd)
+                    {
+                        List<Renderer> mrs = pd.modelRenderers;
+                        if (mrs != null && mrs.Count > 0)
+                        {
+                            for (int i = 0; i < mrs.Count; i++)
+                            {
+                                Renderer r = mrs[i];
+                                if (!r) continue;
+                                MeshFilter mf = r.GetComponent<MeshFilter>();
+                                Mesh mesh = mf ? mf.sharedMesh : null;
+                                if (!mesh && r is SkinnedMeshRenderer smr) mesh = smr.sharedMesh;
+                                if (mesh)
+                                {
+                                    CachedMeshData cmd = GetCachedMesh(mesh);
+                                    if (cmd != null && cmd.Verts.Length > 0)
+                                        outline.Parts.Add(new MeshPart { Tr = r.transform, Data = cmd });
+                                }
+                            }
+                        }
+                        searchRoot = pd.transform;
+                    }
+                }
+
+                if (outline.Parts.Count == 0)
+                {
+                    MeshFilter[] mfs = searchRoot.GetComponentsInChildren<MeshFilter>(false);
+                    for (int i = 0; i < mfs.Length && outline.Parts.Count < 8; i++)
+                    {
+                        MeshFilter mf = mfs[i];
+                        if (!mf || !mf.sharedMesh) continue;
+                        string gn = mf.gameObject.name.ToLowerInvariant();
+                        // Skip particle quad / area indicator / highlight proxy meshes
+                        if (gn.Contains("area") || gn.Contains("indicator") || gn.Contains("wave") || gn.Contains("beam") || gn.Contains("glow") || gn.Contains("flash"))
+                            continue;
+                        Renderer mr = mf.GetComponent<Renderer>();
+                        if (mr && !mr.enabled && kind != 3) continue;
+                        CachedMeshData cmd = GetCachedMesh(mf.sharedMesh);
+                        if (cmd != null && cmd.Verts.Length > 0)
+                            outline.Parts.Add(new MeshPart { Tr = mf.transform, Data = cmd });
+                    }
+
+                    SkinnedMeshRenderer[] smrs = searchRoot.GetComponentsInChildren<SkinnedMeshRenderer>(false);
+                    for (int i = 0; i < smrs.Length && outline.Parts.Count < 8; i++)
+                    {
+                        SkinnedMeshRenderer smr = smrs[i];
+                        if (!smr || !smr.sharedMesh) continue;
+                        CachedMeshData cmd = GetCachedMesh(smr.sharedMesh);
+                        if (cmd != null && cmd.Verts.Length > 0)
+                            outline.Parts.Add(new MeshPart { Tr = smr.transform, Data = cmd });
+                    }
+                }
+
+                // If the object uses non-mesh colliders (e.g. compound colliders on a shrine/interactable), sample its collider surface directly
+                if (outline.Parts.Count == 0 && kind != 3)
+                {
+                    Collider[] cols = root.GetComponentsInChildren<Collider>(false);
+                    if (cols != null && cols.Length > 0)
+                    {
+                        List<Vector3> vList = new List<Vector3>(96);
+                        List<Vector3> eaList = new List<Vector3>(64);
+                        List<Vector3> ebList = new List<Vector3>(64);
+                        for (int cIdx = 0; cIdx < cols.Length && cIdx < 4; cIdx++)
+                        {
+                            Collider col = cols[cIdx];
+                            if (!col || col.isTrigger) continue;
+                            Bounds b = col.bounds;
+                            float rad = Mathf.Max(0.2f, b.extents.magnitude * 1.4f);
+                            Vector3 prev = Vector3.zero;
+                            bool hasPrev = false;
+                            for (int i = 0; i < 64; i++)
+                            {
+                                float y = 1f - 2f * (i + 0.5f) / 64f;
+                                float r = Mathf.Sqrt(Mathf.Max(0f, 1f - y * y));
+                                float phi = i * 2.3999632f;
+                                Vector3 dir = new Vector3(Mathf.Cos(phi) * r, y, Mathf.Sin(phi) * r);
+                                RaycastHit hit;
+                                if (col.Raycast(new Ray(b.center + dir * rad, -dir), out hit, rad * 2f))
+                                {
+                                    Vector3 lp = root.InverseTransformPoint(hit.point);
+                                    vList.Add(lp);
+                                    if (hasPrev) { eaList.Add(prev); ebList.Add(lp); }
+                                    prev = lp;
+                                    hasPrev = true;
+                                }
+                                else hasPrev = false;
+                            }
+                        }
+                        if (vList.Count > 0)
+                        {
+                            outline.Parts.Add(new MeshPart
+                            {
+                                Tr = root,
+                                Data = new CachedMeshData { Verts = vList.ToArray(), EdgeA = eaList.ToArray(), EdgeB = ebList.ToArray() }
+                            });
+                        }
+                    }
+                }
+
+                if (outline.Parts.Count > 0) outline.Complete = true;
+            }
+            catch { }
+
+            return outline;
         }
 
         private static bool IsPurchaseOpen(PurchaseInteraction pi)
@@ -734,7 +1219,7 @@ namespace Surveyor
         private void Cast(Vector3 origin, Vector3 dir, float range, float life, bool big)
         {
             RaycastHit hit;
-            int mask = LayerIndex.world.mask | LayerIndex.entityPrecise.mask | LayerIndex.defaultLayer.mask | LayerIndex.pickups.mask;
+            int mask = LayerIndex.world.mask | LayerIndex.entityPrecise.mask | LayerIndex.defaultLayer.mask;
             if (!Physics.Raycast(origin, dir, out hit, range, mask, QueryTriggerInteraction.Ignore)) return;
             bool enemy = false;
             bool special = false;
@@ -754,6 +1239,10 @@ namespace Surveyor
             }
             else if (col)
             {
+                // Skip invisible interaction sphere/box colliders around dropped pickups so only their true 3D mesh outline is painted
+                if (col.GetComponentInParent<GenericPickupController>() || col.GetComponentInParent<PickupPickerController>())
+                    return;
+
                 TeleporterInteraction tp = col.GetComponentInParent<TeleporterInteraction>();
                 if (tp)
                 {
@@ -762,30 +1251,20 @@ namespace Surveyor
                 }
                 else
                 {
-                    GenericPickupController gpc = col.GetComponentInParent<GenericPickupController>();
-                    PickupPickerController ppc = !gpc ? col.GetComponentInParent<PickupPickerController>() : null;
-                    if ((gpc && gpc.gameObject.activeInHierarchy) || (ppc && ppc.gameObject.activeInHierarchy))
+                    PurchaseInteraction pi = col.GetComponentInParent<PurchaseInteraction>();
+                    if (pi && IsPurchaseOpen(pi))
                     {
-                        c = new Color(0.32f, 1f, 0.94f, 1f);
+                        string tag; int kind;
+                        ClassifyInteractable(pi.gameObject, out tag, out c, out kind);
                         special = true;
                     }
                     else
                     {
-                        PurchaseInteraction pi = col.GetComponentInParent<PurchaseInteraction>();
-                        if (pi && IsPurchaseOpen(pi))
+                        BarrelInteraction bi = col.GetComponentInParent<BarrelInteraction>();
+                        if (bi && IsBarrelOpen(bi))
                         {
-                            string tag; int kind;
-                            ClassifyInteractable(pi.gameObject, out tag, out c, out kind);
+                            c = new Color(1f, 0.72f, 0.2f, 1f);
                             special = true;
-                        }
-                        else
-                        {
-                            BarrelInteraction bi = col.GetComponentInParent<BarrelInteraction>();
-                            if (bi && IsBarrelOpen(bi))
-                            {
-                                c = new Color(1f, 0.72f, 0.2f, 1f);
-                                special = true;
-                            }
                         }
                     }
                 }
@@ -915,7 +1394,7 @@ namespace Surveyor
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
-            KeyCode next, prev, peek;
+            KeyCode next, prev, peek, trapKey;
             int n0 = OdNames.Length;
             if (TryKey(SvrPlugin.ScanNextKey.Value, out next) && Input.GetKeyDown(next)) { OdMode = (OdMode + 1) % n0; TriggerModeBurst(); }
             if (TryKey(SvrPlugin.ScanPrevKey.Value, out prev) && Input.GetKeyDown(prev)) { OdMode = (OdMode + n0 - 1) % n0; TriggerModeBurst(); }
@@ -930,8 +1409,57 @@ namespace Surveyor
                     _peekReady = Time.time + SvrPlugin.PeekCooldown.Value;
                 }
             }
+            // Ghost-Trap [G]: throws out a Ghostbusters / Luigi's Mansion containment trap on the floor ahead.
+            if (TryKey(SvrPlugin.TrapKey.Value, out trapKey) && Input.GetKeyDown(trapKey) && Time.time >= _demon.TrapReadyAt)
+            {
+                _demon.DeployTrap(_body, _input);
+                _revealUntil = Mathf.Max(_revealUntil, Time.time + SvrPlugin.TrapDuration.Value);
+                for (int i = 0; i < 120; i++)
+                {
+                    float ang = (i / 120f) * 6.28318f;
+                    Vector3 rp = _demon.TrapPos + new Vector3(Mathf.Cos(ang) * 1.4f, 0.1f + Random.value * 0.4f, Mathf.Sin(ang) * 1.4f);
+                    AddDot(rp, (i & 1) == 0 ? new Color(1f, 0.88f, 0.12f, 1f) : new Color(0.2f, 1f, 0.55f, 1f), 1.8f, true);
+                }
+            }
 
-            _demon.Tick(dt, _body);
+            float prevRestored = _demon.LastRestoredUntil;
+            _demon.Tick(dt, _body, _input);
+            if (_demon.LastRestoredUntil > prevRestored)
+            {
+                // Celebratory containment burst when the Demon is captured and a lost sense is restored!
+                for (int i = 0; i < 240; i++)
+                {
+                    Vector3 d = Random.onUnitSphere;
+                    d.y = Mathf.Abs(d.y);
+                    AddDot(_demon.TrapPos + d * Random.Range(0.2f, 4.5f), (i & 1) == 0 ? new Color(0.25f, 1f, 0.55f, 1f) : new Color(0.3f, 0.95f, 1f, 1f), 2.6f, true);
+                }
+            }
+
+            // Paint the active Ghost-Trap box & upward containment cone in the 3D point cloud
+            if (_demon.TrapActive && _peekK < 0.65f)
+            {
+                Vector3 tp = _demon.TrapPos;
+                // Hazard-striped Ghost-Trap casing + open angled doors on the floor
+                for (int i = 0; i < 6; i++)
+                {
+                    float bx = Random.Range(-0.55f, 0.55f);
+                    float bz = Random.Range(-0.35f, 0.35f);
+                    bool yellow = (((int)((bx + 1f) * 6f) + (int)((bz + 1f) * 6f)) & 1) == 0;
+                    AddDot(tp + new Vector3(bx, 0.12f, bz), yellow ? new Color(1f, 0.86f, 0.1f, 1f) : new Color(1f, 0.25f, 0.1f, 1f), 0.35f, true);
+                }
+                // Upward emerald/cyan Ghostbusters containment cone + spiraling Poltergust suction rings
+                for (int i = 0; i < 8; i++)
+                {
+                    float h = Random.Range(0.15f, 4.8f);
+                    float r = 0.25f + h * 0.38f;
+                    float ang = Time.time * 9f + h * 2.2f + i * 0.785f;
+                    Vector3 cp = tp + new Vector3(Mathf.Cos(ang) * r, h, Mathf.Sin(ang) * r);
+                    Color cc = _demon.TetherActive
+                        ? ((i & 1) == 0 ? new Color(0.2f, 1f, 0.45f, 1f) : new Color(1f, 0.45f, 0.12f, 1f))
+                        : new Color(0.25f, 1f, 0.78f, 0.9f);
+                    AddDot(cp, cc, 0.28f, true);
+                }
+            }
 
             // Pause ray scanning while the visor is fully up in Peek mode, then fire a fresh burst as the visor lowers.
             if (_peekK < 0.65f)
@@ -1000,7 +1528,8 @@ namespace Surveyor
                         Extents = new Vector3(3.2f, 2.2f, 3.2f),
                         Col = new Color(1f, 0.28f, 0.95f, 1f),
                         Tag = "TELEPORTER",
-                        Kind = 4
+                        Kind = 4,
+                        Outline = GetOrBuildOutline(tr, 4)
                     });
                 }
             }
@@ -1015,14 +1544,18 @@ namespace Surveyor
                     if (!gpc || !gpc.gameObject.activeInHierarchy) continue;
                     Transform tr = gpc.gameObject.transform;
                     if ((tr.position - me).sqrMagnitude > maxDistSqr * 1.3f) continue;
+                    string tag = "ITEM";
+                    Color col = new Color(0.32f, 1f, 0.94f, 1f);
+                    ResolvePickupDisplay(gpc.gameObject, ref tag, ref col);
                     _pois.Add(new Poi
                     {
                         Tr = tr,
                         Pos = tr.position + Vector3.up * 0.4f,
-                        Extents = new Vector3(0.65f, 0.65f, 0.65f),
-                        Col = new Color(0.32f, 1f, 0.94f, 1f),
-                        Tag = "ITEM",
-                        Kind = 3
+                        Extents = new Vector3(0.55f, 0.55f, 0.55f),
+                        Col = col,
+                        Tag = tag,
+                        Kind = 3,
+                        Outline = GetOrBuildOutline(tr, 3)
                     });
                 }
             }
@@ -1037,14 +1570,18 @@ namespace Surveyor
                     if (!ppc || !ppc.gameObject.activeInHierarchy) continue;
                     Transform tr = ppc.gameObject.transform;
                     if ((tr.position - me).sqrMagnitude > maxDistSqr * 1.3f) continue;
+                    string tag = "COMMAND ESSENCE";
+                    Color col = new Color(0.35f, 1f, 0.95f, 1f);
+                    ResolvePickupDisplay(ppc.gameObject, ref tag, ref col);
                     _pois.Add(new Poi
                     {
                         Tr = tr,
                         Pos = tr.position + Vector3.up * 0.5f,
-                        Extents = new Vector3(0.75f, 0.75f, 0.75f),
-                        Col = new Color(0.35f, 1f, 0.95f, 1f),
-                        Tag = "COMMAND ITEM",
-                        Kind = 3
+                        Extents = new Vector3(0.6f, 0.6f, 0.6f),
+                        Col = col,
+                        Tag = tag,
+                        Kind = 3,
+                        Outline = GetOrBuildOutline(tr, 3)
                     });
                 }
             }
@@ -1062,6 +1599,13 @@ namespace Surveyor
                     if ((tr.position - me).sqrMagnitude > maxDistSqr) continue;
                     string tag; Color col; int kind;
                     ClassifyInteractable(pi.gameObject, out tag, out col, out kind);
+                    if (tag == "PRINTER" || tag == "SHOP")
+                    {
+                        string itemTag = null;
+                        Color itemCol = col;
+                        ResolvePickupDisplay(pi.gameObject, ref itemTag, ref itemCol);
+                        if (!string.IsNullOrEmpty(itemTag)) { tag = tag + ": " + itemTag; col = itemCol; }
+                    }
                     Vector3 ext = kind == 1 ? new Vector3(1.1f, 1.8f, 1.1f) : new Vector3(1.1f, 0.95f, 0.85f);
                     Collider c = pi.GetComponentInChildren<Collider>();
                     if (c) ext = Vector3.Max(new Vector3(0.55f, 0.55f, 0.55f), Vector3.Min(c.bounds.extents, new Vector3(2.5f, 3.0f, 2.5f)));
@@ -1072,7 +1616,8 @@ namespace Surveyor
                         Extents = ext,
                         Col = col,
                         Tag = tag,
-                        Kind = kind
+                        Kind = kind,
+                        Outline = GetOrBuildOutline(tr, kind)
                     });
                 }
             }
@@ -1094,7 +1639,8 @@ namespace Surveyor
                         Extents = new Vector3(0.6f, 0.75f, 0.6f),
                         Col = new Color(1f, 0.72f, 0.2f, 1f),
                         Tag = "BARREL",
-                        Kind = 2
+                        Kind = 2,
+                        Outline = GetOrBuildOutline(tr, 2)
                     });
                 }
             }
@@ -1110,13 +1656,13 @@ namespace Surveyor
                 RefreshInteractables();
             }
             if (!burst && now < _nextPoiPaint) return;
-            _nextPoiPaint = now + (OdMode == 2 ? 0.045f : 0.075f);
+            _nextPoiPaint = now + (OdMode == 2 ? 0.042f : 0.068f);
 
             Vector3 me = _body.corePosition;
             float baseRange = SvrPlugin.ScanRange.Value * SvrSenses.SightMult;
             float maxRange = baseRange * (OdMode == 2 ? 2.0f : (OdMode == 4 ? 1.55f : 1.25f));
             int mult = (burst ? 3 : 1) * (OdMode == 2 ? 2 : 1);
-            float life = SvrPlugin.DotLife.Value * 0.55f;
+            float life = SvrPlugin.DotLife.Value * 0.58f;
 
             for (int i = 0; i < _pois.Count; i++)
             {
@@ -1125,7 +1671,7 @@ namespace Surveyor
                 Vector3 pos = p.Pos;
                 float dist = Vector3.Distance(me, pos);
 
-                if (p.Kind == 4) // TELEPORTER: always paint out to 240m with base ring + tall vertical beacon spire
+                if (p.Kind == 4) // TELEPORTER: always paint out to 240m with base ring + actual 3D teleporter prongs + tall vertical beacon spire
                 {
                     if (dist > 240f) continue;
                     int ringPts = 14 * mult;
@@ -1144,37 +1690,97 @@ namespace Surveyor
                         Vector3 sp = p.Tr.position + new Vector3(Random.Range(-0.45f, 0.45f), h, Random.Range(-0.45f, 0.45f));
                         AddDot(sp, new Color(1f, 0.35f, 0.98f, 1f), life, true);
                     }
+                    if (p.Outline != null && p.Outline.Parts.Count > 0)
+                        PaintMeshOutline(p.Outline, new Color(1f, 0.35f, 0.95f, 1f), 10 * mult, life);
                     continue;
                 }
 
                 if (dist > maxRange) continue;
 
-                // Paint 3D bounding-box wireframe/surface silhouette dots so the chest/item/shrine shape is unmistakable
-                Vector3 e = p.Extents;
-                int boxPts = (p.Kind == 3 ? 8 : (p.Kind == 2 ? 5 : 9)) * mult;
-                for (int b = 0; b < boxPts; b++)
+                // Refresh outline if a dropped item's PickupDisplay model just finished spawning
+                PoiOutline outline = p.Outline;
+                if (outline == null || (!outline.Complete && now >= outline.NextCheck))
                 {
-                    // Pick points along edges/faces of the bounding box
-                    float sx = Random.value < 0.5f ? -1f : 1f;
-                    float sy = Random.value < 0.5f ? -1f : 1f;
-                    float sz = Random.value < 0.5f ? -1f : 1f;
-                    int axis = b % 3;
-                    Vector3 offset = axis == 0
-                        ? new Vector3(Random.Range(-e.x, e.x), sy * e.y, sz * e.z)
-                        : (axis == 1
-                            ? new Vector3(sx * e.x, Random.Range(-e.y, e.y), sz * e.z)
-                            : new Vector3(sx * e.x, sy * e.y, Random.Range(-e.z, e.z)));
-                    AddDot(pos + offset, p.Col, life, true);
+                    outline = GetOrBuildOutline(p.Tr, p.Kind);
+                    p.Outline = outline;
+                    _pois[i] = p;
                 }
 
-                // Vertical beacon plume above items and chests so they stand out above ground clutter
-                int plumePts = (p.Kind == 3 ? 6 : 3) * mult;
-                float plumeHeight = p.Kind == 3 ? 4.2f : (p.Kind == 1 ? 3.0f : 2.2f);
-                for (int v = 0; v < plumePts; v++)
+                int sampleBudget = (p.Kind == 3 ? 16 : (p.Kind == 2 ? 9 : 14)) * mult;
+                if (outline != null && outline.Parts.Count > 0)
                 {
-                    float h = Random.Range(e.y, e.y + plumeHeight);
-                    AddDot(pos + new Vector3(Random.Range(-0.12f, 0.12f), h, Random.Range(-0.12f, 0.12f)), p.Col, life * 0.85f, true);
+                    PaintMeshOutline(outline, p.Col, sampleBudget, life);
                 }
+                else
+                {
+                    // Smooth elliptical contour fallback if an object has no mesh yet
+                    Vector3 e = p.Extents;
+                    for (int b = 0; b < sampleBudget; b++)
+                    {
+                        float ang = (b / (float)sampleBudget) * 6.28318f + now * 2.2f;
+                        float yf = Mathf.Sin(b * 1.7f + now);
+                        float pinch = Mathf.Sqrt(Mathf.Max(0.15f, 1f - yf * yf * 0.7f));
+                        Vector3 offset = new Vector3(Mathf.Cos(ang) * e.x * pinch, yf * e.y, Mathf.Sin(ang) * e.z * pinch);
+                        AddDot(pos + offset, p.Col, life, true);
+                    }
+                }
+
+                // For dropped items (Kind == 3), add a sleek circular holo-pedestal ring on the ground + thin vertical filament
+                if (p.Kind == 3)
+                {
+                    int ringN = 6 * mult;
+                    Vector3 basePos = p.Tr.position + Vector3.up * 0.08f;
+                    for (int r = 0; r < ringN; r++)
+                    {
+                        float ang = (r / (float)ringN) * 6.28318f + now * 2.6f;
+                        Vector3 rp = basePos + new Vector3(Mathf.Cos(ang) * 0.42f, 0f, Mathf.Sin(ang) * 0.42f);
+                        AddDot(rp, Color.Lerp(p.Col, Color.white, 0.25f), life * 0.75f, false);
+                    }
+                    int plumePts = 4 * mult;
+                    for (int v = 0; v < plumePts; v++)
+                    {
+                        float h = Random.Range(0.55f, 3.6f);
+                        AddDot(pos + new Vector3(Random.Range(-0.04f, 0.04f), h, Random.Range(-0.04f, 0.04f)), p.Col, life * 0.8f, false);
+                    }
+                }
+                else
+                {
+                    int plumePts = 3 * mult;
+                    float plumeHeight = p.Kind == 1 ? 2.8f : 1.9f;
+                    for (int v = 0; v < plumePts; v++)
+                    {
+                        float h = Random.Range(p.Extents.y, p.Extents.y + plumeHeight);
+                        AddDot(pos + new Vector3(Random.Range(-0.08f, 0.08f), h, Random.Range(-0.08f, 0.08f)), p.Col, life * 0.8f, false);
+                    }
+                }
+            }
+        }
+
+        private void PaintMeshOutline(PoiOutline outline, Color baseCol, int count, float life)
+        {
+            int parts = outline.Parts.Count;
+            if (parts == 0) return;
+            Color edgeCol = Color.Lerp(baseCol, Color.white, 0.28f);
+            for (int n = 0; n < count; n++)
+            {
+                MeshPart mp = outline.Parts[n % parts];
+                if (!mp.Tr || mp.Data == null) continue;
+                CachedMeshData d = mp.Data;
+                Vector3 localPt;
+                bool isEdge = d.EdgeA != null && d.EdgeA.Length > 0 && (n % 3 != 0);
+                if (isEdge)
+                {
+                    int eIdx = Random.Range(0, d.EdgeA.Length);
+                    localPt = Vector3.Lerp(d.EdgeA[eIdx], d.EdgeB[eIdx], Random.value);
+                }
+                else if (d.Verts != null && d.Verts.Length > 0)
+                {
+                    localPt = d.Verts[Random.Range(0, d.Verts.Length)];
+                }
+                else continue;
+
+                Vector3 worldPt = mp.Tr.TransformPoint(localPt);
+                AddDot(worldPt, isEdge ? edgeCol : baseCol, life, true);
             }
         }
 
@@ -1707,6 +2313,47 @@ namespace Surveyor
             GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _buf, ScaleMode.StretchToFill, true);
         }
 
+        private static void DrawScreenLine(Vector2 a, Vector2 b, float thick, Texture2D tex)
+        {
+            Vector2 d = b - a;
+            float len = d.magnitude;
+            if (len < 0.75f) return;
+            int steps = Mathf.Clamp(Mathf.CeilToInt(len / Mathf.Max(1.6f, thick * 0.7f)), 1, 64);
+            float half = thick * 0.5f;
+            for (int s = 0; s <= steps; s++)
+            {
+                Vector2 p = Vector2.Lerp(a, b, s / (float)steps);
+                GUI.DrawTexture(new Rect(p.x - half, p.y - half, thick, thick), tex);
+            }
+        }
+
+        private static void ComputeConvexHull(List<Vector2> pts, List<Vector2> hull)
+        {
+            hull.Clear();
+            int n = pts.Count;
+            if (n < 3) return;
+            int left = 0;
+            for (int i = 1; i < n; i++)
+                if (pts[i].x < pts[left].x || (Mathf.Approximately(pts[i].x, pts[left].x) && pts[i].y < pts[left].y))
+                    left = i;
+
+            int p = left;
+            int guard = 0;
+            do
+            {
+                hull.Add(pts[p]);
+                int q = (p + 1) % n;
+                for (int i = 0; i < n; i++)
+                {
+                    Vector2 a = pts[p], b = pts[i], c = pts[q];
+                    float cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+                    if (cross < -0.001f) q = i;
+                }
+                p = q;
+                if (++guard > 28) break;
+            } while (p != left);
+        }
+
         private void DrawInteractables(Camera cam, float scale, float dotAlpha)
         {
             if (dotAlpha <= 0.005f || _pois.Count == 0) return;
@@ -1734,50 +2381,228 @@ namespace Surveyor
                 if (dist > maxD) continue;
                 if (p.Kind != 4 && drawn >= 18) continue;
 
-                Vector3 sp = cam.WorldToScreenPoint(p.Pos + Vector3.up * (p.Extents.y + 0.35f));
+                Vector3 sp = cam.WorldToScreenPoint(p.Pos);
                 if (sp.z <= 0.5f) continue;
                 float sx = sp.x;
                 float sy = Screen.height - sp.y;
                 if (sx < 20f || sx > Screen.width - 20f || sy < 20f || sy > Screen.height - 20f) continue;
 
                 float distFade = p.Kind == 4 ? 0.95f : Mathf.Clamp01(1.15f - dist / maxD);
-                float a = distFade * dotAlpha * (p.Kind == 4 ? 0.95f : 0.85f);
+                float a = distFade * dotAlpha * (p.Kind == 4 ? 0.95f : 0.88f);
                 if (a <= 0.04f) continue;
 
                 drawn++;
-                float bSize = (p.Kind == 4 ? 14f : (p.Kind == 3 ? 9f : 11f)) * scale;
-                float thick = Mathf.Max(1.5f, 2f * scale);
+                float thick = Mathf.Max(1.5f, 2.0f * scale);
                 Color bc = new Color(p.Col.r, p.Col.g, p.Col.b, a);
-                GUI.color = bc;
+                Color edgeGlow = Color.Lerp(bc, new Color(1f, 1f, 1f, a), 0.3f);
 
-                // Corner brackets around the interactable/item
-                GUI.DrawTexture(new Rect(sx - bSize, sy - bSize, bSize * 0.45f, thick), white);
-                GUI.DrawTexture(new Rect(sx - bSize, sy - bSize, thick, bSize * 0.45f), white);
-                GUI.DrawTexture(new Rect(sx + bSize * 0.55f, sy - bSize, bSize * 0.45f, thick), white);
-                GUI.DrawTexture(new Rect(sx + bSize - thick, sy - bSize, thick, bSize * 0.45f), white);
-                GUI.DrawTexture(new Rect(sx - bSize, sy + bSize - thick, bSize * 0.45f, thick), white);
-                GUI.DrawTexture(new Rect(sx - bSize, sy + bSize * 0.55f, thick, bSize * 0.45f), white);
-                GUI.DrawTexture(new Rect(sx + bSize * 0.55f, sy + bSize - thick, bSize * 0.45f, thick), white);
-                GUI.DrawTexture(new Rect(sx + bSize - thick, sy + bSize * 0.55f, thick, bSize * 0.45f), white);
+                // Project the item/interactable's actual 3D mesh vertices to screen space and trace its true 2D silhouette hull
+                _hullPts.Clear();
+                float maxX = sx, anchorY = sy;
+                if (p.Outline != null && p.Outline.Parts.Count > 0)
+                {
+                    int parts = p.Outline.Parts.Count;
+                    for (int mpIdx = 0; mpIdx < parts; mpIdx++)
+                    {
+                        MeshPart mp = p.Outline.Parts[mpIdx];
+                        if (!mp.Tr || mp.Data == null || mp.Data.Verts == null || mp.Data.Verts.Length == 0) continue;
+                        Vector3[] v = mp.Data.Verts;
+                        int step = Mathf.Max(1, v.Length / (36 / parts + 1));
+                        for (int k = 0; k < v.Length && _hullPts.Count < 40; k += step)
+                        {
+                            Vector3 wp = mp.Tr.TransformPoint(v[k]);
+                            Vector3 vp = cam.WorldToScreenPoint(wp);
+                            if (vp.z > 0.35f)
+                            {
+                                Vector2 sPt = new Vector2(vp.x, Screen.height - vp.y);
+                                if ((sPt - new Vector2(sx, sy)).sqrMagnitude < (160f * scale) * (160f * scale))
+                                {
+                                    _hullPts.Add(sPt);
+                                    if (sPt.x > maxX) { maxX = sPt.x; anchorY = sPt.y; }
+                                }
+                            }
+                        }
+                    }
+                }
 
-                string txt = p.Tag + " " + Mathf.RoundToInt(dist) + "m";
-                float tw = (txt.Length * 7.8f + 10f) * scale;
+                ComputeConvexHull(_hullPts, _hullOut);
+                if (_hullOut.Count >= 3)
+                {
+                    GUI.color = edgeGlow;
+                    for (int h = 0; h < _hullOut.Count; h++)
+                    {
+                        Vector2 p0 = _hullOut[h];
+                        Vector2 p1 = _hullOut[(h + 1) % _hullOut.Count];
+                        DrawScreenLine(p0, p1, thick, white);
+                    }
+                    // Also draw a few internal 3D mesh feature edges so the 3D form inside the silhouette reads clearly
+                    if (dist < 28f && p.Outline != null && p.Outline.Parts.Count > 0)
+                    {
+                        GUI.color = new Color(bc.r, bc.g, bc.b, a * 0.52f);
+                        MeshPart mp0 = p.Outline.Parts[0];
+                        if (mp0.Tr && mp0.Data != null && mp0.Data.EdgeA != null && mp0.Data.EdgeA.Length > 0)
+                        {
+                            int eLen = mp0.Data.EdgeA.Length;
+                            int eStep = Mathf.Max(1, eLen / 10);
+                            for (int e = 0; e < eLen; e += eStep)
+                            {
+                                Vector3 va = cam.WorldToScreenPoint(mp0.Tr.TransformPoint(mp0.Data.EdgeA[e]));
+                                Vector3 vb = cam.WorldToScreenPoint(mp0.Tr.TransformPoint(mp0.Data.EdgeB[e]));
+                                if (va.z > 0.35f && vb.z > 0.35f)
+                                    DrawScreenLine(new Vector2(va.x, Screen.height - va.y), new Vector2(vb.x, Screen.height - vb.y), Mathf.Max(1f, 1.3f * scale), white);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // Sleek 8-sided contour ring if the object is very far away or tiny on screen
+                    float rad = (p.Kind == 4 ? 14f : (p.Kind == 3 ? 8.5f : 10.5f)) * scale;
+                    GUI.color = edgeGlow;
+                    Vector2 prev = Vector2.zero;
+                    for (int k = 0; k <= 8; k++)
+                    {
+                        float ang = k * (6.2831853f / 8f) + 0.3927f;
+                        Vector2 cur = new Vector2(sx + Mathf.Cos(ang) * rad, sy + Mathf.Sin(ang) * rad);
+                        if (k > 0) DrawScreenLine(prev, cur, thick, white);
+                        prev = cur;
+                    }
+                    maxX = sx + rad;
+                    anchorY = sy;
+                }
+
+                // Angled tactical callout leader line + pill label
+                string txt = p.Tag + " · " + Mathf.RoundToInt(dist) + "m";
+                float tw = (txt.Length * 7.5f + 12f) * scale;
                 float th = 18f * scale;
-                GUI.color = new Color(0f, 0f, 0f, a * 0.65f);
-                GUI.DrawTexture(new Rect(sx + bSize + 4f * scale, sy - th * 0.5f, tw, th), white);
+                Vector2 elbow = new Vector2(maxX + 6f * scale, anchorY - 5f * scale);
+                GUI.color = edgeGlow;
+                DrawScreenLine(new Vector2(maxX, anchorY), elbow, Mathf.Max(1f, 1.5f * scale), white);
+                DrawScreenLine(elbow, elbow + new Vector2(6f * scale, 0f), Mathf.Max(1f, 1.5f * scale), white);
+
+                float lx = elbow.x + 6f * scale;
+                float ly = elbow.y - th * 0.5f;
+                GUI.color = new Color(0.02f, 0.04f, 0.06f, a * 0.72f);
+                GUI.DrawTexture(new Rect(lx, ly, tw, th), white);
+                GUI.color = edgeGlow;
+                GUI.DrawTexture(new Rect(lx, ly, 2.5f * scale, th), white);
                 GUI.color = bc;
-                GUI.Label(new Rect(sx + bSize + 8f * scale, sy - th * 0.5f, tw, th), txt, _label);
+                GUI.Label(new Rect(lx + 6f * scale, ly, tw, th), txt, _label);
             }
             _label.fontSize = origFs;
         }
 
         private void DrawDemon(Camera cam, float scale, float dotAlpha)
         {
-            if (!_demon.Active || dotAlpha <= 0.005f) return;
-            bool revealed = Time.time < _revealUntil;
+            if (dotAlpha <= 0.005f) return;
+            Texture2D white = Texture2D.whiteTexture;
+
+            // Draw the Ghost-Trap HUD marker and Proton/Poltergust capture streams when the trap is deployed
+            if (_demon.TrapActive)
+            {
+                Vector3 tsp = cam.WorldToScreenPoint(_demon.TrapPos + Vector3.up * 0.35f);
+                if (tsp.z > 0.35f)
+                {
+                    float tx = tsp.x, ty = Screen.height - tsp.y;
+                    float rad = 11f * scale;
+                    GUI.color = new Color(1f, 0.88f, 0.15f, 0.92f * dotAlpha);
+                    DrawScreenLine(new Vector2(tx - rad, ty), new Vector2(tx, ty - rad), 2f * scale, white);
+                    DrawScreenLine(new Vector2(tx, ty - rad), new Vector2(tx + rad, ty), 2f * scale, white);
+                    DrawScreenLine(new Vector2(tx + rad, ty), new Vector2(tx, ty + rad), 2f * scale, white);
+                    DrawScreenLine(new Vector2(tx, ty + rad), new Vector2(tx - rad, ty), 2f * scale, white);
+                    if (_label != null)
+                    {
+                        string tTxt = _demon.TetherActive
+                            ? "CONTAINING DEMON " + Mathf.RoundToInt(_demon.CaptureProgress * 100f) + "%"
+                            : "GHOST TRAP [OPEN]";
+                        GUI.color = _demon.TetherActive ? new Color(0.25f, 1f, 0.55f, 0.95f * dotAlpha) : new Color(1f, 0.9f, 0.2f, 0.9f * dotAlpha);
+                        GUI.Label(new Rect(tx + rad + 6f * scale, ty - 10f * scale, 220f * scale, 20f * scale), tTxt, _label);
+                    }
+                }
+            }
+
+            if (!_demon.Active) return;
+            bool revealed = Time.time < _revealUntil || _demon.TrapActive;
             bool blocked = !revealed && Physics.Linecast(cam.transform.position, _demon.Center, LayerIndex.world.mask, QueryTriggerInteraction.Ignore);
             float vis = (blocked ? 0.18f : 0.95f) * dotAlpha;
             _demon.FillWorld(_demonPoints, Time.time);
+
+            // Ghostbusters Proton Stream + Luigi's Mansion Poltergust Suction Vortex while capturing!
+            if (_demon.TrapActive && (_demon.TetherActive || _demon.CaptureProgress > 0.02f))
+            {
+                Vector3 muzzleWorld = _body.corePosition + cam.transform.right * 0.48f - cam.transform.up * 0.18f + cam.transform.forward * 0.55f;
+                Vector3 demonCenter = _demon.Center;
+                Vector3 trapWorld = _demon.TrapPos + Vector3.up * 0.25f;
+
+                // 1) Ghostbusters Proton Stream: crackling orange/red core beam + spiraling electric blue helix from gun to Demon
+                Vector3 prevCore = Vector3.zero, prevHelix = Vector3.zero;
+                bool hasPrevStream = false;
+                const int streamSegs = 22;
+                for (int s = 0; s <= streamSegs; s++)
+                {
+                    float u = s / (float)streamSegs;
+                    float env = Mathf.Sin(u * 3.14159f);
+                    Vector3 basePt = Vector3.Lerp(muzzleWorld, demonCenter, u);
+                    Vector3 jitter = new Vector3(
+                        Mathf.Sin(Time.time * 42f + s * 1.9f),
+                        Mathf.Cos(Time.time * 37f + s * 2.3f),
+                        Mathf.Sin(Time.time * 49f + s * 1.4f)) * (0.22f * env);
+                    Vector3 coreWorld = basePt + jitter;
+
+                    float hAng = Time.time * 28f - u * 18f;
+                    Vector3 helixOffset = (cam.transform.right * Mathf.Cos(hAng) + cam.transform.up * Mathf.Sin(hAng)) * (0.34f * env);
+                    Vector3 helixWorld = basePt + helixOffset;
+
+                    Vector3 sc = cam.WorldToScreenPoint(coreWorld);
+                    Vector3 sh = cam.WorldToScreenPoint(helixWorld);
+                    if (sc.z > 0.3f && sh.z > 0.3f)
+                    {
+                        Vector2 c2 = new Vector2(sc.x, Screen.height - sc.y);
+                        Vector2 h2 = new Vector2(sh.x, Screen.height - sh.y);
+                        if (hasPrevStream)
+                        {
+                            GUI.color = new Color(1f, 0.32f, 0.08f, 0.95f * dotAlpha);
+                            DrawScreenLine(prevCore, c2, 3.2f * scale, white);
+                            GUI.color = new Color(1f, 0.92f, 0.55f, 0.9f * dotAlpha);
+                            DrawScreenLine(prevCore, c2, 1.4f * scale, white);
+                            GUI.color = new Color(0.2f, 0.82f, 1f, 0.92f * dotAlpha);
+                            DrawScreenLine(prevHelix, h2, 2.2f * scale, white);
+                        }
+                        prevCore = c2;
+                        prevHelix = h2;
+                        hasPrevStream = true;
+                    }
+                    else hasPrevStream = false;
+                }
+
+                // 2) Luigi's Mansion Poltergust Suction Vortex: spiraling ectoplasm-green funnel pulling Demon into the Ghost-Trap
+                Vector3 prevVortex = Vector3.zero;
+                bool hasPrevVortex = false;
+                const int vortexSegs = 26;
+                for (int v = 0; v <= vortexSegs; v++)
+                {
+                    float u = v / (float)vortexSegs; // 0 = Demon, 1 = Trap
+                    float funnelRad = Mathf.Lerp(1.15f, 0.12f, u);
+                    float vAng = Time.time * 32f + u * 22f;
+                    Vector3 vWorld = Vector3.Lerp(demonCenter, trapWorld, u)
+                        + new Vector3(Mathf.Cos(vAng) * funnelRad, Mathf.Sin(u * 3.14159f) * 0.45f, Mathf.Sin(vAng) * funnelRad);
+                    Vector3 sv = cam.WorldToScreenPoint(vWorld);
+                    if (sv.z > 0.3f)
+                    {
+                        Vector2 v2 = new Vector2(sv.x, Screen.height - sv.y);
+                        if (hasPrevVortex)
+                        {
+                            GUI.color = (v & 1) == 0
+                                ? new Color(0.22f, 1f, 0.52f, 0.92f * dotAlpha)
+                                : new Color(0.3f, 0.95f, 1f, 0.88f * dotAlpha);
+                            DrawScreenLine(prevVortex, v2, 2.4f * scale, white);
+                        }
+                        prevVortex = v2;
+                        hasPrevVortex = true;
+                    }
+                    else hasPrevVortex = false;
+                }
+            }
 
             // afterimages: where it was a moment ago, so its movement smears
             _trailT -= Time.deltaTime;
@@ -1787,7 +2612,6 @@ namespace Surveyor
                 _trailB.Clear(); _trailB.AddRange(_trailA);
                 _trailA.Clear(); _trailA.AddRange(_demonPoints);
             }
-            Texture2D white = Texture2D.whiteTexture;
             DrawTrail(cam, _trailB, 0.10f * vis, scale, white);
             DrawTrail(cam, _trailA, 0.20f * vis, scale, white);
 
@@ -1805,7 +2629,7 @@ namespace Surveyor
                 GUI.DrawTexture(new Rect(sp.x - dx - size * 0.5f, y, size, size), white);
                 GUI.color = new Color(0.2f, 0.45f, 1f, vis);
                 GUI.DrawTexture(new Rect(sp.x + dx - size * 0.5f, y, size, size), white);
-                GUI.color = new Color(0.9f, 0.97f, 1f, vis);
+                GUI.color = _demon.TetherActive ? new Color(0.35f, 1f, 0.65f, vis) : new Color(0.9f, 0.97f, 1f, vis);
                 GUI.DrawTexture(new Rect(sp.x - size * 0.5f, y, size, size), white);
             }
         }
@@ -1925,7 +2749,21 @@ namespace Surveyor
                 }
                 float pr = _peekReady - Time.time;
                 GUI.color = new Color(0.9f, 0.95f, 1f, 0.85f);
-                GUI.Label(new Rect(sx, sy + 36f * scale, 420f * scale, 24f * scale), "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "]" + (pr > 0f ? "  " + pr.ToString("0") + "s" : "  ready"), _label);
+                GUI.Label(new Rect(sx, sy + 36f * scale, 220f * scale, 24f * scale), "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "]" + (pr > 0f ? "  " + pr.ToString("0") + "s" : "  ready"), _label);
+
+                float tr = _demon.TrapReadyAt - Time.time;
+                string trapKeyStr = SvrPlugin.TrapKey.Value.ToUpperInvariant();
+                if (_demon.TrapActive)
+                {
+                    GUI.color = new Color(0.25f, 1f, 0.55f, 0.95f);
+                    GUI.Label(new Rect(sx + 165f * scale, sy + 36f * scale, 360f * scale, 24f * scale), "TRAP [" + trapKeyStr + "]  OPEN — AIM & FIRE AT DEMON!", _label);
+                }
+                else
+                {
+                    GUI.color = SvrSenses.Lost > 0 ? new Color(1f, 0.88f, 0.25f, 0.95f) : new Color(0.82f, 0.95f, 1f, 0.82f);
+                    string trapSub = tr > 0f ? ("  " + tr.ToString("0") + "s") : (SvrSenses.Lost > 0 ? "  READY (CAPTURE DEMON -> RESTORE SENSE)" : "  ready");
+                    GUI.Label(new Rect(sx + 165f * scale, sy + 36f * scale, 420f * scale, 24f * scale), "TRAP [" + trapKeyStr + "]" + trapSub, _label);
+                }
 
                 // Top-center banner when Q / E switches scanner mode
                 if (sinceSwitch < 1.35f)
@@ -1940,6 +2778,44 @@ namespace Surveyor
                     GUI.Label(new Rect(bx + 14f * scale, by + 4f * scale, bw - 20f * scale, 22f * scale), "SCANNER MODE: " + OdNames[mIdx], _label);
                     GUI.color = new Color(0.85f, 1f, 0.9f, 0.9f * bAlpha);
                     GUI.Label(new Rect(bx + 14f * scale, by + 22f * scale, bw - 20f * scale, 22f * scale), OdDescs[mIdx], _label);
+                }
+
+                // Ghostbusters / Luigi's Mansion Containment HUD bar while Ghost-Trap is active
+                if (_demon.TrapActive)
+                {
+                    float cw = 480f * scale, ch = 48f * scale;
+                    float cx = Screen.width * 0.5f - cw * 0.5f, cy = Screen.height * 0.22f;
+                    GUI.color = new Color(0.02f, 0.04f, 0.06f, 0.82f);
+                    GUI.DrawTexture(new Rect(cx, cy, cw, ch), white);
+                    Color topBarCol = _demon.TetherActive ? new Color(0.22f, 1f, 0.52f, 0.98f) : new Color(1f, 0.86f, 0.15f, 0.95f);
+                    GUI.color = topBarCol;
+                    GUI.DrawTexture(new Rect(cx, cy, cw, 2.5f * scale), white);
+
+                    string hdr = _demon.TetherActive
+                        ? "PROTON TETHER LOCKED — REELING IN DEMON (" + Mathf.RoundToInt(_demon.CaptureProgress * 100f) + "%)"
+                        : "GHOST TRAP OPEN — AIM AT THE DEMON & HOLD FIRE TO CAPTURE!";
+                    GUI.Label(new Rect(cx + 12f * scale, cy + 4f * scale, cw - 24f * scale, 22f * scale), hdr, _label);
+
+                    float barW = cw - 24f * scale, barH = 11f * scale;
+                    float barX = cx + 12f * scale, barY = cy + 29f * scale;
+                    GUI.color = new Color(0.12f, 0.16f, 0.2f, 0.9f);
+                    GUI.DrawTexture(new Rect(barX, barY, barW, barH), white);
+                    GUI.color = _demon.TetherActive ? new Color(0.25f, 1f, 0.55f, 0.95f) : new Color(1f, 0.45f, 0.12f, 0.85f);
+                    GUI.DrawTexture(new Rect(barX, barY, barW * Mathf.Clamp01(_demon.CaptureProgress), barH), white);
+                }
+                else if (Time.time < _demon.LastRestoredUntil)
+                {
+                    float rAlpha = Mathf.Clamp01(_demon.LastRestoredUntil - Time.time);
+                    float cw = 480f * scale, ch = 44f * scale;
+                    float cx = Screen.width * 0.5f - cw * 0.5f, cy = Screen.height * 0.22f;
+                    GUI.color = new Color(0.02f, 0.06f, 0.04f, 0.82f * rAlpha);
+                    GUI.DrawTexture(new Rect(cx, cy, cw, ch), white);
+                    GUI.color = new Color(0.25f, 1f, 0.55f, 0.98f * rAlpha);
+                    GUI.DrawTexture(new Rect(cx, cy, cw, 3f * scale), white);
+                    string msg = !string.IsNullOrEmpty(_demon.LastRestoredSense)
+                        ? ("GHOST CONTAINED — RESTORED " + _demon.LastRestoredSense + "!")
+                        : "GHOST CONTAINED — ALL SENSES INTACT!";
+                    GUI.Label(new Rect(cx + 14f * scale, cy + 10f * scale, cw - 24f * scale, 24f * scale), msg, _label);
                 }
             }
             if (Peeking)

@@ -152,4 +152,23 @@ namespace Jukebox
         public void Deserialize(NetworkReader r) { r.ReadByte(); }
         public void OnReceived() => JukeboxPlugin.HostStartVote();
     }
+
+    /// <summary>Player → host: vote to skip the current song.</summary>
+    public class JbSkipBallotMessage : INetMessage
+    {
+        public uint Voter;
+        public void Serialize(NetworkWriter w) { w.Write(Voter); }
+        public void Deserialize(NetworkReader r) { Voter = r.ReadUInt32(); }
+        public void OnReceived() => JukeboxPlugin.HostReceiveSkip(Voter);
+    }
+
+    /// <summary>Host → everyone: current skip vote count vs required.</summary>
+    public class JbSkipTallyMessage : INetMessage
+    {
+        public int Count, Needed;
+        public void Serialize(NetworkWriter w) { w.Write((byte)Count); w.Write((byte)Needed); }
+        public void Deserialize(NetworkReader r) { Count = r.ReadByte(); Needed = r.ReadByte(); }
+        public void OnReceived() { if (!NetworkServer.active) Handle(); }
+        public void Handle() { JukeboxPlugin.SkipCount = Count; JukeboxPlugin.SkipNeeded = Needed; }
+    }
 }
