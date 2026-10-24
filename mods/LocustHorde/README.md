@@ -16,7 +16,7 @@ every 20 seconds and make war on everything: you, your allies and the planet's m
 - When one opens, **"The Horde Arrives..."** pops up in the middle of the screen, and **"Destroy E-Hole!"** joins
   your objectives (top right).
 - **Seal it by destroying it.** It's very tough: 6000 health (+1800 per level) and 60 armor. Monsters attack
-  it too, but only chip at it (25% damage) - sealing it is your job: it bursts out **one random green (uncommon) item per player**, plus gold. It stays open until
+  it too, but only chip at it (25% damage) - sealing it is your job: it bursts out **one random item per player - 50/50 uncommon (green) or boss (yellow)** - plus gold. It stays open until
   you destroy it.
 
 ## Locusts
@@ -56,6 +56,16 @@ Host with the artifact on: press **F8** to open an E-Hole near you right away (c
 - Every number is in `BepInEx/config/com.VincentMacaluso.LocustHorde.cfg`.
 
 ## Changes
+
+- 1.9.2: E-Hole rewards are a 50/50 of green and boss (yellow) items (config "Seal Item Tier (1.9.2)").
+
+- 1.9.1: E-Hole health back to 6000 (+1800 per level), no extra-player bonus (config "E-Hole Health Per Extra
+  Player (1.9.1)" can turn it back on).
+
+- 1.9.0: E-Hole rewards are a 50/50 of red and boss (yellow) items (config "Seal Item Tier (1.9)").
+
+- 1.8.0: sealing an E-Hole drops legendary (red) items again (config "Seal Item Tier (1.8)"). E-Holes are twice as
+  tough (12000 health +3600 per level) and gain 50% more for each extra player (4 players: x2.5).
 
 - 1.7.0: sealing an E-Hole drops green items instead of reds (config "Seal Item Tier": White, Green, Red or Boss;
   "Seal Items Per Player").

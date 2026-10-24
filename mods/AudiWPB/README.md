@@ -41,7 +41,7 @@ have a 4% chance to. Only while the artifact is on.
 |---|---|
 | **06L115562B** (Audi Q5 oil filter) | +50% health regen per stack. Every 8 s, an 8% chance to set yourself on fire; the burn is stronger with each filter. |
 | **Pirelli Scorpion Verde** (tyre) | +50% move speed per stack, up to 3. At 4 stacks every tyre gives +100% instead (+400%). Extra tyres past 4 do nothing. You lose grip and drift sideways; at 4 it's much worse and you can't hold a straight line. |
-| **E-tron Battery** | +1000 shield per stack. You move 25% slower per stack. Every 2.5 s, lightning arcs from you to teammates within 15 m (about 3% of their health per battery; it never kills). |
+| **E-tron Battery** | +1000 shield per stack. You move 25% slower per stack. Every 2.5 s, harmless lightning arcs from you to teammates within 15 m (no damage). |
 
 ## Install
 
