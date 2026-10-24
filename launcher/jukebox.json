@@ -1,3 +1,45 @@
 {
-  "songs": []
+  "songs": [
+    {
+      "id": "mp3-my-sprinkler-goes-like-this",
+      "title": "My Sprinkler Goes Like This",
+      "artist": "a6407805-alt",
+      "audio": "https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/jukebox/mp3-my-sprinkler-goes-like-this.mp3",
+      "added": "2026-10-24T03:32:00.7385216Z",
+      "addedBy": "a6407805-alt"
+    },
+    {
+      "id": "mp3-jussipussi-edm",
+      "title": "Jussipussi EDM",
+      "artist": "DeAndre6969",
+      "audio": "https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/jukebox/mp3-jussipussi-edm.mp3",
+      "added": "2026-10-24T04:04:02.2083210Z",
+      "addedBy": "DeAndre6969"
+    },
+    {
+      "id": "mp3-bigger-problem",
+      "title": "mp3-bigger-problem",
+      "artist": "DeAndre6969",
+      "audio": "https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/jukebox/mp3-bigger-problem.mp3",
+      "added": "2026-10-24T04:04:03.5453391Z",
+      "addedBy": "DeAndre6969"
+    },
+    {
+      "id": "mp3-i-told-my-wife-she-should-embrace-her-mistakes",
+      "title": "I Told My Wife She Should Embrace Her Mistakes",
+      "artist": "a6407805-alt",
+      "audio": "https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/jukebox/mp3-i-told-my-wife-she-should-embrace-her-mistakes.mp3",
+      "added": "2026-10-24T04:10:38.1919964Z",
+      "addedBy": "a6407805-alt"
+    },
+    {
+      "id": "mp3-white-bitches",
+      "title": "White Bitches",
+      "artist": "DeAndre6969",
+      "audio": "https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/jukebox/mp3-white-bitches.mp3",
+      "added": "2026-10-24T04:15:50.8289143Z",
+      "addedBy": "DeAndre6969"
+    }
+  ],
+  "removed": []
 }

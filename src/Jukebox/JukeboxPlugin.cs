@@ -45,7 +45,7 @@ namespace Jukebox
         public static bool VoteOpen;
         public static int MyVote = -1;
         public static string NowPlayingId = "", NowPlayingTitle = "";
-        public static bool NowPlayingMissing;
+        public static bool NowPlayingMissing, NowPlayingBroken;
         private static float _nowPlayingShownAt = -100f;
         private static string _toast = "";
         private static float _toastUntil;
@@ -299,6 +299,7 @@ namespace Jukebox
             NowPlayingId = id ?? "";
             NowPlayingTitle = title ?? "";
             NowPlayingMissing = false;
+            NowPlayingBroken = false;
             if (NowPlayingId.Length == 0) { GameMusic.Restore(); Toast("Jukebox stopped."); return; }
 
             SongLibrary.Reload();
@@ -310,6 +311,7 @@ namespace Jukebox
             else
             {
                 NowPlayingMissing = true;
+                NowPlayingBroken = song != null && song.Downloaded; // the file is there, Windows wouldn't play it
                 GameMusic.Restore();
             }
             _nowPlayingShownAt = Time.unscaledTime;
@@ -376,7 +378,7 @@ namespace Jukebox
             if (NowPlayingId.Length > 0)
             {
                 bool big = Time.unscaledTime - _nowPlayingShownAt < 6f;
-                string text = (NowPlayingMissing ? "Not downloaded: " : "Now playing: ") + NowPlayingTitle;
+                string text = (NowPlayingBroken ? "Couldn't play: " : NowPlayingMissing ? "Not downloaded: " : "Now playing: ") + NowPlayingTitle;
                 if (!NowPlayingMissing && MciPlayer.LengthMs > 0)
                 {
                     int pos = MciPlayer.PositionMs / 1000, len = MciPlayer.LengthMs / 1000;

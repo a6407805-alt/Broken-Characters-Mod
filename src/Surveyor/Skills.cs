@@ -14,6 +14,8 @@ namespace Surveyor
     {
         public float Spool;
         public float AnchorLeft;
+        /// <summary>Recoil the model shows (SvrHeavy consumes it).</summary>
+        public float KickPulse;
         private float _idle;
         private bool _slowed;
         private int _senseVersion = -1;
@@ -92,6 +94,9 @@ namespace Surveyor
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
             Util.PlaySound("Play_commando_M1", gameObject);
             characterBody.AddSpreadBloom(0.12f);
+            float rk = anchored ? 0.45f : 1f;                  // heavy gun: the camera kicks with every round
+            AddRecoil(-0.35f * rk, -0.75f * rk, -0.25f * rk, 0.25f * rk);
+            _spool.KickPulse += 0.22f;
 
             new BulletAttack
             {
@@ -310,5 +315,54 @@ namespace Surveyor
         }
 
         public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.PrioritySkill; }
+    }
+
+    // ================================================================ Utility alt: Peek (visor off)
+
+    public class SvrPeekState : BaseSkillState
+    {
+        public override void OnEnter()
+        {
+            base.OnEnter();
+            Util.PlaySound("Play_commando_R", gameObject);
+            SvrRigPart.OpenVisor(gameObject, SvrPlugin.PeekSeconds.Value);      // the visor flips up on every client
+            if (isAuthority)
+            {
+                SvrLidar lidar = GetComponent<SvrLidar>();
+                if (lidar) lidar.StartPeek(SvrPlugin.PeekSeconds.Value);
+            }
+        }
+
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+            if (fixedAge >= 0.35f && isAuthority) outer.SetNextStateToMain();
+        }
+
+        public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.Skill; }
+    }
+
+    // ================================================================ Special alt: LiDAR Overdrive (mode chosen with the mode key)
+
+    public class SvrOverdriveState : BaseSkillState
+    {
+        public override void OnEnter()
+        {
+            base.OnEnter();
+            Util.PlaySound("Play_drone_repair", gameObject);
+            if (isAuthority)
+            {
+                SvrLidar lidar = GetComponent<SvrLidar>();
+                if (lidar) lidar.Overdrive(SvrLidar.OdMode);
+            }
+        }
+
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+            if (fixedAge >= 0.3f && isAuthority) outer.SetNextStateToMain();
+        }
+
+        public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.Skill; }
     }
 }

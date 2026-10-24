@@ -97,6 +97,8 @@ namespace BrokenCharactersLauncher
         public MainWindow()
         {
             InitializeComponent();
+            LocationChanged += DockSidePanels; // GUIDE / CREATOR side panels follow the launcher
+            SizeChanged += DockSidePanels;
         }
 
         // ================================================================== startup
@@ -244,6 +246,14 @@ namespace BrokenCharactersLauncher
             {
                 try { return await GetLatestReleaseOnceAsync(); }
                 catch (ReleaseMissingException) when (attempt < 4) { await Task.Delay(TimeSpan.FromSeconds(5)); }
+                catch (HttpRequestException)
+                {
+                    // GitHub's API allows only 60 checks an hour per home internet; lots of restarts use that up.
+                    // The release also carries release-info.json, a plain download with no such limit: use it.
+                    ReleaseInfo? viaFile = await GetLatestReleaseFromInfoFileAsync();
+                    if (viaFile != null) return viaFile;
+                    throw;
+                }
             }
         }
 
@@ -252,11 +262,40 @@ namespace BrokenCharactersLauncher
             public ReleaseMissingException(string message) : base(message) { }
         }
 
+        /// <summary>The version + sizes from the release's release-info.json (written by the build server). Null if missing.</summary>
+        private static async Task<ReleaseInfo?> GetLatestReleaseFromInfoFileAsync()
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                string text = await Http.GetStringAsync($"https://github.com/{Repo}/releases/latest/download/release-info.json?t={DateTime.UtcNow.Ticks}", cts.Token);
+                using JsonDocument json = JsonDocument.Parse(text);
+                JsonElement r = json.RootElement;
+                string version = r.GetProperty("version").GetString() ?? "";
+                if (version.Length == 0) return null;
+                DateTimeOffset published = r.TryGetProperty("published", out JsonElement p) && p.TryGetDateTimeOffset(out DateTimeOffset d) ? d : DateTimeOffset.MinValue;
+                return new ReleaseInfo(version, $"https://github.com/{Repo}/releases/latest/download/{AssetName}",
+                    r.GetProperty("zipSize").GetInt64(), published, r.TryGetProperty("exeSize", out JsonElement x) ? x.GetInt64() : 0);
+            }
+            catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException || ex is JsonException || ex is KeyNotFoundException || ex is InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>A saved creator key makes API calls count against that person's own 5,000-an-hour limit.</summary>
+        internal static void AddKeyIfAny(HttpRequestMessage request)
+        {
+            string? key = Publisher.ReadSavedKey();
+            if (!string.IsNullOrEmpty(key)) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+        }
+
         private static async Task<ReleaseInfo> GetLatestReleaseOnceAsync()
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Repo}/releases/latest");
             request.Headers.Accept.ParseAdd("application/vnd.github+json");
+            AddKeyIfAny(request);
 
             using HttpResponseMessage response = await Http.SendAsync(request, cts.Token);
             if (response.StatusCode == HttpStatusCode.Forbidden || (int)response.StatusCode == 429)
@@ -310,6 +349,7 @@ namespace BrokenCharactersLauncher
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
                 using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Repo}/commits?per_page=12");
                 request.Headers.Accept.ParseAdd("application/vnd.github+json");
+                AddKeyIfAny(request);
                 using HttpResponseMessage response = await Http.SendAsync(request, cts.Token);
                 response.EnsureSuccessStatusCode();
 
@@ -676,6 +716,7 @@ namespace BrokenCharactersLauncher
             {
                 Task roster = RefreshRosterFromGitHubAsync();
                 Task changelog = LoadChangelogAsync();
+                _ = SyncJukeboxQuietlyAsync();
                 if (await TrySelfUpdateAsync(fromRefresh: true)) return; // restarting into the new launcher
                 await CheckAndUpdateAsync();
                 await roster;
@@ -709,10 +750,49 @@ namespace BrokenCharactersLauncher
             LaunchGame();
         }
 
+        /// <summary>The GUIDE button (title bar, left of STEAM PLAY): opens the install/update/publish guide in its own window inside the launcher.</summary>
+        private GuideWindow? _guide;
+        private PublishWindow? _creator;
+        private const double SidePanelGap = 16;
+
+        private void GuideTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (_guide != null) { _guide.Close(); return; } // the button toggles the panel
+            _guide = new GuideWindow { Owner = this };
+            _guide.Closed += (_, __) => _guide = null;
+            DockSidePanels(this, EventArgs.Empty);
+            _guide.Show();
+        }
+
+        /// <summary>Keeps the side panels stuck to the launcher, same height, same gap: GUIDE on the left, CREATOR on
+        /// the right. Hooked to LocationChanged/SizeChanged in the constructor, so they follow the launcher.</summary>
+        private void DockSidePanels(object? sender, EventArgs e)
+        {
+            double h = ActualHeight > 0 ? ActualHeight : Height;
+            double w = ActualWidth > 0 ? ActualWidth : Width;
+            if (_guide != null)
+            {
+                _guide.Height = h;
+                _guide.Top = Top;
+                _guide.Left = Math.Max(SystemParameters.VirtualScreenLeft, Left - _guide.Width - SidePanelGap);
+            }
+            if (_creator != null)
+            {
+                _creator.Height = h;
+                _creator.Top = Top;
+                _creator.Left = Math.Min(SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - _creator.Width,
+                                         Left + w + SidePanelGap);
+            }
+        }
+
         /// <summary>Opens the "publish my mod" window (see PublishWindow.xaml.cs / Publisher.cs).</summary>
         private void Creator_Click(object sender, RoutedEventArgs e)
         {
-            new PublishWindow { Owner = this }.ShowDialog();
+            if (_creator != null) { _creator.Close(); return; } // the button toggles the panel
+            _creator = new PublishWindow { Owner = this };
+            _creator.Closed += (_, __) => _creator = null;
+            DockSidePanels(this, EventArgs.Empty);
+            _creator.Show();
         }
 
         private void Jukebox_Click(object sender, RoutedEventArgs e)
@@ -734,6 +814,19 @@ namespace BrokenCharactersLauncher
         {
             string key = ExtrasKeyBox.Password.Trim();
             if (key.Length == 0) return;
+            if (!KeyVault.LooksLikeKey(key))
+            {
+                // A password: unlock the extras key from the repo (KeyVault.cs).
+                SaveKeyButton.IsEnabled = false;
+                (string? unlocked, string? error) = await KeyVault.UnlockFromRepoAsync(KeyVault.ExtrasPath, key);
+                SaveKeyButton.IsEnabled = true;
+                if (unlocked == null)
+                {
+                    MessageBox.Show(this, error, "Extras", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                key = unlocked;
+            }
             try
             {
                 Directory.CreateDirectory(ExtrasDir);

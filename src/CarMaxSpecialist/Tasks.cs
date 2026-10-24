@@ -189,6 +189,18 @@ namespace CarMaxSpecialist
         }
 
         public static int Open;
+
+        // the confirm key's name for the on-screen text (Enter itself opens RoR2's chat, so it isn't the default)
+        private static string CN
+        {
+            get
+            {
+                KeyCode k = CmxPlugin.ConfirmKey.Value;
+                if (k == KeyCode.KeypadPlus) return "NUM +";
+                if (k == KeyCode.KeypadEnter) return "NUM ENTER";
+                return k.ToString().ToUpper();
+            }
+        }
         public static bool ClearRequest;
         // mouse mode (toggle key): click the same things the keys press
         private readonly List<Hit> _hits = new List<Hit>();
@@ -296,14 +308,14 @@ namespace CarMaxSpecialist
                 case Kind.Story: return t.Step == 0 ? "Warranty claim. Customer states " + t.Story.Complaint + ". Pick the cause." : "Now pick the correction.";
                 case Kind.Invoice: return "Invoice. " + t.Header.Replace("$", "").Replace("+", "plus").Replace("=", "equals").Replace("?", "what");
                 case Kind.Ero:
-                    return t.Step == 0 ? "Repair order entry. " + t.Says + " Pick the matching complaint." : t.Step == 1 ? "Pick the pay type. " + PayHints[t.NeedPay] : "Stamp it. Press num enter.";
+                    return t.Step == 0 ? "Repair order entry. " + t.Says + " Pick the matching complaint." : t.Step == 1 ? "Pick the pay type. " + PayHints[t.NeedPay] : "Stamp it. Press " + CN.ToLower() + ".";
                 case Kind.Appt:
                     switch (t.Step)
                     {
-                        case 0: return "Service scheduler. Pick the appointment date. Press a number, then num enter.";
+                        case 0: return "Service scheduler. Pick the appointment date. Press a number, then " + CN.ToLower() + ".";
                         case 1: return "Pick the same date again. The order has changed.";
                         case 2: return t.Name.Length == 0 ? "Type the customer's name: " + Spaced(t.TargetName) + ". First letter " + t.TargetName[0] + "." : "Next letter " + t.TargetName[t.Name.Length] + ".";
-                        case 3: return "Set the promise time to " + FormatTime((int)t.TargetMin) + ". Hold 4 for earlier, 6 for later, then num enter.";
+                        case 3: return "Set the promise time to " + FormatTime((int)t.TargetMin) + ". Hold 4 for earlier, 6 for later, then " + CN.ToLower() + ".";
                         default: return "Submitting. Wait for the bar, then tick all three compliance boxes.";
                     }
                 case Kind.Inventory: return "Inventory audit. " + t.InvParts[t.Step] + ". Count the boxes on the shelf and match the system quantity.";
@@ -623,7 +635,7 @@ namespace CarMaxSpecialist
         private static int DigitDown()
         {
             if (_clickDigit >= 0) { int c = _clickDigit; _clickDigit = -1; return c; }
-            if (Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetKeyDown(KeyCode.Return)) return 11;
+            if (Input.GetKeyDown(CmxPlugin.ConfirmKey.Value)) return 11;
             for (int i = 0; i <= 9; i++)
                 if (Input.GetKeyDown(KeyCode.Alpha0 + i) || Input.GetKeyDown(KeyCode.Keypad0 + i)) return i;
             return -1;
@@ -689,8 +701,8 @@ namespace CarMaxSpecialist
                 case Kind.Inventory:
                 {
                     int d = DigitDown();
-                    if (ArrowPressed(0) || Input.GetKeyDown(KeyCode.KeypadPlus)) { t.Qty = Mathf.Min(20, t.Qty + 1); CmxAudio.Play("typing"); }
-                    else if (ArrowPressed(2) || Input.GetKeyDown(KeyCode.KeypadMinus)) { t.Qty = Mathf.Max(0, t.Qty - 1); CmxAudio.Play("typing"); }
+                    if (ArrowPressed(0)) { t.Qty = Mathf.Min(20, t.Qty + 1); CmxAudio.Play("typing"); }
+                    else if (ArrowPressed(2)) { t.Qty = Mathf.Max(0, t.Qty - 1); CmxAudio.Play("typing"); }
                     if (d >= 0 && d <= 9) { t.Qty = d; t.Msg = ""; CmxAudio.Play("typing"); break; }
                     if (d != 11) break;
                     if (t.Qty == t.InvShelf[t.Step])
@@ -1165,7 +1177,7 @@ namespace CarMaxSpecialist
             _mono.normal.textColor = Color.white;
             GUI.Label(stamp, "LARGE COMPLETED", _mono);
             _mono.fontSize = old;
-            Hint(inner, t.Step == 0 ? "Press 1, 2 or 3" : t.Step == 1 ? "Press 1-4 for the pay type the bill-to calls for" : "Press NUM ENTER to stamp it", sc);
+            Hint(inner, t.Step == 0 ? "Press 1, 2 or 3" : t.Step == 1 ? "Press 1-4 for the pay type the bill-to calls for" : "Press " + CN + " to stamp it", sc);
         }
 
         private void DrawInventory(Task t, Rect inner, float y, float w, float pad, float sc)
@@ -1193,8 +1205,8 @@ namespace CarMaxSpecialist
             float bw = (rw - 6f * sc) / 2f;
             Btn(t, new Rect(rx, y + lh + 56f * sc, bw, 30f * sc), "-", arrow: 2);
             Btn(t, new Rect(rx + bw + 6f * sc, y + lh + 56f * sc, bw, 30f * sc), "+", arrow: 0);
-            Btn(t, new Rect(rx, y + lh + 90f * sc, rw, 30f * sc), "NUM ENTER", 11);
-            GUI.Label(new Rect(x, shelfR.yMax + 6f * sc, shelfR.width, lh * 3f), "Change SYSTEM QTY with <b>Up / Down</b>, <b>+ / -</b> or just <b>press the number</b>, then <b>NUM ENTER</b>.", _label);
+            Btn(t, new Rect(rx, y + lh + 90f * sc, rw, 30f * sc), "" + CN + "", 11);
+            GUI.Label(new Rect(x, shelfR.yMax + 6f * sc, shelfR.width, lh * 3f), "Change SYSTEM QTY with <b>Up / Down</b>, <b>the + / - buttons</b> or just <b>press the number</b>, then <b>" + CN + "</b>.", _label);
             if (t.Msg.Length > 0)
             {
                 _label.normal.textColor = new Color(0.7f, 0.05f, 0.05f);
@@ -1212,7 +1224,7 @@ namespace CarMaxSpecialist
                 case 0:
                 case 1:
                 {
-                    GUI.Label(new Rect(x, y, w, lh * 2f), t.Step == 0 ? "<b>Pick the day the customer will bring the vehicle in.</b>\nPress its number, then NUM ENTER." : "<b>Policy 7.3.1: pick the same date a second time.</b>\nThe order has changed. Press its number, then NUM ENTER.", _label);
+                    GUI.Label(new Rect(x, y, w, lh * 2f), t.Step == 0 ? "<b>Pick the day the customer will bring the vehicle in.</b>\nPress its number, then " + CN + "." : "<b>Policy 7.3.1: pick the same date a second time.</b>\nThe order has changed. Press its number, then " + CN + ".", _label);
                     y += lh * 2f + 8f * sc;
                     float cg = 6f * sc, cw = (w - cg * 2f) / 3f, ch = 34f * sc;
                     for (int i = 0; i < 9; i++)
@@ -1225,8 +1237,8 @@ namespace CarMaxSpecialist
                         _center.normal.textColor = new Color(0f, 0.23f, 0.46f);
                         GUI.Label(c, "<b>[" + (i + 1) + "]  " + t.Dates[t.Order[i]] + "</b>", _center);
                     }
-                    Btn(t, new Rect(x + w * 0.5f - 90f * sc, y + 3f * (ch + cg) + 2f * sc, 180f * sc, 32f * sc), "NUM ENTER", 11);
-                    Hint(inner, "Number = choose    NUM ENTER = confirm", sc);
+                    Btn(t, new Rect(x + w * 0.5f - 90f * sc, y + 3f * (ch + cg) + 2f * sc, 180f * sc, 32f * sc), "" + CN + "", 11);
+                    Hint(inner, "Number = choose    " + CN + " = confirm", sc);
                     break;
                 }
                 case 2:
@@ -1255,14 +1267,14 @@ namespace CarMaxSpecialist
                     float frac = Mathf.Clamp01((t.Pos - 420f) / 660f);
                     Box(new Rect(x, y, w, 14f * sc), new Color(0.35f, 0.35f, 0.35f));
                     Box(new Rect(x + w * frac - 9f * sc, y - 12f * sc, 18f * sc, 38f * sc), new Color(1f, 0.79f, 0.15f));
-                    GUI.Label(new Rect(x, y + 28f * sc, w, lh * 2f), "<b>HOLD 4</b> = earlier     <b>HOLD 6</b> = later     <b>NUM ENTER</b> = set\nVery sensitive: don't go past the time!", _label);
+                    GUI.Label(new Rect(x, y + 28f * sc, w, lh * 2f), "<b>HOLD 4</b> = earlier     <b>HOLD 6</b> = later     <b>" + CN + "</b> = set\nVery sensitive: don't go past the time!", _label);
                     {
                         float bw = (w - 12f * sc) / 3f, by = y + 28f * sc + lh * 2f + 4f * sc;
                         Btn(t, new Rect(x, by, bw, 34f * sc), "<  HOLD", hold: 3);
-                        Btn(t, new Rect(x + bw + 6f * sc, by, bw, 34f * sc), "NUM ENTER", 11);
+                        Btn(t, new Rect(x + bw + 6f * sc, by, bw, 34f * sc), "" + CN + "", 11);
                         Btn(t, new Rect(x + 2f * (bw + 6f * sc), by, bw, 34f * sc), "HOLD  >", hold: 1);
                     }
-                    Hint(inner, "Hold 4 / 6    NUM ENTER = set the time", sc);
+                    Hint(inner, "Hold 4 / 6    " + CN + " = set the time", sc);
                     break;
                 }
                 default:

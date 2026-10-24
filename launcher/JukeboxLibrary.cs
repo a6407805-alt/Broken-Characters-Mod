@@ -31,11 +31,16 @@ namespace BrokenCharactersLauncher
         [JsonPropertyName("audio")] public string? Audio { get; set; }
         [JsonPropertyName("added")] public string? Added { get; set; }
         [JsonPropertyName("addedBy")] public string? AddedBy { get; set; }
+
+        /// <summary>Set for an MP3/WAV the player dropped into the Jukebox folder themselves (not in any list).</summary>
+        [JsonIgnore] public string? FilePath { get; set; }
     }
 
     public sealed class JukeboxFile
     {
         [JsonPropertyName("songs")] public List<JukeboxSong> Songs { get; set; } = new List<JukeboxSong>();
+        /// <summary>Songs someone pressed Remove on: every PC deletes its copy, and nobody re-shares them.</summary>
+        [JsonPropertyName("removed")] public List<string> Removed { get; set; } = new List<string>();
     }
 
     public static class JukeboxLibrary
@@ -56,9 +61,24 @@ namespace BrokenCharactersLauncher
         private static HttpClient CreateHttp()
         {
             var c = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-            c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("BrokenCharactersLauncher", "1.0"));
+            // Suno's site and CDN can refuse non-browser clients, so ask like a browser does.
+            c.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", BrowserAgent);
             return c;
         }
+
+        private const string BrowserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
+
+        /// <summary>An id for a shared MP3 file (from its file name): lowercase letters, digits and dashes.</summary>
+        public static string FileSongId(string name)
+        {
+            string id = Regex.Replace(name.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
+            while (id.StartsWith("mp3-", StringComparison.Ordinal)) id = id.Substring(4); // already a shared file's id
+            return "mp3-" + (id.Length == 0 ? Guid.NewGuid().ToString("N").Substring(0, 8) : id.Length > 60 ? id.Substring(0, 60) : id);
+        }
+
+        /// <summary>The jukebox comes with the friends-only extras: only PCs with an extras key download the songs.</summary>
+        public static bool ExtrasEnabled => File.Exists(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BrokenCharacters", "extras-key.txt"));
 
         public static string SongPath(string id) => Path.Combine(Folder, id + ".mp3");
         public static bool IsDownloaded(string id) => File.Exists(SongPath(id));
@@ -83,16 +103,59 @@ namespace BrokenCharactersLauncher
         }
 
         /// <summary>The group list from GitHub (raw file, no API limit); falls back to the last copy we saw.</summary>
+        private const string ReleaseCopyUrl = "https://github.com/" + Publisher.Repo + "/releases/download/jukebox/jukebox.json";
+
+        /// <summary>After any change to the song list: put a copy on the jukebox release too (see FetchGroupAsync).</summary>
+        public static async Task PublishGroupCopyAsync(Publisher pub, JukeboxFile group, CancellationToken ct = default)
+        {
+            try
+            {
+                Directory.CreateDirectory(Folder);
+                string text = Serialize(group);
+                File.WriteAllText(SharedCache, text);
+                string tmp = Path.Combine(Folder, "jukebox-upload.json");
+                File.WriteAllText(tmp, text);
+                await pub.UploadReleaseFileAsync("jukebox", "jukebox.json", tmp, "application/json", ct);
+            }
+            catch (Exception ex) when (ex is GitHubException || ex is HttpRequestException || ex is IOException) { } // the repo copy still has it
+        }
+
         public static async Task<JukeboxFile> FetchGroupAsync(CancellationToken ct = default)
         {
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 cts.CancelAfter(TimeSpan.FromSeconds(10));
-                using HttpResponseMessage r = await Http.GetAsync(SharedUrl + "?t=" + DateTime.UtcNow.Ticks, cts.Token);
-                if (r.StatusCode == System.Net.HttpStatusCode.NotFound) return new JukeboxFile();
-                r.EnsureSuccessStatusCode();
-                string text = await r.Content.ReadAsStringAsync(cts.Token);
+                // The GitHub API gives the list as it is right now. The raw file (the fallback, when the API's hourly
+                // limit is used up) can be several minutes old, which once made just-shared songs look unshared.
+                string? text = null;
+                // 1. The copy on the jukebox release: always fresh and no hourly limit (written on every change).
+                try
+                {
+                    using HttpResponseMessage rel = await Http.GetAsync(ReleaseCopyUrl + "?t=" + DateTime.UtcNow.Ticks, cts.Token);
+                    if (rel.IsSuccessStatusCode) text = await rel.Content.ReadAsStringAsync(cts.Token);
+                    if (text != null && !text.TrimStart().StartsWith("{", StringComparison.Ordinal)) text = null;
+                }
+                catch (HttpRequestException) { }
+                // 2. The GitHub API (fresh, but 60 checks an hour without a key). 3. The raw file (can be minutes old).
+                if (text == null)
+                try
+                {
+                    using var api = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/repos/" + Publisher.Repo + "/contents/" + RepoPath + "?ref=main");
+                    api.Headers.TryAddWithoutValidation("Accept", "application/vnd.github.raw");
+                    MainWindow.AddKeyIfAny(api);
+                    using HttpResponseMessage ar = await Http.SendAsync(api, cts.Token);
+                    if (ar.StatusCode == System.Net.HttpStatusCode.NotFound) return new JukeboxFile();
+                    if (ar.IsSuccessStatusCode) text = await ar.Content.ReadAsStringAsync(cts.Token);
+                }
+                catch (HttpRequestException) { }
+                if (text == null)
+                {
+                    using HttpResponseMessage r = await Http.GetAsync(SharedUrl + "?t=" + DateTime.UtcNow.Ticks, cts.Token);
+                    if (r.StatusCode == System.Net.HttpStatusCode.NotFound) return new JukeboxFile();
+                    r.EnsureSuccessStatusCode();
+                    text = await r.Content.ReadAsStringAsync(cts.Token);
+                }
                 Directory.CreateDirectory(Folder);
                 File.WriteAllText(SharedCache, text);
                 return Parse(text);
@@ -127,7 +190,8 @@ namespace BrokenCharactersLauncher
                 {
                     using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     cts.CancelAfter(TimeSpan.FromSeconds(15));
-                    using HttpResponseMessage r = await Http.GetAsync(uri, cts.Token); // follows short-link redirects
+                    using var req = new HttpRequestMessage(HttpMethod.Get, uri);
+                    using HttpResponseMessage r = await Http.SendAsync(req, cts.Token); // follows short-link redirects
                     html = await r.Content.ReadAsStringAsync(cts.Token);
                     Match fromUrl = Uuid.Match(r.RequestMessage?.RequestUri?.ToString() ?? "");
                     if (fromUrl.Success) bare = fromUrl;
@@ -167,14 +231,30 @@ namespace BrokenCharactersLauncher
         {
             Directory.CreateDirectory(Folder);
             string dest = SongPath(song.Id), part = dest + ".part";
-            var urls = new List<string> { "https://cdn1.suno.ai/" + song.Id + ".mp3" };
+            var urls = new List<string>();
+            // Shared songs live on GitHub (the jukebox release): download from there first, Suno only as a backup.
+            bool onGitHub = song.Audio != null && song.Audio.Contains("github.com/", StringComparison.OrdinalIgnoreCase);
+            if (onGitHub) urls.Add(song.Audio!);
+            bool fromSuno = !song.Id.StartsWith("mp3-", StringComparison.Ordinal) && !onGitHub;
+            if (!song.Id.StartsWith("mp3-", StringComparison.Ordinal)) urls.Add("https://cdn1.suno.ai/" + song.Id + ".mp3");
             if (!string.IsNullOrEmpty(song.Audio) && !urls.Contains(song.Audio)) urls.Add(song.Audio);
+            if (fromSuno)
+            try
+            {
+                // The song page names the current audio address; read it fresh in case the CDN moved.
+                JukeboxSong fresh = await ResolveAsync("https://suno.com/song/" + song.Id, ct);
+                if (!string.IsNullOrEmpty(fresh.Audio) && !urls.Contains(fresh.Audio)) urls.Add(fresh.Audio);
+            }
+            catch (InvalidOperationException) { }
+            if (fromSuno) urls.Add("https://cdn2.suno.ai/" + song.Id + ".mp3");
             Exception? last = null;
             foreach (string url in urls)
             {
                 try
                 {
-                    using HttpResponseMessage r = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+                    using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                    req.Headers.TryAddWithoutValidation("Referer", "https://suno.com/");
+                    using HttpResponseMessage r = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
                     r.EnsureSuccessStatusCode();
                     await using (var outFile = File.Create(part))
                         await r.Content.CopyToAsync(outFile, ct);
@@ -214,25 +294,60 @@ namespace BrokenCharactersLauncher
         /// Fetches the group list, downloads every song this PC is missing and rewrites playlist.json.
         /// Reports progress lines; returns how many songs failed. Safe to call at launcher start (quiet on errors).
         /// </summary>
-        public static async Task<int> SyncAsync(IProgress<string>? progress = null, CancellationToken ct = default)
+        public static async Task<int> SyncAsync(IProgress<string>? progress = null, CancellationToken ct = default, JukeboxFile? known = null)
         {
             await SyncLock.WaitAsync(ct);
             try
             {
-                List<JukeboxSong> all = Merge(await FetchGroupAsync(ct), LoadLocal());
+                if (!ExtrasEnabled)
+                {
+                    WritePlaylist(Array.Empty<JukeboxSong>());
+                    progress?.Report("The jukebox comes with the extras. Enter the extras key or password in the EXTRAS box (bottom left) first.");
+                    return 0;
+                }
+                JukeboxFile group = await FetchGroupAsync(ct);
+                if (known != null)
+                {
+                    // The jukebox window may know songs a slow copy of the list doesn't have yet: use both.
+                    foreach (string gone in known.Removed) if (!group.Removed.Contains(gone)) group.Removed.Add(gone);
+                    foreach (JukeboxSong s in known.Songs) if (!group.Songs.Any(g => g.Id == s.Id)) group.Songs.Add(s);
+                }
+                foreach (string gone in group.Removed) DeleteSongFile(gone); // someone pressed Remove: drop our copy too
+                JukeboxFile mine = LoadLocal();
+                if (mine.Songs.RemoveAll(s => group.Removed.Contains(s.Id)) > 0) SaveLocal(mine);
+                List<JukeboxSong> all = Merge(group, mine).Where(s => !group.Removed.Contains(s.Id)).ToList();
                 List<JukeboxSong> missing = all.Where(s => !IsDownloaded(s.Id)).ToList();
                 int failed = 0;
+                string firstError = "";
                 for (int i = 0; i < missing.Count; i++)
                 {
                     progress?.Report("Downloading " + (i + 1) + " of " + missing.Count + ": " + missing[i].Title);
                     try { await DownloadAsync(missing[i], ct); }
-                    catch (IOException ex) { failed++; progress?.Report(ex.Message); }
+                    catch (IOException ex) { failed++; if (firstError.Length == 0) firstError = ex.Message; progress?.Report(ex.Message); }
                 }
                 WritePlaylist(all);
-                progress?.Report(failed == 0 ? all.Count + " song(s) ready for the game." : all.Count - failed + " song(s) ready, " + failed + " couldn't download.");
+                progress?.Report(failed == 0 ? all.Count + " song(s) ready for the game."
+                                             : all.Count - failed + " song(s) ready, " + failed + " couldn't download. " + firstError);
                 return failed;
             }
             finally { SyncLock.Release(); }
+        }
+
+        /// <summary>MP3/WAV files dropped into the Jukebox folder by hand (named after the file, like the mod does).</summary>
+        public static List<JukeboxSong> LooseFiles(IEnumerable<JukeboxSong> known)
+        {
+            var ids = new HashSet<string>(known.Select(k => k.Id), StringComparer.OrdinalIgnoreCase);
+            var list = new List<JukeboxSong>();
+            if (!Directory.Exists(Folder)) return list;
+            foreach (string f in Directory.GetFiles(Folder).OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            {
+                string ext = Path.GetExtension(f).ToLowerInvariant();
+                if (ext != ".mp3" && ext != ".wav") continue;
+                string id = Path.GetFileNameWithoutExtension(f);
+                if (ids.Contains(id)) continue;
+                list.Add(new JukeboxSong { Id = id, Title = id.Replace('_', ' '), FilePath = f });
+            }
+            return list;
         }
 
         public static void DeleteSongFile(string id)

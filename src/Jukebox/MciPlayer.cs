@@ -34,7 +34,16 @@ namespace Jukebox
         {
             Stop();
             if (!System.IO.File.Exists(path)) return false;
-            int err = Send("open \"" + path + "\" type mpegvideo alias " + Alias);
+            // Suno MP3s carry cover art, which Windows' player sometimes treats as a video stream and then fails to
+            // open (MCI error 277). So play a copy without the tag first, then the original, each twice.
+            string clean = CleanCopy(path);
+            int err = -1;
+            foreach (string file in clean != null ? new[] { clean, clean, path } : new[] { path, path })
+            {
+                err = Send("open \"" + file + "\" type mpegvideo alias " + Alias);
+                if (err == 0) break;
+                Send("close " + Alias);
+            }
             if (err != 0) { JukeboxPlugin.Log?.LogWarning("Jukebox couldn't open " + path + " (MCI error " + err + ")"); return false; }
             _open = true;
             Send("set " + Alias + " time format milliseconds");
@@ -42,6 +51,41 @@ namespace Jukebox
             LengthMs = len;
             SetVolume(volume);
             return Send("play " + Alias) == 0;
+        }
+
+        /// <summary>
+        /// Copy of the MP3 in %TEMP%\BCMJukebox without the ID3v2 tag (title, cover art) at the start and the ID3v1
+        /// tag at the end: just the audio frames. Reused while the original doesn't change. Null if there's no tag.
+        /// </summary>
+        private static string CleanCopy(string path)
+        {
+            try
+            {
+                if (!path.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase)) return null;
+                byte[] d = System.IO.File.ReadAllBytes(path);
+                int start = 0, end = d.Length;
+                while (start + 10 <= end && d[start] == 'I' && d[start + 1] == 'D' && d[start + 2] == '3')
+                {
+                    int size = (d[start + 6] & 0x7F) << 21 | (d[start + 7] & 0x7F) << 14 | (d[start + 8] & 0x7F) << 7 | (d[start + 9] & 0x7F);
+                    start += 10 + size + ((d[start + 5] & 0x10) != 0 ? 10 : 0);
+                }
+                if (end - 128 > start && d[end - 128] == 'T' && d[end - 127] == 'A' && d[end - 126] == 'G') end -= 128;
+                if (start == 0 && end == d.Length) return null;
+                if (start >= end) return null;
+                string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "BCMJukebox");
+                System.IO.Directory.CreateDirectory(dir);
+                string dest = System.IO.Path.Combine(dir, System.IO.Path.GetFileNameWithoutExtension(path) + "_" + d.Length + ".mp3");
+                if (!System.IO.File.Exists(dest))
+                {
+                    using (var f = System.IO.File.Create(dest)) f.Write(d, start, end - start);
+                }
+                return dest;
+            }
+            catch (Exception e)
+            {
+                JukeboxPlugin.Log?.LogWarning("Jukebox couldn't make a clean copy of " + path + ": " + e.Message);
+                return null;
+            }
         }
 
         /// <summary>0-100 on a perceptual curve, mapped to MCI's 0-1000.</summary>

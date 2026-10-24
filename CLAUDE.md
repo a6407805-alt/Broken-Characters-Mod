@@ -11,9 +11,11 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - `release/` installer (`install.ps1`), updater (`update.ps1`), `package.sh`. `.github/workflows/build.yml` does it all.
 - Launcher cards: one file per mod in `launcher/cards/<Mod>.json` (CI merges them into `roster.json` via
   `release/merge_roster.py` and attaches the result to the release). Never rewrite `launcher/roster.json` wholesale.
-- Creator window (`launcher/Publisher.cs`, `PublishWindow.xaml*`): lets a creator upload only their own mod through the
-  GitHub API; who owns what is `launcher/creators.json`. Don't commit dlls into `mods/<Mod>/` when `src/<Mod>/` exists.
+- Creator window (`launcher/Publisher.cs`, `PublishWindow.xaml*`): lets any creator upload mods through the
+  GitHub API. Every creator may update EVERY mod (owner's rule: one shared pack); `creators.json` just records who added a mod. Don't commit dlls into `mods/<Mod>/` when `src/<Mod>/` exists.
   Before changing a mod you don't own, check `creators.json` and `git log -- src/<Mod>`.
+  Quick upload (`QuickUpload.cs`, `PublishWindow.Quick.cs`): pick/drag a friend's .zip/.dll, it's staged as
+  `%TEMP%\BrokenCharacters-QuickUpload\<id>\mods\<Mod>\` and the normal scan/publish runs on that.
 
 ## Build & release (nothing builds locally: no dotnet in the sandbox)
 - Every push to main: build Duelist + every `src/*/*.csproj` → package `Broken-Characters-Mod.zip` → Windows installer
@@ -35,10 +37,21 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - Never run the installer on the owner's PC yourself. Game log for bugs: `BepInEx\LogOutput.log` (stage it, grep for
   the mod's namespace and "Exception").
 
-## Dev branch (work in progress, owner's fast test loop)
-- Unfinished changes go on the `dev` branch, never `main`. A push to `dev` builds the mods and the launcher (no
-  installer test) and publishes `Broken-Characters-Mod-dev.zip` to the `dev` pre-release. Launchers/updaters read only
-  `latest`, so dev builds never reach friends. There is ONE launcher for everyone (from main); never publish a separate dev launcher. Merge `dev` into `main` when a change is finished.
+## Character status (green / yellow / red)
+- Every roster entry/card has `"status"`: `green` = complete, `yellow` = in progress, `red` = early / untested. The launcher
+  card shows it as a tag and `src/CharacterStatus/` adds a status line to each survivor's description in game.
+- The owner sets statuses by clicking answers in the chat (AskUserQuestion). To change one: edit `"status"` in
+  `launcher/roster.json` (existing characters) or `launcher/cards/<Mod>.json` (new ones; ALWAYS give a new card a status),
+  run `python3 release/sync_status.py` (rewrites `mods/CharacterStatus/status.json`; add a MATCH entry there for new names), commit both.
+- Current: green Billy Bigsuits, Brother, Clay Rebel, Reaper; yellow CarMax, Audi Technician, Wilbur, Nidus, Phantom Assassin,
+  Infested General, Emberwarden, Duelist; red Surveyor, Ashwing Drake, Gravitos.
+
+## Dev branch (optional, for risky experiments)
+- Owner's rule (Oct 24 2026): PLAY and TEST LEVEL load EVERY character, finished or not. Unfinished characters go to `main`
+  too; the owner tells friends what to expect with a **status**, not with a branch (see "Character status" below).
+  `dev` is still available for risky experiments: a push to `dev` builds the mods and the launcher (no installer test)
+  and publishes `Broken-Characters-Mod-dev.zip` to the `dev` pre-release. Launchers/updaters read only `latest`.
+  There is ONE launcher for everyone (from main); never publish a separate dev launcher.
 - Fetch: `https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/dev/Broken-Characters-Mod-dev.zip`.
 - Hot reload: ScriptEngine is installed on the owner's PC (`BepInEx\plugins\ScriptEngine\`). A mod being
   hot-reloaded lives in `BepInEx\scripts\` (F6 reloads it) and must NOT also be in `plugins\`. Only code reloads;
@@ -55,10 +68,13 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - Push once per finished change, then one `gh run watch`; don't poll in loops.
 - Keep replies short; the owner is a visual learner and likes concrete steps.
 - Never print or commit the extras key (a `github_pat_...`).
+  The password-locked copy is fine to commit: `launcher/keys/extras.json` (AES-GCM + PBKDF2, `launcher/KeyVault.cs`),
+  unlocked by the guide's password box or the EXTRAS box. Creator keys have NO passwords (owner removed them).
 
 ## Jukebox (src/Jukebox + launcher JUKEBOX window)
-- Songs are Suno links in `launcher/jukebox.json` on main (no audio in the repo). The launcher edits it with the
-  creator key (`Publisher.UpdateTextFileAsync`, commits with `[skip ci]`); players without a key get a local list.
+- Every song is shared (no only-me, no Suno links anymore). UPLOAD SONGS (or drag MP3s onto the window) uploads the
+  files to the `jukebox` release. `launcher/jukebox.json` lists them (`audio` = release URL) plus `removed` ids (Remove = gone
+  for everyone, every PC deletes its copy). Edited with the creator key, `[skip ci]`. Only PCs with the extras key sync.
 - Launcher downloads `cdn1.suno.ai/<id>.mp3` to `%APPDATA%\BrokenCharacters\Jukebox\` and writes `playlist.json`
   (`JukeboxLibrary.cs`). The mod plays mp3 directly with winmm `type mpegvideo` (`MciPlayer.cs`), volume via setaudio.
 - Votes: host picks 3, players press 7/8/9, host tallies (R2API.Networking messages in `SongLibrary.cs`), each PC plays

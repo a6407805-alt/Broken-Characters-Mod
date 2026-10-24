@@ -1,0 +1,190 @@
+<Window x:Class="BrokenCharactersLauncher.GuideWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Broken Characters Mod - Guide"
+        Width="600" Height="720"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        WindowStartupLocation="Manual"
+        ShowInTaskbar="False"
+        FontFamily="Segoe UI">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="Accent" Color="#FFC928" />
+        <SolidColorBrush x:Key="TextDim" Color="#C9D6EA" />
+
+        <Style x:Key="TitleButton" TargetType="Button">
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#40FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GhostButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource Accent}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="14,6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="#30FFC928" BorderBrush="{StaticResource Accent}" BorderThickness="1" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#60FFC928" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Accent}" />
+            <Setter Property="FontSize" Value="24" />
+            <Setter Property="FontWeight" Value="Black" />
+            <Setter Property="Margin" Value="0,18,0,6" />
+        </Style>
+
+        <Style x:Key="StepTitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
+        <Style x:Key="StepBody" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextDim}" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="LineHeight" Value="23" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,2,0,10" />
+        </Style>
+    </Window.Resources>
+
+    <Border CornerRadius="10" Background="#FF0E1220" BorderBrush="{StaticResource Accent}" BorderThickness="1" Padding="28,10,28,22">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- title bar (drag to move) -->
+            <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown" Margin="-28,0,-28,0" Height="44">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="28,0,0,0">
+                    <TextBlock Text="GUIDE" Foreground="White" FontSize="18" FontWeight="Black" />
+                    <TextBlock Text="  INSTALL, UPDATE &amp; PUBLISH" Foreground="{StaticResource Accent}" FontSize="18" FontWeight="Black" />
+                </StackPanel>
+                <Button Content="&#x2715;" Style="{StaticResource TitleButton}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,10,0" Click="Close_Click" ToolTip="Close" />
+            </Grid>
+
+            <!-- scrollable guide content -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0">
+                <StackPanel Margin="0,0,22,0">
+
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="Installing (first time)" Margin="0,8,0,6" />
+                    <TextBlock Style="{StaticResource StepTitle}" Text="1. Download the launcher" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="Grab Broken-Characters-Mod.exe from the latest release and keep it on your Desktop." />
+                    <TextBlock Style="{StaticResource StepTitle}" Text="2. Let Windows allow it" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="If &quot;Windows protected your PC&quot; shows up: More info, then Run anyway. That's normal for a new app, not a sign anything is wrong." />
+                    <TextBlock Style="{StaticResource StepTitle}" Text="3. Let it install" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="It finds Risk of Rain 2 on its own. If it can't, pick your Risk of Rain 2 folder when asked. First install takes a few minutes." />
+                    <TextBlock Style="{StaticResource StepTitle}" Text="4. Got an extras key?" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="Type the extras password (or paste the extras key) into the EXTRAS box bottom-left and press Save. One-time step; skip it if you weren't given one." />
+                    <TextBlock Style="{StaticResource StepTitle}" Text="5. Press PLAY" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="It updates anything that needs it, then starts the game." />
+
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="Updating" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="You never have to download anything again after the first install. Every time you play, just press PLAY: it checks for a newer launcher and swaps itself in if there is one, checks for a newer mod pack and installs it, then starts the game." />
+                    <TextBlock Style="{StaticResource StepBody}" Text="Or press CHECK FOR UPDATES at the top any time to reload the character/map cards and patch notes without starting the game." />
+
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="The buttons up top" />
+                    <TextBlock Style="{StaticResource StepBody}" TextWrapping="Wrap">
+                        <Run Text="STEAM PLAY → LAUNCHER" FontWeight="Bold" Foreground="White" /><Run Text=" — turn on once and Steam's own Play button opens this launcher first. " />
+                        <Run Text="PATCH NOTES" FontWeight="Bold" Foreground="White" /><Run Text=" — what changed recently. " />
+                        <Run Text="JUKEBOX" FontWeight="Bold" Foreground="White" /><Run Text=" — pick the group's songs, vote in-game with 7/8/9. " />
+                        <Run Text="TEST LEVEL" FontWeight="Bold" Foreground="White" /><Run Text=" — singleplayer only, jumps into a dev-tools test run. " />
+                        <Run Text="CREATOR" FontWeight="Bold" Foreground="White" /><Run Text=" — publish your own mod (see below). " />
+                        <Run Text="GUIDE" FontWeight="Bold" Foreground="White" /><Run Text=" — this window, any time." />
+                    </TextBlock>
+
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="The extras (optional)" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="Some copyrighted content is friends-only. Ask the pack owner for the guide password, type it below to show the extras key, press Copy, then paste it (Ctrl+V) into the EXTRAS box bottom-left and press Save." />
+                    <Border Background="#1AFFC928" BorderBrush="#60FFC928" BorderThickness="1" CornerRadius="6" Padding="14,12" Margin="0,4,0,6">
+                        <StackPanel>
+                            <TextBlock Text="EXTRAS KEY (LOCKED)" Foreground="{StaticResource Accent}" FontSize="14" FontWeight="Black" />
+                            <DockPanel Margin="0,8,0,0">
+                                <Button DockPanel.Dock="Right" x:Name="UnlockButton" Content="Unlock" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="Unlock_Click" />
+                                <PasswordBox x:Name="GuidePasswordBox" Height="36" FontSize="15" VerticalContentAlignment="Center"
+                                             Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" KeyDown="GuidePasswordBox_KeyDown" />
+                            </DockPanel>
+                            <DockPanel x:Name="RevealRow" Margin="0,10,0,0" Visibility="Collapsed">
+                                <Button DockPanel.Dock="Right" x:Name="CopyKeyButton" Content="Copy" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="CopyKey_Click" />
+                                <TextBox x:Name="RevealBox" IsReadOnly="True" Height="36" FontSize="13" FontFamily="Consolas" VerticalContentAlignment="Center" Padding="6,0"
+                                         Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" />
+                            </DockPanel>
+                            <TextBlock x:Name="UnlockStatus" Foreground="#FF9A8C" FontSize="14" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed" />
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="Part 2: Publishing your mod" />
+                    <TextBlock Style="{StaticResource StepTitle}" Text="1. Open CREATOR" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="Click CREATOR at the top of the launcher." />
+                    <TextBlock Style="{StaticResource StepTitle}" Text="2. Paste your creator key" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="The first time, paste the creator key you made (see below) into the SIGN IN box and press SIGN IN. It's remembered after that." />
+                    <TextBlock Style="{StaticResource StepTitle}" Text="3. Pick your mod's folder and publish" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="Choose the folder your mod lives in (it needs a src/&lt;YourMod&gt; or mods/&lt;YourMod&gt; subfolder) and press PUBLISH. Only the files that changed get uploaded." />
+                    <TextBlock Style="{StaticResource StepTitle}" Text="Quick upload (a .zip or .dll from MEGA, Discord...)" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="In CREATOR, press Pick files... (or drag the files onto the QUICK UPLOAD box). Check the mod name: pick one from the list to update it, or type a new name for a new mod. Press Check files, then the gold button. Any creator can update any mod in the pack." />
+                    <TextBlock Style="{StaticResource StepBody}" FontStyle="Italic" Text="See CONTRIBUTING.md in the repo for the full new-character checklist." />
+
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="Getting your creator key" />
+                    <TextBlock Style="{StaticResource StepBody}" TextWrapping="Wrap">
+                        <Run Text="Each creator generates their own personal key — never share one key between people. On GitHub: Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token, scope " />
+                        <Run Text="public_repo" FontFamily="Consolas" Foreground="White" />
+                        <Run Text=", then paste the token into the CREATOR window's key box. The pack owner adds your name to the allow-list before your key will work." />
+                    </TextBlock>
+                    <TextBlock Style="{StaticResource StepBody}">
+                        <Hyperlink NavigateUri="https://github.com/settings/tokens/new?scopes=public_repo&amp;description=Broken%20Characters%20creator%20key" RequestNavigate="CreateToken_RequestNavigate" Foreground="{StaticResource Accent}">
+                            <Run Text="Create a creator key on GitHub" FontWeight="Bold" />
+                        </Hyperlink>
+                        <Run Text=" (the same link is in CREATOR's sign-in box)." />
+                    </TextBlock>
+
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="Troubleshooting" />
+                    <TextBlock Style="{StaticResource StepBody}" Text="Can't reach GitHub / no internet: if the pack is already installed, PLAY still works offline — you just won't get the newest update until you're back online." />
+                    <TextBlock Style="{StaticResource StepBody}" Text="&quot;Update failed&quot;: press Retry. Still failing? Send a screenshot of the launcher to the group chat." />
+                    <TextBlock Style="{StaticResource StepBody}" Text="Windows still won't open it: right-click Broken-Characters-Mod.exe → Properties → tick Unblock (bottom right) → OK, then try again." />
+                    <TextBlock Style="{StaticResource StepBody}" Text="Multiplayer: everyone in the lobby needs the same build — press PLAY or CHECK FOR UPDATES before you invite people." />
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <DockPanel Grid.Row="2" Margin="0,14,0,0">
+                <Button DockPanel.Dock="Right" Content="Open as PDF in browser" Style="{StaticResource GhostButton}" Click="OpenPdf_Click" />
+                <TextBlock Foreground="{StaticResource TextDim}" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap" Text="Broken Characters Mod — a friends-only Risk of Rain 2 pack." />
+            </DockPanel>
+
+        </Grid>
+    </Border>
+</Window>

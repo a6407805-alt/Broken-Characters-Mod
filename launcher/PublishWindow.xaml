@@ -2,12 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Broken Characters Mod - Creator"
-        Width="760" Height="720"
+        Width="600" Height="720"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
         ResizeMode="NoResize"
-        WindowStartupLocation="CenterScreen"
+        WindowStartupLocation="Manual"
+        ShowInTaskbar="False"
         FontFamily="Segoe UI"
         Loaded="Window_Loaded"
         Closing="Window_Closing">
@@ -95,6 +96,7 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -107,21 +109,32 @@
                 <Button Content="&#x2715;" Style="{StaticResource TitleButton}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,10,0" Click="Close_Click" ToolTip="Close" />
             </Grid>
 
-            <!-- ======================================================== step 0: creator key -->
-            <StackPanel x:Name="KeyPanel" Grid.Row="1" VerticalAlignment="Center" Visibility="Collapsed">
-                <TextBlock Text="Paste your creator key" Foreground="White" FontSize="26" FontWeight="Bold" />
-                <TextBlock Foreground="{StaticResource TextDim}" FontSize="15" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="You only do this once. The key is a long piece of text the pack owner gave you. It lets this launcher upload your mod, and nothing else." />
-                <PasswordBox x:Name="KeyBox" Height="40" Margin="0,22,0,0" FontSize="15" VerticalContentAlignment="Center"
-                             Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" />
-                <TextBlock x:Name="KeyError" Foreground="#FF9A8C" FontSize="14" TextWrapping="Wrap" Margin="0,10,0,0" Visibility="Collapsed" />
-                <Button x:Name="SaveKeyButton" Content="SAVE KEY" Style="{StaticResource GoldButton}" Margin="0,22,0,0" Click="SaveKey_Click" />
-                <TextBlock Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap" Margin="0,16,0,0"
-                           Text="Just here to play? You don't need this window. Close it and press PLAY." />
-            </StackPanel>
+            <!-- ======================================================== step 0: sign in (compact, sits above the main panel) -->
+            <Border x:Name="KeyPanel" Grid.Row="1" Visibility="Collapsed" Background="#1AFFC928" BorderBrush="{StaticResource Accent}" BorderThickness="1"
+                    CornerRadius="6" Padding="14,10" Margin="0,4,0,12">
+                <StackPanel>
+                    <TextBlock Text="SIGN IN (ONCE)" Foreground="{StaticResource Accent}" FontSize="14" FontWeight="Black" />
+                    <TextBlock Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,8"
+                               Text="Paste your creator key (the long text starting with ghp_ or github_pat_). Then Pick files and Publish below unlock. Just here to play? Close this." />
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" x:Name="SaveKeyButton" Content="SIGN IN" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
+                                Height="32" Click="SaveKey_Click" />
+                        <PasswordBox x:Name="KeyBox" Height="32" FontSize="14" VerticalContentAlignment="Center"
+                                     Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" />
+                    </DockPanel>
+                    <TextBlock Margin="0,8,0,0" FontSize="13" TextWrapping="Wrap" Foreground="{StaticResource TextDim}">
+                        <Run Text="No key yet? " />
+                        <Hyperlink NavigateUri="https://github.com/settings/tokens/new?scopes=public_repo&amp;description=Broken%20Characters%20creator%20key" RequestNavigate="CreateToken_RequestNavigate" Foreground="{StaticResource Accent}">
+                            <Run Text="Create a creator key on GitHub" FontWeight="Bold" />
+                        </Hyperlink>
+                        <Run Text=" (sign in to GitHub, scroll down, press Generate token, copy it, paste it here). The pack owner must add you to the repo first." />
+                    </TextBlock>
+                    <TextBlock x:Name="KeyError" Foreground="#FF9A8C" FontSize="13" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed" />
+                </StackPanel>
+            </Border>
 
             <!-- ======================================================== main: pick folder, see changes, publish -->
-            <Grid x:Name="MainPanel" Grid.Row="1" Visibility="Collapsed">
+            <Grid x:Name="MainPanel" Grid.Row="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -142,6 +155,26 @@
                             <TextBlock x:Name="FolderText" Foreground="White" FontSize="13" TextTrimming="CharacterEllipsis" Text="No folder chosen yet" />
                         </Border>
                     </DockPanel>
+
+                    <!-- QUICK UPLOAD: a friend's .zip/.dll from MEGA etc. (PublishWindow.Quick.cs) -->
+                    <Border x:Name="QuickBox" Background="#1AFFC928" BorderBrush="#60FFC928" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,10,0,0"
+                            AllowDrop="True" DragOver="Quick_DragOver" DragEnter="Quick_DragOver" Drop="Quick_Drop">
+                        <StackPanel>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" x:Name="PickFilesButton" Content="Pick files..." Style="{StaticResource GhostButton}" Margin="8,0,0,0" VerticalAlignment="Center" Click="PickFiles_Click" />
+                                <StackPanel>
+                                    <TextBlock Text="OR QUICK UPLOAD" Foreground="{StaticResource Accent}" FontSize="13" FontWeight="Black" />
+                                    <TextBlock x:Name="QuickText" Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap"
+                                               Text="Got a mod as a .zip or .dll (MEGA, Discord...)? Pick it, or drag it onto this box." />
+                                </StackPanel>
+                            </DockPanel>
+                            <DockPanel x:Name="QuickNameRow" Margin="0,8,0,0" Visibility="Collapsed">
+                                <TextBlock DockPanel.Dock="Left" Text="Mod name:" Foreground="White" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <Button DockPanel.Dock="Right" x:Name="QuickCheckButton" Content="Check files" Style="{StaticResource GhostButton}" Margin="8,0,0,0" Click="QuickCheck_Click" />
+                                <ComboBox x:Name="QuickName" IsEditable="True" Height="30" FontSize="13" VerticalContentAlignment="Center" />
+                            </DockPanel>
+                        </StackPanel>
+                    </Border>
                     <TextBlock Text="2. Your mods" Foreground="White" FontSize="18" FontWeight="Bold" Margin="0,18,0,8" />
                 </StackPanel>
 

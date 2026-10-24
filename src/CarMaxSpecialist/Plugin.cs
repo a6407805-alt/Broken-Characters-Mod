@@ -49,7 +49,7 @@ namespace CarMaxSpecialist
         public static ConfigEntry<float> EroRelief, ApptRelief, EroChance, ApptChance, InvChance, MatchChance, SliderSensitivity, SliderTolerance;
         public static ConfigEntry<float> TaskEveryMin, TaskEveryMax, TaskRelief, TaskNag;
         public static ConfigEntry<float> DeadlineMin, DeadlineMax, DeadlineStressRelief, DeadlineFailStress;
-        public static ConfigEntry<KeyCode> MouseKey;
+        public static ConfigEntry<KeyCode> MouseKey, ConfirmKey;
         public static ConfigEntry<float> LayoffRange, LayoffDamage, HeavyDamage, HeavyCooldown, EmailDamage, AuditDamage, AuditRange, AuditSeconds, PalletDamage, PalletRadius, BackorderChance;
         public static ConfigEntry<float> CoworkerSeconds, LazyChance, DiyStress;
         public static ConfigEntry<float> SecondaryCooldown, UtilityCooldown, SpecialCooldown;
@@ -131,6 +131,7 @@ namespace CarMaxSpecialist
             EmailDamage = Config.Bind("4. Skills", "EmailDamage", 1.1f, "M1 light combo base damage (1.1 = 110%); the 4 hits are x0.6, x0.8, x1.2, x2.4 of this.");
             HeavyDamage = Config.Bind("4. Skills", "HeavyDamage_v3", 1f, "M2 heavy combo base damage (1 = 100%); the 4 hits are x1, x1.2, x1.5, x2, and the building adds x2.");
             HeavyCooldown = Config.Bind("4. Skills", "HeavyCooldown_v4", 1.5f, "Seconds between M2 hits (you can hold the button).");
+            ConfirmKey = Config.Bind("3. Tasks", "ConfirmKey_v4", KeyCode.KeypadPlus, "Key that confirms in the pop-ups (the big + on the number pad). Enter and Num Enter open RoR2's chat, so avoid them.");
             MouseKey = Config.Bind("3. Tasks", "MouseToggleKey_v2", KeyCode.F7, "Press to free the mouse so you can click the task windows (press again to go back to aiming).");
             AuditDamage = Config.Bind("4. Skills", "AuditDamage", 1.5f, "Inventory Audit damage to each scanned enemy.");
             AuditRange = Config.Bind("4. Skills", "AuditRange", 40f, "Inventory Audit range.");

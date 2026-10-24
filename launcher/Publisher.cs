@@ -4,7 +4,7 @@
 //  A mod creator picks the folder where their mod lives (a copy of the repo: it has src\ and mods\ inside) and
 //  presses PUBLISH. This class:
 //    1. checks the creator key (a GitHub token that can write to this one repo) and finds out who it belongs to,
-//    2. works out which mods that person may publish (launcher/creators.json; brand-new mods are always allowed),
+//    2. lists the mods in the folder that changed (every creator may update every mod; creators.json only notes who added one),
 //    3. compares the local files with what is online and lists what changed,
 //    4. uploads ONLY the changed files that belong to the chosen mods, as one commit on top of the newest main.
 //       Nothing else in the repo can be touched, and nothing is ever deleted, so one person's publish can't
@@ -112,6 +112,10 @@ namespace BrokenCharactersLauncher
         public string Login { get; private set; } = "";
         public bool IsAdmin => Login.Equals(Repo.Split('/')[0], StringComparison.OrdinalIgnoreCase);
 
+        /// <summary>The owner's rule: the pack is ONE shared mod, so every creator may update every mod (Vince updates
+        /// existing mods). creators.json now only records who added a mod first; it no longer locks anyone out.</summary>
+        public bool CanEditAll => true;
+
         public Publisher(string token) { _token = token.Trim(); }
 
         public static string? ReadSavedKey()
@@ -161,6 +165,46 @@ namespace BrokenCharactersLauncher
             if (!response.IsSuccessStatusCode)
                 throw new GitHubException((int)response.StatusCode, Friendly((int)response.StatusCode, text));
             return string.IsNullOrWhiteSpace(text) ? null : JsonNode.Parse(text);
+        }
+
+        /// <summary>
+        /// Uploads a file (a jukebox MP3) to the repo's "jukebox" release (made on first use), so it never bloats git.
+        /// Returns the public download address. An existing file with the same name is replaced.
+        /// </summary>
+        public async Task<string> UploadReleaseFileAsync(string tag, string assetName, string localPath, string contentType, CancellationToken ct = default)
+        {
+            JsonNode? release;
+            try { release = await CallAsync(HttpMethod.Get, "/releases/tags/" + tag, null, ct); }
+            catch (GitHubException ex) when (ex.Status == 404)
+            {
+                release = await CallAsync(HttpMethod.Post, "/releases", new JsonObject
+                {
+                    ["tag_name"] = tag,
+                    ["target_commitish"] = Branch,
+                    ["name"] = "Jukebox songs",
+                    ["body"] = "MP3s shared from the launcher's JUKEBOX. Not a game build.",
+                    ["prerelease"] = true,
+                    ["make_latest"] = "false"
+                }, ct);
+            }
+            long id = release!["id"]!.GetValue<long>();
+            foreach (JsonNode? a in release["assets"]?.AsArray() ?? new JsonArray())
+                if (a?["name"]?.GetValue<string>() == assetName)
+                    await CallAsync(HttpMethod.Delete, "/releases/assets/" + a["id"]!.GetValue<long>(), null, ct);
+
+            using var request = new HttpRequestMessage(HttpMethod.Post,
+                "https://uploads.github.com/repos/" + Repo + "/releases/" + id + "/assets?name=" + Uri.EscapeDataString(assetName));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+            await using FileStream fs = File.OpenRead(localPath);
+            request.Content = new StreamContent(fs);
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromMinutes(10));
+            using HttpResponseMessage response = await Http.SendAsync(request, cts.Token);
+            string text = await response.Content.ReadAsStringAsync(cts.Token);
+            if (!response.IsSuccessStatusCode) throw new GitHubException((int)response.StatusCode, Friendly((int)response.StatusCode, text));
+            return JsonNode.Parse(text)!["browser_download_url"]!.GetValue<string>();
         }
 
         private static string Friendly(int status, string text)
@@ -241,6 +285,26 @@ namespace BrokenCharactersLauncher
                     if (kv.Key.Equals(login, StringComparison.OrdinalIgnoreCase) && kv.Value is JsonArray arr)
                         foreach (JsonNode? n in arr) if (n != null) owned.Add(n.GetValue<string>());
             return owned;
+        }
+
+        /// <summary>The existing mods this person may update (admins: every mod in mods/), for the quick-upload name box.</summary>
+        public async Task<List<string>> PublishableModsAsync(CancellationToken ct = default)
+        {
+            (string head, string treeSha) = await GetHeadAsync(ct);
+            var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (CanEditAll || IsAdmin)
+            {
+                JsonNode? tree = await CallAsync(HttpMethod.Get, "/git/trees/" + treeSha + "?recursive=1", null, ct);
+                foreach (JsonNode? item in tree?["tree"]?.AsArray() ?? new JsonArray())
+                {
+                    string[] parts = (item?["path"]?.GetValue<string>() ?? "").Split('/');
+                    if (item?["type"]?.GetValue<string>() == "tree" && parts.Length == 2 && parts[0] == "mods") names.Add(parts[1]);
+                }
+            }
+            else
+                foreach (string mod in OwnedMods(await ReadCreatorsAsync(head, ct), Login))
+                    if (mod != "*") names.Add(mod);
+            return names.ToList();
         }
 
         // ------------------------------------------------------------------ scanning
@@ -330,7 +394,7 @@ namespace BrokenCharactersLauncher
             foreach (string mod in names)
             {
                 bool isNew = !remoteMods.Contains(mod);
-                bool allowed = IsAdmin || isNew || owned.Contains("*") || owned.Contains(mod, StringComparer.OrdinalIgnoreCase);
+                bool allowed = CanEditAll || IsAdmin || isNew || owned.Contains("*") || owned.Contains(mod, StringComparer.OrdinalIgnoreCase);
                 if (!allowed) continue; // someone else's mod: not even shown, so it can't be touched by accident
 
                 bool hasSource = Directory.Exists(Path.Combine(folder, "src", mod)) || remoteSource.Contains(mod);
@@ -348,7 +412,7 @@ namespace BrokenCharactersLauncher
                     return list;
                 }, ct);
 
-                if (IsAdmin && !files.Any(f => f.Changed)) continue; // admins have every mod: only list the ones with changes
+                if ((CanEditAll || IsAdmin) && !files.Any(f => f.Changed)) continue; // everyone has every mod: only list the ones with changes
 
                 string conflict = "";
                 int changedCount = files.Count(f => f.Changed);

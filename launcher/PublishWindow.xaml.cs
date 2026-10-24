@@ -49,7 +49,11 @@ namespace BrokenCharactersLauncher
 
         private void ShowKeyPanel(string? error)
         {
-            MainPanel.Visibility = Visibility.Collapsed;
+            // The main panel stays on screen (so Pick files / Publish are visible), just greyed out until signed in.
+            MainPanel.Visibility = Visibility.Visible;
+            MainPanel.IsEnabled = false;
+            MainPanel.Opacity = 0.45;
+            HelloText.Text = "Not signed in yet: sign in above to use Pick files and Publish.";
             KeyPanel.Visibility = Visibility.Visible;
             KeyError.Text = error ?? "";
             KeyError.Visibility = string.IsNullOrEmpty(error) ? Visibility.Collapsed : Visibility.Visible;
@@ -63,6 +67,11 @@ namespace BrokenCharactersLauncher
             SaveKeyButton.IsEnabled = false;
             try
             {
+                if (!KeyVault.LooksLikeKey(key))
+                {
+                    ShowKeyPanel("That doesn't look like a creator key (they start with ghp_ or github_pat_). No key yet? Use the \"Create a creator key\" link.");
+                    return;
+                }
                 Publisher.SaveKey(key);
                 KeyBox.Clear();
                 await SignInAsync(key);
@@ -96,6 +105,8 @@ namespace BrokenCharactersLauncher
 
             KeyPanel.Visibility = Visibility.Collapsed;
             MainPanel.Visibility = Visibility.Visible;
+            MainPanel.IsEnabled = true;
+            MainPanel.Opacity = 1;
             HelloText.Text = "Signed in as " + _pub.Login;
 
             string? saved = Publisher.ReadSavedFolder();
@@ -107,6 +118,14 @@ namespace BrokenCharactersLauncher
             }
             else StatusLine.Text = "Press \"Choose folder...\" and pick the folder your mod is in.";
             UpdatePublishButton();
+        }
+
+        /// <summary>"Create a creator key on GitHub": opens GitHub's new-token page with the right box (public_repo) ticked.</summary>
+        private void CreateToken_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); }
+            catch (System.ComponentModel.Win32Exception) { }
+            e.Handled = true;
         }
 
         private void ChangeKey_Click(object sender, RoutedEventArgs e)
@@ -128,6 +147,7 @@ namespace BrokenCharactersLauncher
             if (_folder.Length > 0 && Directory.Exists(_folder)) dialog.InitialDirectory = _folder;
             if (dialog.ShowDialog(this) != true) return;
             _folder = dialog.FolderName;
+            _quickMode = false;
             FolderText.Text = _folder;
             Publisher.SaveFolder(_folder);
             await RefreshAsync();
@@ -150,7 +170,9 @@ namespace BrokenCharactersLauncher
                 ModList.ItemsSource = _plans;
                 if (_plans.Count == 0)
                 {
-                    EmptyText.Text = "No mods of yours were found in this folder, or nothing has changed. If this is the wrong folder, press \"Choose folder...\".";
+                    EmptyText.Text = _quickMode
+                        ? "Nothing new to upload: those files are already in the pack. (Mods built from source on GitHub, like SpecialForces, get their dll from the build server, so a dll alone does nothing: send the changed source instead.)"
+                        : "No mods of yours were found in this folder, or nothing has changed. If this is the wrong folder, press \"Choose folder...\".";
                     EmptyText.Visibility = Visibility.Visible;
                 }
                 else EmptyText.Visibility = Visibility.Collapsed;
@@ -184,6 +206,8 @@ namespace BrokenCharactersLauncher
             ChooseFolderButton.IsEnabled = !busy;
             RefreshButton.IsEnabled = !busy;
             ChangeKeyButton.IsEnabled = !busy;
+            PickFilesButton.IsEnabled = !busy;
+            QuickCheckButton.IsEnabled = !busy;
             ModList.IsEnabled = !busy;
             NoteBox.IsEnabled = !busy;
             UpdatePublishButton();
@@ -231,7 +255,8 @@ namespace BrokenCharactersLauncher
                 Bar.Value = 0;
                 StatusLine.Text = "";
                 ResultText.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x9A, 0x8C));
-                ResultText.Text = "Couldn't publish: " + ex.Message + "\nNothing was changed online. Try again in a minute.";
+                string why = ex.InnerException != null ? ex.Message + " (" + ex.InnerException.Message + ")" : ex.Message;
+                ResultText.Text = "Couldn't publish: " + why + "\nNothing was changed online. Try again in a minute.";
             }
             finally { SetBusy(false); }
 

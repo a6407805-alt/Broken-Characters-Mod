@@ -5,6 +5,7 @@
       "tagline": "Paid hourly. Overworked. Stressed.",
       "added": "2026-10-21T01:08:59-04:00",
       "accent": "#2F6FD8",
+      "status": "yellow",
       "image": "Assets/Roster/CarMaxSpecialist.png"
     },
     {
@@ -12,6 +13,7 @@
       "tagline": "Lives and dies by Flat Rate.",
       "added": "2026-10-20T22:03:50-04:00",
       "accent": "#D0202A",
+      "status": "yellow",
       "image": "Assets/Roster/AudiTechnician.png"
     },
     {
@@ -19,6 +21,7 @@
       "tagline": "Service director. Throws Q5s.",
       "added": "2026-10-20T22:03:49-04:00",
       "accent": "#8C8C96",
+      "status": "green",
       "image": "Assets/Roster/BillyBigsuits.png"
     },
     {
@@ -26,6 +29,7 @@
       "tagline": "Hungry hero. Bigger burp.",
       "added": "2026-10-19T22:05:43-04:00",
       "accent": "#F08AA8",
+      "status": "yellow",
       "image": "Assets/Roster/WilburMod.png"
     },
     {
@@ -33,6 +37,7 @@
       "tagline": "May I have some oats?",
       "added": "2026-10-19T22:05:42-04:00",
       "accent": "#C9A15A",
+      "status": "green",
       "image": "Assets/Roster/OatsBrother.png"
     },
     {
@@ -40,6 +45,7 @@
       "tagline": "Frost dragon, ground and air.",
       "added": "2026-10-19T22:05:41-04:00",
       "accent": "#6FC8F0",
+      "status": "red",
       "image": "Assets/Roster/AshwingDrake.png"
     },
     {
@@ -47,6 +53,7 @@
       "tagline": "The Infested warframe.",
       "added": "2026-10-19T22:05:40-04:00",
       "accent": "#C8B040",
+      "status": "yellow",
       "image": "Assets/Roster/Nidus.png"
     },
     {
@@ -54,6 +61,7 @@
       "tagline": "Coup de Grace crits.",
       "added": "2026-10-19T22:05:39-04:00",
       "accent": "#7A5AC8",
+      "status": "yellow",
       "image": "Assets/Roster/PhantomAssassin.png"
     },
     {
@@ -61,6 +69,7 @@
       "tagline": "Gauss rifle, banelings.",
       "added": "2026-10-19T22:05:38-04:00",
       "accent": "#6A9A3A",
+      "status": "yellow",
       "image": "Assets/Roster/InfestedGeneral.png"
     },
     {
@@ -68,6 +77,7 @@
       "tagline": "Lift, slam, black hole.",
       "added": "2026-10-19T22:05:37-04:00",
       "accent": "#5A50D8",
+      "status": "red",
       "image": "Assets/Roster/Gravitos.png"
     },
     {
@@ -75,6 +85,7 @@
       "tagline": "Traitor Templar, tar minigun.",
       "added": "2026-10-19T22:05:36-04:00",
       "accent": "#3A7AC8",
+      "status": "green",
       "image": "Assets/Roster/ClayRebel.png"
     },
     {
@@ -82,6 +93,7 @@
       "tagline": "Keeper of the flame.",
       "added": "2026-10-19T22:05:35-04:00",
       "accent": "#E8702A",
+      "status": "yellow",
       "image": "Assets/Roster/Emberwarden.png"
     },
     {
@@ -89,6 +101,7 @@
       "tagline": "Harvests the living.",
       "added": "2026-10-19T22:05:34-04:00",
       "accent": "#5A5A6A",
+      "status": "green",
       "image": "Assets/Roster/Reaper.png"
     },
     {
@@ -96,6 +109,7 @@
       "tagline": "It's time to duel!",
       "added": "2026-10-19T21:16:26-04:00",
       "accent": "#E0B030",
+      "status": "yellow",
       "image": "Assets/Roster/Duelist.png"
     }
   ],
