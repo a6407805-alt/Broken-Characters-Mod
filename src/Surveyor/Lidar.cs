@@ -49,7 +49,7 @@ namespace Surveyor
             if (Balance) stolen.Add("BALANCE");
             if (stolen.Count == 0) return null;
             string pick = stolen[Random.Range(0, stolen.Count)];
-            if (pick == "HEARING") { Hearing = false; SvrAudio.Muffle(false); }
+            if (pick == "HEARING") { Hearing = false; SvrAudio.ResetVolume(); }
             else if (pick == "SIGHT") Sight = false;
             else if (pick == "TOUCH") Touch = false;
             else Balance = false;
@@ -62,7 +62,7 @@ namespace Surveyor
             bool any = Hearing || Sight || Touch || Balance;
             Hearing = false; Sight = false; Touch = false; Balance = false;
             if (any) Version++;
-            SvrAudio.Muffle(false);
+            SvrAudio.ResetVolume();
         }
     }
 
@@ -91,28 +91,31 @@ namespace Surveyor
             return _set;
         }
 
-        private static float PlayerVolume()
+        public static void ResetVolume()
         {
             try
             {
-                object console = RoR2.Console.instance;
-                MethodInfo find = console?.GetType().GetMethod("FindConVar", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                object conVar = find?.Invoke(console, new object[] { "volume_sfx" });
-                string text = conVar?.GetType().GetMethod("GetString")?.Invoke(conVar, null) as string;
-                if (float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v)) return v;
+                MethodInfo m = SetRtpc();
+                if (m != null)
+                {
+                    m.Invoke(null, new object[] { "Volume_SFX", 100f });
+                    m.Invoke(null, new object[] { "Volume_Master", 100f });
+                }
+                _applied = false;
             }
             catch { }
-            return 50f;
         }
 
         public static void Muffle(bool on)
         {
             try
             {
-                if (!on && !_applied) return;
-                float v = PlayerVolume() * (on ? SvrPlugin.HearingLossVolume.Value : 1f);
                 MethodInfo m = SetRtpc();
-                if (m != null) m.Invoke(null, new object[] { SvrPlugin.HearingRtpc.Value, v });
+                if (m != null)
+                {
+                    float target = on ? Mathf.Clamp(SvrPlugin.HearingLossVolume.Value * 100f, 15f, 40f) : 100f;
+                    m.Invoke(null, new object[] { SvrPlugin.HearingRtpc.Value, target });
+                }
                 _applied = on;
             }
             catch (Exception e) { SvrPlugin.Log?.LogWarning("Surveyor: hearing change failed: " + e.Message); }
@@ -1611,15 +1614,16 @@ namespace Surveyor
             public bool Big;
         }
 
-        // Scan modes, cycled sequentially by tapping Q (Needle -> Narrow -> Medium -> Wide Flood).
-        // The Surveyor is blind and must aim his scanner; each mode offers a distinct trade-off between cone angle, distance, and dot dispersion.
-        public static readonly string[] OdNames = { "NEEDLE BEAM", "NARROW CONE", "MEDIUM CONE", "WIDE FLOOD" };
+        // Scan modes, cycled sequentially by tapping Q (Bio-Scan -> Salvage -> Topography -> Peripheral Flood).
+        // Each mode offers a distinct purpose: Bio-Scan reveals monsters through walls in a needle beam,
+        // Salvage reveals chests/loot through walls, Topography maps terrain paths, and Peripheral gives wide close-range footing.
+        public static readonly string[] OdNames = { "BIO-SCAN (THREAT RADAR)", "SALVAGE SPECTROMETER", "TOPOGRAPHY RECON", "WIDE PERIPHERAL FLOOD" };
         public static readonly string[] OdDescs =
         {
-            "ULTRA-NARROW 12° · EXTREME 180M REACH · HIGH DENSITY",
-            "NARROW 26° · LONG 110M REACH · FORWARD SCOUT",
-            "BALANCED 48° · MID 60M REACH · DISPERSED DOTS",
-            "WIDE 85° · CLOSE 28M REACH · WIDELY SCATTERED FLOOD"
+            "NARROW 10° · REACH 180M · REVEALS MONSTERS & DEMON THROUGH WALLS",
+            "FOCUSED 26° · REACH 115M · REVEALS CHESTS & LOOT THROUGH WALLS",
+            "BALANCED 50° · REACH 60M · TERRAIN & PATHFINDING SCANNER",
+            "WIDE 90° · REACH 24M · CLOSE-RANGE DISPERSED PERIPHERAL"
         };
         private static readonly int[] OdKind = { 2, 0, 1, 3 };    // which overdrive each mode becomes: 0 sweep, 1 burst, 2 focus, 3 echo
         public static int OdMode;
@@ -1627,6 +1631,44 @@ namespace Surveyor
         private bool _peekNeedBurst;
         private float _repulsorReadyAt;
         private bool _peeking;
+
+        // Minigun & Vacuum selectable upgrade modes (scroll wheel to switch, middle click to cycle)
+        public static int MinigunMode = 0; // 0 = IRIDIUM AP, 1 = CRYO COLD, 2 = INCENDIARY, 3 = PLASMA SHOCK
+        public static int VacuumMode = 0;  // 0 = POLTERGUST, 1 = SINGULARITY, 2 = CRYO-EXHAUST, 3 = REPULSOR
+        private float _miniModeFlash = -10f;
+        private float _vacModeFlash = -10f;
+
+        public static readonly string[] MinigunModeNames = { "IRIDIUM AP", "CRYO COLD", "INCENDIARY", "PLASMA SHOCK" };
+        public static readonly string[] MinigunModeDescs =
+        {
+            "+60% DMG · 280F FORCE · PULVERIZES ARMOR",
+            "LIQUID-N2 · 80% FROST SLOW · ZERO OVERHEAT",
+            "THERMITE ROUNDS · IGNITES WITH BURNING DOT",
+            "HIGH-VOLTAGE · ARCS CHAIN LIGHTNING SHOCKS"
+        };
+        public static readonly Color[] MinigunModeColors =
+        {
+            new Color(1f, 0.65f, 0.15f, 0.95f),   // Amber / Iridium
+            new Color(0.2f, 0.92f, 1f, 0.95f),    // Ice Cyan / Cryo
+            new Color(1f, 0.28f, 0.18f, 0.95f),   // Crimson Fire / Incendiary
+            new Color(0.85f, 0.35f, 1f, 0.95f)    // Violet Plasma / Shock
+        };
+
+        public static readonly string[] VacuumModeNames = { "POLTERGUST", "SINGULARITY", "CRYO-EXHAUST", "REPULSOR" };
+        public static readonly string[] VacuumModeDescs =
+        {
+            "HIGH-FLOW SUCTION · REELS ITEMS, CHESTS & DEMON",
+            "GRAVITATIONAL VORTEX · CLUSTERS ENEMY SWARMS",
+            "SUB-ZERO CONE · FREEZES FOES & LEECHES BARRIER",
+            "REVERSE BLAST WAVE · DEFLECTS PROJS & BLOWS FOES"
+        };
+        public static readonly Color[] VacuumModeColors =
+        {
+            new Color(0.2f, 0.95f, 1f, 0.95f),    // Cyan
+            new Color(0.68f, 0.32f, 1f, 0.95f),   // Purple
+            new Color(0.4f, 0.85f, 1f, 0.95f),    // Pale Frost
+            new Color(1f, 0.58f, 0.12f, 0.95f)    // Hazard Orange
+        };
 
         // Ground item crosshair hover state
         private Poi _hoveredPoi;
@@ -1756,12 +1798,14 @@ namespace Surveyor
             _dots = new Dot[Mathf.Max(1024, SvrPlugin.MaxDots.Value)];
             _demon = new SvrDemon();
             _sharedBakeMesh = new Mesh { name = "SvrLidarBakeMesh" };
+            SvrAudio.ResetVolume();
         }
 
         private void OnEnable()
         {
             Camera.onPreCull += PreCull;
             Camera.onPostRender += PostRender;
+            SvrAudio.ResetVolume();
         }
 
         private void OnDestroy()
@@ -1774,8 +1818,9 @@ namespace Surveyor
             if (_sharedBakeMesh) Destroy(_sharedBakeMesh);
             for (int i = 0; i < _techCaches.Count; i++)
                 if (_techCaches[i].Go) Destroy(_techCaches[i].Go);
+            SvrAudio.ResetVolume();
         }
-        private void OnDisable() { Camera.onPreCull -= PreCull; Camera.onPostRender -= PostRender; RestoreCamera(); DropPeekFx(); }
+        private void OnDisable() { Camera.onPreCull -= PreCull; Camera.onPostRender -= PostRender; RestoreCamera(); DropPeekFx(); SvrAudio.ResetVolume(); }
 
         public bool Peeking { get { return _peeking && Time.time < _peekUntil; } }
         public bool OverdriveOn { get { return _odActive >= 0 && Time.time < _odUntil; } }
@@ -1784,6 +1829,8 @@ namespace Surveyor
 
         public void VacuumHold(Ray aim, float dt, CharacterBody body)
         {
+            int vMode = VacuumMode % 4;
+
             if (_demon != null)
             {
                 _demon.VacuumHold(body, aim, dt);
@@ -1801,22 +1848,24 @@ namespace Surveyor
 
                 Vector3 toObj = p.Tr.position - aim.origin;
                 float dObj = toObj.magnitude;
-                if (dObj < 38f && (Vector3.Angle(aim.direction, toObj) < 55f || dObj < 8f))
+                if (dObj < 45f && (Vector3.Angle(aim.direction, toObj) < 60f || dObj < 9f))
                 {
-                    float speed = isItem ? 32f : 16f;
+                    float speed = isItem ? 36f : 18f;
                     Vector3 targetPos = isItem ? foot : (foot + aim.direction * 1.8f);
-                    p.Tr.position = Vector3.MoveTowards(p.Tr.position, targetPos, speed * dt);
-                    Rigidbody rb = p.Tr.GetComponent<Rigidbody>();
-                    if (rb) rb.velocity = (targetPos - p.Tr.position).normalized * speed;
+                    Transform moveTr = (p.Tr.parent && p.Tr.parent.GetComponent<PurchaseInteraction>()) ? p.Tr.parent : p.Tr;
+                    moveTr.position = Vector3.MoveTowards(moveTr.position, targetPos, speed * dt);
+                    p.Pos = moveTr.position + Vector3.up * 0.4f;
+                    Rigidbody rb = moveTr.GetComponent<Rigidbody>();
+                    if (rb) rb.velocity = (targetPos - moveTr.position).normalized * speed;
                 }
             }
 
-            // Also suction any physics pickup colliders via fast non-alloc layer query (0.001ms)
+            // Physics pickup query (0.001ms non-alloc)
             try
             {
                 int pLayer = LayerMask.NameToLayer("Pickup");
                 int pickupMask = pLayer >= 0 ? ((1 << pLayer) | LayerIndex.defaultLayer.mask) : LayerIndex.defaultLayer.mask;
-                int hitCount = Physics.OverlapSphereNonAlloc(aim.origin, 35f, _colHits, pickupMask);
+                int hitCount = Physics.OverlapSphereNonAlloc(aim.origin, 40f, _colHits, pickupMask);
                 for (int i = 0; i < hitCount; i++)
                 {
                     Collider c = _colHits[i];
@@ -1827,28 +1876,103 @@ namespace Surveyor
                     Transform tr = c.transform;
                     Vector3 toItem = tr.position - aim.origin;
                     float dItem = toItem.magnitude;
-                    if (dItem < 38f && (Vector3.Angle(aim.direction, toItem) < 55f || dItem < 8f))
+                    if (dItem < 45f && (Vector3.Angle(aim.direction, toItem) < 60f || dItem < 9f))
                     {
-                        tr.position = Vector3.MoveTowards(tr.position, foot, 30f * dt);
+                        tr.position = Vector3.MoveTowards(tr.position, foot, 36f * dt);
                         Rigidbody rb = c.attachedRigidbody;
-                        if (rb) rb.velocity = (foot - tr.position).normalized * 30f;
+                        if (rb) rb.velocity = (foot - tr.position).normalized * 36f;
                     }
                 }
             }
             catch { }
 
-            // 2) Swirling inward vacuum vortex dots in the point cloud flowing inward into the nozzle
+            // Mode-specific vacuum mechanics
+            if (vMode == 1) // SINGULARITY: gravitational pull on enemy swarms
+            {
+                Vector3 vortexPt = aim.origin + aim.direction * 14f;
+                var bodies = CharacterBody.readOnlyInstancesList;
+                for (int bIdx = 0; bIdx < bodies.Count; bIdx++)
+                {
+                    CharacterBody enemy = bodies[bIdx];
+                    if (!enemy || !enemy.healthComponent || !enemy.healthComponent.alive || enemy == body) continue;
+                    if (enemy.teamComponent && enemy.teamComponent.teamIndex == body.teamComponent.teamIndex) continue;
+                    Vector3 toE = enemy.corePosition - aim.origin;
+                    float dE = toE.magnitude;
+                    if (dE < 38f && Vector3.Angle(aim.direction, toE) < 60f)
+                    {
+                        Vector3 pull = (vortexPt - enemy.corePosition).normalized * (24f * dt);
+                        if (enemy.characterMotor) enemy.characterMotor.velocity += pull;
+                        else if (enemy.rigidbody) enemy.rigidbody.velocity += pull;
+                    }
+                }
+            }
+            else if (vMode == 2) // CRYO-EXHAUST: freezes foes & leeches barrier
+            {
+                var bodies = CharacterBody.readOnlyInstancesList;
+                for (int bIdx = 0; bIdx < bodies.Count; bIdx++)
+                {
+                    CharacterBody enemy = bodies[bIdx];
+                    if (!enemy || !enemy.healthComponent || !enemy.healthComponent.alive || enemy == body) continue;
+                    if (enemy.teamComponent && enemy.teamComponent.teamIndex == body.teamComponent.teamIndex) continue;
+                    Vector3 toE = enemy.corePosition - aim.origin;
+                    if (toE.magnitude < 30f && Vector3.Angle(aim.direction, toE) < 45f)
+                    {
+                        if (UnityEngine.Networking.NetworkServer.active) enemy.AddTimedBuff(RoR2Content.Buffs.Slow80, 2f);
+                        if (body && body.healthComponent) body.healthComponent.AddBarrier(0.75f * dt * 60f);
+                    }
+                }
+            }
+            else if (vMode == 3) // REPULSOR: blows foes back & deflects projectiles
+            {
+                var bodies = CharacterBody.readOnlyInstancesList;
+                for (int bIdx = 0; bIdx < bodies.Count; bIdx++)
+                {
+                    CharacterBody enemy = bodies[bIdx];
+                    if (!enemy || !enemy.healthComponent || !enemy.healthComponent.alive || enemy == body) continue;
+                    if (enemy.teamComponent && enemy.teamComponent.teamIndex == body.teamComponent.teamIndex) continue;
+                    Vector3 toE = enemy.corePosition - aim.origin;
+                    if (toE.magnitude < 26f && Vector3.Angle(aim.direction, toE) < 55f)
+                    {
+                        Vector3 push = aim.direction * (2800f * dt);
+                        if (enemy.characterMotor) enemy.characterMotor.ApplyForce(push, true, true);
+                        else if (enemy.rigidbody) enemy.rigidbody.AddForce(push, ForceMode.Impulse);
+                    }
+                }
+                try
+                {
+                    int pCount = Physics.OverlapSphereNonAlloc(aim.origin, 22f, _colHits, LayerIndex.projectile.mask);
+                    for (int pIdx = 0; pIdx < pCount; pIdx++)
+                    {
+                        Collider pc = _colHits[pIdx];
+                        if (!pc) continue;
+                        RoR2.Projectile.ProjectileController proj = pc.GetComponentInParent<RoR2.Projectile.ProjectileController>();
+                        if (proj && proj.owner != body.gameObject)
+                        {
+                            Vector3 toProj = proj.transform.position - aim.origin;
+                            if (Vector3.Angle(aim.direction, toProj) < 65f)
+                            {
+                                Destroy(proj.gameObject);
+                                AddDot(proj.transform.position, Color.white, 0.4f, true);
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Swirling vacuum vortex dots in the point cloud
             Vector3 nozzle = aim.origin + transform.right * 0.35f - transform.up * 0.15f;
             float t = Time.time * 20f;
+            Color vCol = VacuumModeColors[vMode];
             for (int i = 0; i < 16; i++)
             {
-                float prog = (Time.time * 2.5f + i * 0.0625f) % 1.0f; // 0 (far) -> 1 (nozzle)
-                float d = Mathf.Lerp(28f, 0.28f, prog);
-                float radius = Mathf.Lerp(3.2f, 0.08f, prog);
+                float prog = (Time.time * 2.5f + i * 0.0625f) % 1.0f;
+                float d = (vMode == 3) ? Mathf.Lerp(0.28f, 26f, prog) : Mathf.Lerp(28f, 0.28f, prog);
+                float radius = Mathf.Lerp(3.2f, 0.08f, (vMode == 3) ? (1f - prog) : prog);
                 float angle = t + i * 0.3927f + prog * 10f;
                 Vector3 radial = (transform.right * Mathf.Cos(angle) + transform.up * Mathf.Sin(angle)) * radius;
                 Vector3 dotPos = nozzle + aim.direction * d + radial;
-                Color dotCol = (i & 1) == 0 ? new Color(0.2f, 0.95f, 1f, 1f) : new Color(1f, 0.65f, 0.15f, 1f);
+                Color dotCol = (i & 1) == 0 ? vCol : Color.white;
                 AddDot(dotPos, dotCol, 0.14f, true);
             }
         }
@@ -2640,6 +2764,47 @@ namespace Surveyor
             catch { }
         }
 
+        public void TriggerOverdrivePulse()
+        {
+            if (!_body) return;
+            Vector3 me = _body.corePosition;
+            _pulseAt = me;
+            _pulseLeft = 3600;
+            _pulseRange = 260f;
+            _revealUntil = Mathf.Max(_revealUntil, Time.time + 10.0f);
+            Util.PlaySound("Play_commando_R_stun", gameObject);
+            Util.PlaySound("Play_UI_obj_casinoChest_open", gameObject);
+
+            // Refresh and ping all interactables & chests across the stage
+            ScanInteractables(true);
+
+            // Ping and track all monsters across the entire stage through walls
+            try
+            {
+                var bodies = CharacterBody.readOnlyInstancesList;
+                for (int i = 0; i < bodies.Count; i++)
+                {
+                    CharacterBody b = bodies[i];
+                    if (!b || !b.healthComponent || !b.healthComponent.alive || b == _body) continue;
+                    if (b.teamComponent && b.teamComponent.teamIndex == _body.teamComponent.teamIndex) continue;
+                    if (!_tracked.Contains(b.healthComponent) && _tracked.Count < 60)
+                    {
+                        _tracked.Add(b.healthComponent);
+                        _trackedUntil.Add(Time.time + 10.0f);
+                    }
+                    SweepBody(b, 0.85f, 16);
+                }
+                if (_demon != null && _demon.Active) _demon.Pulse(me, 260f);
+            }
+            catch { }
+
+            // Dense radial sweep rays
+            for (int i = 0; i < 480; i++)
+            {
+                Cast(me + Vector3.up * 1f, Random.onUnitSphere, 260f, SvrPlugin.DotLife.Value * 1.5f, true);
+            }
+        }
+
         public void Overdrive(int mode)
         {
             int kind = OdKind[Mathf.Clamp(mode, 0, OdKind.Length - 1)];
@@ -2912,13 +3077,34 @@ namespace Surveyor
 
             if (!_techSpawned && Time.timeSinceLevelLoad > 2.5f) SpawnFieldTechCaches();
 
-            // Tapping Q sequentially rolls through the 4 modes (TOPOGRAPHY -> THERMAL -> SALVAGE -> STRUCTURAL) with a snappy audio cue
+            // Tapping Q sequentially rolls through the 4 modes (Bio-Scan -> Salvage -> Topography -> Peripheral Flood) with a snappy audio cue
             KeyCode next, peek, trapKey, repKey, minKey, cashKey;
             int n0 = OdNames.Length;
             if (TryKey(SvrPlugin.ScanNextKey.Value, out next) && Input.GetKeyDown(next))
             {
                 OdMode = (OdMode + 1) % n0;
                 TriggerModeBurst();
+            }
+
+            // Mouse Scroll Wheel or Middle Click: switch Minigun Ammo modes (M1) or Vacuum modes (M2)
+            float scroll = Input.GetAxis("Mouse ScrollWheel");
+            bool midClick = Input.GetMouseButtonDown(2);
+            if (Mathf.Abs(scroll) > 0.02f || midClick)
+            {
+                int dir = (scroll > 0.02f || midClick) ? 1 : -1;
+                bool holdingM2 = Input.GetMouseButton(1) || (_input && _input.skill2.down);
+                if (holdingM2)
+                {
+                    VacuumMode = (VacuumMode + dir + 4) % 4;
+                    _vacModeFlash = Time.time;
+                    Util.PlaySound("Play_UI_menuClick", gameObject);
+                }
+                else
+                {
+                    MinigunMode = (MinigunMode + dir + 4) % 4;
+                    _miniModeFlash = Time.time;
+                    Util.PlaySound("Play_UI_menuClick", gameObject);
+                }
             }
 
             // Peek on its own key. Toggleable: pressing F lifts visor, pressing F again closes it.
@@ -3337,14 +3523,26 @@ namespace Surveyor
                     continue;
                 }
 
+                // Mode 1: SALVAGE SPECTROMETER penetrates walls for all chests, terminals, shrines & loot!
+                // Mode 0: BIO-SCAN penetrates walls for enemies
+                bool isSalvageMode = (OdMode % 4 == 1);
+                bool canPenetrate = isSalvageMode || burst || OverdriveOn || (Time.time < _revealUntil);
+
                 // Gated by current scanner cone mode unless burst, hovered, or in close touch (dist <= 4.5m)
                 if (!burst && !isHovered && dist > 4.5f)
                 {
                     if (dist > maxRange) continue;
                     if (_input && Vector3.Angle(_input.aimDirection, toPoi) > coneAngle) continue;
+                    if (!canPenetrate && dist > 14f)
+                    {
+                        if (Physics.Linecast(me, pos, LayerIndex.world.mask)) continue;
+                    }
                 }
 
-                int sampleBudget = (p.Kind == 3 ? (isHovered ? 36 : 24) : (p.Kind == 2 ? 10 : 16)) * mult;
+                if (canPenetrate && p.Target)
+                    p.Target.OnWaveWash(3.5f, 1f);
+
+                int sampleBudget = (p.Kind == 3 ? (isHovered ? 40 : 28) : (p.Kind == 2 ? 14 : 20)) * mult;
                 if (p.Target && p.Target.Parts.Count > 0)
                 {
                     PaintTargetWireframe(p.Target, sampleBudget, life);
@@ -3354,17 +3552,22 @@ namespace Surveyor
                     PaintMeshOutline(p.Outline, p.Col, sampleBudget, life);
                 }
 
-                // Ground item extra pedestal ring so dropped loot is clearly visible in LiDAR view
+                // Ground item extra pedestal ring & vertical laser beacon column so dropped loot is clearly visible in LiDAR view
                 if (p.Kind == 3)
                 {
-                    int ringPts = isHovered ? 10 : 6;
+                    int ringPts = isHovered ? 12 : 8;
                     for (int r = 0; r < ringPts; r++)
                     {
-                        float ang = (r / (float)ringPts) * 6.28318f + (isHovered ? now * 4f : 0f);
-                        Vector3 rp = p.Pos + new Vector3(Mathf.Cos(ang) * 0.42f, 0.08f, Mathf.Sin(ang) * 0.42f);
+                        float ang = (r / (float)ringPts) * 6.28318f + (isHovered ? now * 4f : now * 1.5f);
+                        Vector3 rp = p.Pos + new Vector3(Mathf.Cos(ang) * 0.52f, 0.08f, Mathf.Sin(ang) * 0.52f);
                         AddDot(rp, p.Col, life, true);
                     }
-                    AddDot(p.Pos + Vector3.up * 0.3f, Color.white, life, true);
+                    int bPts = isHovered ? 8 : 6;
+                    for (int h = 1; h <= bPts; h++)
+                    {
+                        Vector3 hp = p.Pos + Vector3.up * (h * 0.28f);
+                        AddDot(hp, isHovered ? Color.white : p.Col, life, true);
+                    }
                 }
             }
         }
@@ -3414,7 +3617,7 @@ namespace Surveyor
             }
         }
 
-        // The always-on scanner. Each mode cycled by Q (0=TOPOGRAPHY, 1=THERMAL, 2=SALVAGE, 3=STRUCTURAL) has a distinct geometry and range profile.
+        // The always-on scanner. Each mode cycled by Q (0=BIO-SCAN, 1=SALVAGE, 2=TOPOGRAPHY, 3=PERIPHERAL FLOOD) has a distinct geometry and range profile.
         private void Scan(float dt)
         {
             if (!_input) return;
@@ -3423,55 +3626,61 @@ namespace Surveyor
             float sight = SvrSenses.SightMult;
             float frames = Mathf.Clamp(dt * 60f, 0.5f, 4f);
             int baseRays = Mathf.RoundToInt(SvrPlugin.RaysPerFrame.Value * frames * sight * (1f - 0.5f * prox));
-            float range = SvrPlugin.ScanRange.Value * sight;
             Vector3 o = _input.aimOrigin;
             Vector3 aim = _input.aimDirection;
             float life = SvrPlugin.DotLife.Value * (sight < 1f ? 0.7f : 1f);
             switch (OdMode % 4)
             {
-                case 0:     // NEEDLE BEAM: Super narrow 12-degree cone, extreme 180m reach, high dot density
+                case 0:     // BIO-SCAN (THREAT RADAR): Tight 10-degree cone, extreme 180m reach, reveals all monsters & demon through walls!
                 {
                     int rays = Mathf.RoundToInt(baseRays * 1.55f);
-                    float r = range * 2.5f;
-                    float l = life * 1.25f;
+                    float r = 180f * sight;
+                    float l = life * 1.1f;
                     for (int i = 0; i < rays; i++)
                     {
                         _spin++;
                         float f = ((_spin % 257) + Random.value) / 257f;
-                        Cast(o, Cone(aim, 12f * Mathf.Sqrt(f), _spin * 2.39996f), r, l, i % 5 == 0);
+                        Cast(o, Cone(aim, 10f * Mathf.Sqrt(f), _spin * 2.39996f), r, l, i % 5 == 0);
                     }
                     if (Time.time >= _focusLockNext)
                     {
-                        _focusLockNext = Time.time + 0.35f;
+                        _focusLockNext = Time.time + 0.15f;
                         try
                         {
-                            BullseyeSearch bs = new BullseyeSearch
+                            var bodies = CharacterBody.readOnlyInstancesList;
+                            for (int bIdx = 0; bIdx < bodies.Count; bIdx++)
                             {
-                                searchOrigin = o,
-                                searchDirection = aim,
-                                maxDistanceFilter = r,
-                                maxAngleFilter = 14f,
-                                teamMaskFilter = TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex),
-                                filterByLoS = false,
-                                sortMode = BullseyeSearch.SortMode.Angle
-                            };
-                            bs.RefreshCandidates();
-                            foreach (HurtBox hb in bs.GetResults())
-                                if (hb && hb.healthComponent && hb.healthComponent.alive && !_tracked.Contains(hb.healthComponent) && _tracked.Count < 35)
+                                CharacterBody b = bodies[bIdx];
+                                if (!b || !b.healthComponent || !b.healthComponent.alive || b == _body) continue;
+                                if (b.teamComponent && b.teamComponent.teamIndex == _body.teamComponent.teamIndex) continue;
+                                Vector3 toB = b.corePosition - o;
+                                float distB = toB.magnitude;
+                                if (distB < r && Vector3.Angle(aim, toB) < 14f)
                                 {
-                                    _tracked.Add(hb.healthComponent);
-                                    _trackedUntil.Add(Time.time + 0.65f);
+                                    if (!_tracked.Contains(b.healthComponent) && _tracked.Count < 45)
+                                    {
+                                        _tracked.Add(b.healthComponent);
+                                        _trackedUntil.Add(Time.time + 1.2f);
+                                    }
+                                    SweepBody(b, 0.75f, 12);
                                 }
+                            }
+                            if (_demon != null && _demon.Active)
+                            {
+                                Vector3 toDem = _demon.Pos - o;
+                                if (toDem.magnitude < r && Vector3.Angle(aim, toDem) < 18f)
+                                    _demon.Pulse(o, 20f);
+                            }
                         }
                         catch { }
                     }
                     break;
                 }
-                case 1:     // NARROW CONE: 26-degree cone, long 110m reach, focused dots
+                case 1:     // SALVAGE SPECTROMETER: 26-degree cone, 115m reach, reveals chests & loot through walls
                 {
-                    int rays = Mathf.RoundToInt(baseRays * 1.35f);
-                    float r = range * 1.6f;
-                    float l = life * 1.1f;
+                    int rays = Mathf.RoundToInt(baseRays * 1.25f);
+                    float r = 115f * sight;
+                    float l = life * 1.0f;
                     for (int i = 0; i < rays; i++)
                     {
                         _spin++;
@@ -3480,27 +3689,27 @@ namespace Surveyor
                     }
                     break;
                 }
-                case 2:     // MEDIUM CONE: 48-degree cone, mid 60m reach, dispersed dots across the wider angle
+                case 2:     // TOPOGRAPHY RECON: 50-degree cone, 60m reach, terrain pathfinding
                 {
                     int rays = Mathf.RoundToInt(baseRays * 1.05f);
-                    float r = range * 0.95f;
+                    float r = 60f * sight;
                     for (int i = 0; i < rays; i++)
                     {
                         _spin++;
                         float f = ((_spin % 257) + Random.value) / 257f;
-                        Cast(o, Cone(aim, 48f * Mathf.Sqrt(f), _spin * 2.39996f), r, life, false);
+                        Cast(o, Cone(aim, 50f * Mathf.Sqrt(f), _spin * 2.39996f), r, life * 0.9f, false);
                     }
                     break;
                 }
-                default:    // WIDE FLOOD: 85-degree peripheral cone, close 28m reach, widely dispersed scattered dots
+                default:    // WIDE PERIPHERAL FLOOD: 90-degree wide peripheral cone, close 24m reach, scattered dots
                 {
                     int rays = Mathf.RoundToInt(baseRays * 0.85f);
-                    float r = range * 0.45f;
+                    float r = 24f * sight;
                     for (int i = 0; i < rays; i++)
                     {
                         _spin++;
                         float f = ((_spin % 257) + Random.value) / 257f;
-                        Cast(o, Cone(aim, 85f * Mathf.Sqrt(f), _spin * 2.39996f), r, life * 0.85f, false);
+                        Cast(o, Cone(aim, 90f * Mathf.Sqrt(f), _spin * 2.39996f), r, life * 0.75f, false);
                     }
                     break;
                 }
@@ -3613,14 +3822,14 @@ namespace Surveyor
                 for (int i = 0; i < _pois.Count; i++)
                 {
                     Poi p = _pois[i];
-                    if (p.Kind != 3 || !p.Tr || !p.Tr.gameObject.activeInHierarchy) continue;
+                    if (!p.Tr || !p.Tr.gameObject.activeInHierarchy) continue;
                     Vector3 toP = p.Pos - aimO;
                     float fwd = Vector3.Dot(toP, aimD);
-                    if (fwd > 0.4f && fwd < 48f)
+                    if (fwd > 0.3f && fwd < 65f)
                     {
                         Vector3 proj = aimO + aimD * fwd;
                         float rayDist = Vector3.Distance(proj, p.Pos);
-                        float threshold = Mathf.Clamp(fwd * 0.08f, 0.75f, 2.8f);
+                        float threshold = Mathf.Clamp(fwd * 0.12f, 1.2f, 4.2f);
                         if (rayDist < threshold && rayDist < closestDist)
                         {
                             closestDist = rayDist;
@@ -3633,12 +3842,12 @@ namespace Surveyor
                 if (foundHover)
                 {
                     _hoveredPoi = closestHover;
-                    _hoveredPoiUntil = now + 0.18f;
-                    for (int k = 0; k < 8; k++)
+                    _hoveredPoiUntil = now + 0.35f;
+                    for (int k = 0; k < 12; k++)
                     {
-                        float ang = k * 0.785f + now * 5f;
-                        Vector3 hDot = _hoveredPoi.Pos + new Vector3(Mathf.Cos(ang) * 0.55f, 0.15f + 0.08f * Mathf.Sin(now * 8f + k), Mathf.Sin(ang) * 0.55f);
-                        AddDot(hDot, _hoveredPoi.Col, 0.12f, true);
+                        float ang = k * 0.523f + now * 6f;
+                        Vector3 hDot = _hoveredPoi.Pos + new Vector3(Mathf.Cos(ang) * 0.6f, 0.15f + 0.1f * Mathf.Sin(now * 8f + k), Mathf.Sin(ang) * 0.6f);
+                        AddDot(hDot, _hoveredPoi.Col, 0.18f, true);
                     }
                 }
             }
@@ -3722,15 +3931,15 @@ namespace Surveyor
             RestoreStageFog();
         }
 
-        // Scan-mode accent colors for the HUD (high-contrast cyan / orange / amber / azure — no green).
+        // Scan-mode accent colors for the HUD (0=BIO-SCAN, 1=SALVAGE, 2=TOPOGRAPHY, 3=PERIPHERAL FLOOD).
         private static Color ModeAccent(int mode)
         {
             switch (mode % 4)
             {
-                case 1: return new Color(1f, 0.5f, 0.16f, 0.95f);    // THERMAL: hot orange
-                case 2: return new Color(1f, 0.78f, 0.25f, 0.95f);   // SALVAGE: amber
-                case 3: return new Color(0.4f, 0.72f, 1f, 0.95f);    // STRUCTURAL: azure
-                default: return new Color(0.22f, 0.95f, 1f, 0.95f);  // TOPOGRAPHY: electric cyan
+                case 0: return new Color(1f, 0.32f, 0.22f, 0.95f);    // BIO-SCAN: threat crimson / amber
+                case 1: return new Color(1f, 0.78f, 0.22f, 0.95f);    // SALVAGE: gold / amber
+                case 2: return new Color(0.2f, 0.95f, 1f, 0.95f);     // TOPOGRAPHY: electric cyan
+                default: return new Color(0.45f, 0.85f, 0.45f, 0.95f); // PERIPHERAL FLOOD: radar emerald
             }
         }
 
@@ -5041,6 +5250,88 @@ namespace Surveyor
                 GUI.DrawTexture(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f, pw, 1.5f * scale), white);
                 GUI.DrawTexture(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f + 8f * scale, pw, 1.5f * scale), white);
                 GUI.Label(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f + 12f * scale, pw, 24f * scale), "VISOR OFF", _label);
+            }
+
+            // Bottom-Right Hotbar: Modular Minigun Ammo Modes & Vacuum Upgrades
+            {
+                float panelW = 340f * scale;
+                float panelX = Screen.width - panelW - 24f * scale;
+                float panelY = Screen.height - 235f * scale;
+
+                // 1) MINIGUN AMMO MODES (M1 + SCROLL WHEEL)
+                int mMode = MinigunMode % 4;
+                bool mFlash = (Time.time - _miniModeFlash) < 0.65f;
+                Color mActiveCol = MinigunModeColors[mMode];
+
+                GUI.color = new Color(0.85f, 0.92f, 1f, 0.92f);
+                GUI.Label(new Rect(panelX, panelY, panelW, 18f * scale), "PRIMARY [M1]: AMMO MODES  (SCROLL TO SWITCH)", _label);
+
+                float chipW = (panelW - 3f * 4f * scale) / 4f;
+                float chipH = 24f * scale;
+                float cy = panelY + 20f * scale;
+                for (int i = 0; i < 4; i++)
+                {
+                    bool active = (i == mMode);
+                    Color cCol = MinigunModeColors[i];
+                    float cx = panelX + i * (chipW + 4f * scale);
+
+                    GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, mFlash ? 0.45f : 0.22f) : new Color(0.05f, 0.08f, 0.12f, 0.65f);
+                    GUI.DrawTexture(new Rect(cx, cy, chipW, chipH), white);
+
+                    GUI.color = active ? (mFlash ? Color.white : cCol) : new Color(cCol.r, cCol.g, cCol.b, 0.35f);
+                    GUI.DrawTexture(new Rect(cx, cy, chipW, 1.8f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, cy + chipH - 1.8f * scale, chipW, 1.8f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, cy, 1.8f * scale, chipH), white);
+                    GUI.DrawTexture(new Rect(cx + chipW - 1.8f * scale, cy, 1.8f * scale, chipH), white);
+
+                    int prevSize = _label.fontSize;
+                    _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
+                    _label.alignment = TextAnchor.MiddleCenter;
+                    GUI.color = active ? Color.white : new Color(0.7f, 0.75f, 0.8f, 0.75f);
+                    GUI.Label(new Rect(cx, cy, chipW, chipH), MinigunModeNames[i], _label);
+                    _label.fontSize = prevSize;
+                    _label.alignment = TextAnchor.MiddleLeft;
+                }
+
+                GUI.color = mActiveCol;
+                GUI.Label(new Rect(panelX, cy + chipH + 2f * scale, panelW, 16f * scale), "▶ " + MinigunModeDescs[mMode], _label);
+
+                // 2) POLTERGUST VACUUM MODES (M2 + SCROLL WHEEL)
+                float vy = cy + chipH + 22f * scale;
+                int vMode = VacuumMode % 4;
+                bool vFlash = (Time.time - _vacModeFlash) < 0.65f;
+                Color vActiveCol = VacuumModeColors[vMode];
+
+                GUI.color = new Color(0.85f, 0.92f, 1f, 0.92f);
+                GUI.Label(new Rect(panelX, vy, panelW, 18f * scale), "SECONDARY [M2]: VACUUM MODES  (HOLD M2 + SCROLL)", _label);
+
+                float vcy = vy + 20f * scale;
+                for (int i = 0; i < 4; i++)
+                {
+                    bool active = (i == vMode);
+                    Color cCol = VacuumModeColors[i];
+                    float cx = panelX + i * (chipW + 4f * scale);
+
+                    GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, vFlash ? 0.45f : 0.22f) : new Color(0.05f, 0.08f, 0.12f, 0.65f);
+                    GUI.DrawTexture(new Rect(cx, vcy, chipW, chipH), white);
+
+                    GUI.color = active ? (vFlash ? Color.white : cCol) : new Color(cCol.r, cCol.g, cCol.b, 0.35f);
+                    GUI.DrawTexture(new Rect(cx, vcy, chipW, 1.8f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, vcy + chipH - 1.8f * scale, chipW, 1.8f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, vcy, 1.8f * scale, chipH), white);
+                    GUI.DrawTexture(new Rect(cx + chipW - 1.8f * scale, vcy, 1.8f * scale, chipH), white);
+
+                    int prevSize = _label.fontSize;
+                    _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
+                    _label.alignment = TextAnchor.MiddleCenter;
+                    GUI.color = active ? Color.white : new Color(0.7f, 0.75f, 0.8f, 0.75f);
+                    GUI.Label(new Rect(cx, vcy, chipW, chipH), VacuumModeNames[i], _label);
+                    _label.fontSize = prevSize;
+                    _label.alignment = TextAnchor.MiddleLeft;
+                }
+
+                GUI.color = vActiveCol;
+                GUI.Label(new Rect(panelX, vcy + chipH + 2f * scale, panelW, 16f * scale), "▶ " + VacuumModeDescs[vMode], _label);
             }
 
             // Suit interference near the demon: subtle crimson/cyan vector glitch ticks on peripheral HUD (no solid/gray boxes).

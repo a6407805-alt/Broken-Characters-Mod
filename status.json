@@ -123,8 +123,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.5.7",
-      "note": "Active WIP (v0.5.7): Top-left HUD cluster clear of RoR2 chat, Shimmer Demon full health bar (damage with minigun to break containment shield, then suck up with vacuum once weakened below 35%), crystal clear Visor Peek with smooth 2.4s LiDAR reboot sequence on lowering visor, and 3D player suit model visible in third person with dedicated illumination light."
+      "version": "0.5.8",
+      "note": "Active WIP (v0.5.8): Differentiated scanner modes (Bio-Scan reveals monsters through walls, Salvage reveals chests/loot through walls, Topography maps terrain paths, Peripheral flood gives local footing), fixed audio SFX restore, 4 selectable Minigun ammo modes + 4 Vacuum modes switchable via mouse scroll wheel with dedicated bottom-right hotbar dock, ground item hover inspection tooltips with vertical beacon spires, and R ability overhauled to 360-degree LiDAR Overdrive Pulse."
     }
   ]
 }

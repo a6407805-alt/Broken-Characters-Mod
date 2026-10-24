@@ -184,25 +184,41 @@ namespace Surveyor
         private void Shoot(Ray aim, bool anchored)
         {
             _shotCounter++;
-            bool hasDu = SvrUpgrades.Has(SvrUpgrades.DU_SLUG);
-            bool hasCryo = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET);
-            bool hasPlasma = SvrUpgrades.Has(SvrUpgrades.PLASMA_ACCEL);
+            int mMode = SvrLidar.MinigunMode % 4;
+            bool isIridium = (mMode == 0);
+            bool isCryo = (mMode == 1);
+            bool isIncendiary = (mMode == 2);
+            bool isPlasma = (mMode == 3);
+
+            bool hasDu = SvrUpgrades.Has(SvrUpgrades.DU_SLUG) || isIridium;
+            bool hasCryo = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) || isCryo;
+            bool hasPlasma = SvrUpgrades.Has(SvrUpgrades.PLASMA_ACCEL) || isPlasma;
             bool hasGyro = SvrUpgrades.Has(SvrUpgrades.GYRO_HARNESS);
             bool hasLeech = SvrUpgrades.Has(SvrUpgrades.AETHER_LEECH);
 
             float spread = Mathf.Lerp(SvrPlugin.SpreadMax.Value, SvrPlugin.SpreadMin.Value, _spool.Spool) * SvrSenses.SpreadMult * (anchored ? 0.5f : (hasGyro ? 0.72f : 1f));
-            float dmgMult = (anchored ? 1f + SvrPlugin.AnchorDamageBonus.Value : 1f) * (hasDu ? 1.75f : 1f);
+            float dmgMult = (anchored ? 1f + SvrPlugin.AnchorDamageBonus.Value : 1f) * (isIridium ? 1.6f : (isIncendiary ? 1.15f : 1f));
             float dmg = damageStat * SvrPlugin.BulletDamage.Value * dmgMult;
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
-            Util.PlaySound(hasDu ? "Play_commando_M2" : "Play_commando_M1", gameObject);
-            characterBody.AddSpreadBloom(hasGyro ? 0.06f : 0.12f);
+
+            string shootSound = isCryo ? "Play_MULT_m1_smg_shoot" : (isIridium ? "Play_commando_M2" : "Play_commando_M1");
+            Util.PlaySound(shootSound, gameObject);
+            characterBody.AddSpreadBloom(hasGyro ? 0.05f : 0.09f);
             float rk = (anchored ? 0.45f : 1f) * (hasGyro ? 0.5f : 1f);     // heavy gun: the camera kicks with every round
             AddRecoil(-0.35f * rk, -0.75f * rk, -0.25f * rk, 0.25f * rk);
-            _spool.KickPulse += hasDu ? 0.32f : 0.22f;
+            _spool.KickPulse += isIridium ? 0.35f : 0.22f;
+
+            // Cryo cooling: cools down minigun heat on each shot
+            if (isCryo)
+            {
+                _spool.Heat = Mathf.Max(0f, _spool.Heat - 0.045f);
+                _spool.Overheated = false;
+            }
 
             DamageTypeCombo dtCombo = DamageType.Generic;
             if (hasCryo) dtCombo = DamageType.SlowOnHit;
-            if (hasPlasma && (_shotCounter % 4 == 0)) dtCombo = DamageType.Shock5s;
+            if (isIncendiary) dtCombo = DamageType.IgniteOnHit;
+            if (hasPlasma && (_shotCounter % 3 == 0)) dtCombo = DamageType.Shock5s;
 
             new BulletAttack
             {
@@ -213,65 +229,74 @@ namespace Surveyor
                 minSpread = 0f,
                 maxSpread = spread,
                 damage = dmg,
-                force = hasDu ? 280f : 120f,
+                force = isIridium ? 280f : 120f,
                 tracerEffectPrefab = _tracer,
                 muzzleName = "MuzzleRight",
                 hitEffectPrefab = _hit,
                 isCrit = RollCrit(),
-                radius = hasDu ? 0.42f : 0.25f,
+                radius = isIridium ? 0.45f : 0.25f,
                 smartCollision = true,
                 maxDistance = SvrPlugin.MinigunRange.Value,
-                procCoefficient = hasDu ? 0.9f : 0.7f,
+                procCoefficient = isIridium ? 0.9f : 0.7f,
                 damageType = dtCombo
             }.Fire();
 
             // Depleted-Uranium Slug & Cryo-Jacket & Plasma-Accelerator on-hit effects
-            if (hasDu || hasCryo || hasPlasma || hasLeech)
+            try
             {
-                try
+                RaycastHit hit;
+                if (Physics.Raycast(aim.origin, aim.direction, out hit, SvrPlugin.MinigunRange.Value, LayerIndex.entityPrecise.mask | LayerIndex.world.mask, QueryTriggerInteraction.Ignore))
                 {
-                    RaycastHit hit;
-                    if (Physics.Raycast(aim.origin, aim.direction, out hit, SvrPlugin.MinigunRange.Value, LayerIndex.entityPrecise.mask | LayerIndex.world.mask, QueryTriggerInteraction.Ignore))
+                    HurtBox hb = hit.collider ? hit.collider.GetComponent<HurtBox>() : null;
+                    HealthComponent hc = hb ? hb.healthComponent : null;
+                    if (hc && hc.alive && hc.body && hc.body != characterBody)
                     {
-                        HurtBox hb = hit.collider ? hit.collider.GetComponent<HurtBox>() : null;
-                        HealthComponent hc = hb ? hb.healthComponent : null;
-                        if (hc && hc.alive && hc.body && hc.body != characterBody)
-                        {
-                            if (hasLeech && characterBody.healthComponent)
-                                characterBody.healthComponent.AddBarrier(Mathf.Max(1.5f, characterBody.maxBarrier * 0.012f));
+                        if (hasLeech && characterBody.healthComponent)
+                            characterBody.healthComponent.AddBarrier(Mathf.Max(1.5f, characterBody.maxBarrier * 0.012f));
 
-                            if (NetworkServer.active)
+                        if (NetworkServer.active)
+                        {
+                            if (hasDu) hc.body.AddTimedBuff(RoR2Content.Buffs.Pulverized, 4f);
+                            if (hasCryo) hc.body.AddTimedBuff(RoR2Content.Buffs.Slow80, 3.5f);
+                            if (isIncendiary)
                             {
-                                if (hasDu) hc.body.AddTimedBuff(RoR2Content.Buffs.Pulverized, 4f);
-                                if (hasCryo) hc.body.AddTimedBuff(RoR2Content.Buffs.Slow80, 3.5f);
-                                if (hasPlasma && _spool.Spool > 0.6f && (_shotCounter % 3 == 0))
+                                InflictDotInfo info = new InflictDotInfo
                                 {
-                                    LightningOrb orb = new LightningOrb
-                                    {
-                                        origin = hit.point,
-                                        damageValue = dmg * 0.85f,
-                                        isCrit = RollCrit(),
-                                        bouncesRemaining = 2,
-                                        teamIndex = TeamComponent.GetObjectTeam(gameObject),
-                                        attacker = gameObject,
-                                        procCoefficient = 0.5f,
-                                        lightningType = LightningOrb.LightningType.Ukulele,
-                                        range = 18f
-                                    };
-                                    orb.bouncedObjects = new List<HealthComponent> { hc };
-                                    HurtBox nextTarget = orb.PickNextTarget(hit.point);
-                                    if (nextTarget)
-                                    {
-                                        orb.target = nextTarget;
-                                        OrbManager.instance.AddOrb(orb);
-                                    }
+                                    victimObject = hc.gameObject,
+                                    attackerObject = gameObject,
+                                    totalDamage = dmg,
+                                    dotIndex = DotController.DotIndex.Burn,
+                                    damageMultiplier = 1f
+                                };
+                                DotController.InflictDot(ref info);
+                            }
+                            if (hasPlasma && _spool.Spool > 0.5f && (_shotCounter % 2 == 0))
+                            {
+                                LightningOrb orb = new LightningOrb
+                                {
+                                    origin = hit.point,
+                                    damageValue = dmg * 0.85f,
+                                    isCrit = RollCrit(),
+                                    bouncesRemaining = 3,
+                                    teamIndex = TeamComponent.GetObjectTeam(gameObject),
+                                    attacker = gameObject,
+                                    procCoefficient = 0.5f,
+                                    lightningType = LightningOrb.LightningType.Ukulele,
+                                    range = 20f
+                                };
+                                orb.bouncedObjects = new List<HealthComponent> { hc };
+                                HurtBox nextTarget = orb.PickNextTarget(hit.point);
+                                if (nextTarget)
+                                {
+                                    orb.target = nextTarget;
+                                    OrbManager.instance.AddOrb(orb);
                                 }
                             }
                         }
                     }
                 }
-                catch { }
             }
+            catch { }
 
             if (_lidar) _lidar.Shot(aim, _spool.Spool, anchored);
         }
@@ -544,25 +569,24 @@ namespace Surveyor
         public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.Skill; }
     }
 
-    // ================================================================ Special alt: LiDAR Overdrive (mode chosen with the mode key)
+    // ================================================================ Special: LiDAR Overdrive Pulse (360-degree full stage reveal)
 
     public class SvrOverdriveState : BaseSkillState
     {
         public override void OnEnter()
         {
             base.OnEnter();
-            Util.PlaySound("Play_drone_repair", gameObject);
             if (isAuthority)
             {
                 SvrLidar lidar = GetComponent<SvrLidar>();
-                if (lidar) lidar.Overdrive(SvrLidar.OdMode);
+                if (lidar) lidar.TriggerOverdrivePulse();
             }
         }
 
         public override void FixedUpdate()
         {
             base.FixedUpdate();
-            if (fixedAge >= 0.3f && isAuthority) outer.SetNextStateToMain();
+            if (fixedAge >= 0.25f && isAuthority) outer.SetNextStateToMain();
         }
 
         public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.Skill; }
