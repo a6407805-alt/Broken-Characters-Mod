@@ -227,6 +227,11 @@ jobs:
           [ -f publish-preview.png ] && files="$files publish-preview.png"
           [ -f jukebox-preview.png ] && files="$files jukebox-preview.png"
           [ -f roster.json ] && files="$files roster.json"
+          # release-info.json: version + sizes as a plain file, so launchers can check for updates even when
+          # GitHub's API hourly limit (60 per home internet) is used up.
+          exe_size=0; [ -f Broken-Characters-Mod.exe ] && exe_size=$(stat -c %s Broken-Characters-Mod.exe)
+          printf '{"version":"%s","zipSize":%s,"exeSize":%s,"published":"%s"}\n' "$GITHUB_SHA" "$(stat -c %s Broken-Characters-Mod.zip)" "$exe_size" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > release-info.json
+          files="$files release-info.json"
           notes="Built automatically from commit ${GITHUB_SHA::7}. Easiest: run Broken-Characters-Mod.exe (the launcher). Or download Broken-Characters-Mod.zip, extract it and run INSTALL.bat. (Broken-Characters-Collection.zip is the same file under its old name, for older updaters.)"
           # Update the release in place (never delete it), so launchers checking mid-publish never see "no release".
           # Files go up first; the version (target commit) flips last, so a launcher only updates once they're all there.
