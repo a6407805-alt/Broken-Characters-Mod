@@ -54,6 +54,9 @@ namespace BrokenCharactersLauncher
             string myName = me == null ? "" : Path.GetFileName(me);
             if (me == null || !myName.StartsWith("Broken-Characters-", StringComparison.OrdinalIgnoreCase)
                 || !myName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return false;
+            // The dev launcher (Broken-Characters-Mod-dev.exe, from the dev pre-release) is newer than "latest":
+            // never swap it for the friends' launcher, or dev-only features vanish the moment it opens.
+            if (myName.IndexOf("-dev", StringComparison.OrdinalIgnoreCase) >= 0) return false;
 
             string newPath = me + ".new";
             string oldPath = me + ".old";

@@ -18,6 +18,12 @@ namespace BrokenCharactersLauncher
                 new PublishWindow(e.Args[i + 1]).Show();
                 return;
             }
+            int j = Array.IndexOf(e.Args, "--screenshot-jukebox");
+            if (j >= 0 && j + 1 < e.Args.Length)
+            {
+                new JukeboxWindow(e.Args[j + 1]).Show();
+                return;
+            }
             new MainWindow().Show();
         }
     }

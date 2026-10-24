@@ -186,6 +186,33 @@ namespace BrokenCharactersLauncher
             return Login;
         }
 
+        /// <summary>
+        /// Reads one text file from main, lets <paramref name="change"/> rewrite it (null = file doesn't exist yet), and
+        /// saves it back as one commit. Used by the Jukebox window for launcher/jukebox.json. The commit message gets
+        /// "[skip ci]" so adding a song doesn't rebuild the whole pack.
+        /// </summary>
+        public async Task UpdateTextFileAsync(string repoPath, Func<string?, string> change, string message, CancellationToken ct = default)
+        {
+            string? sha = null, current = null;
+            try
+            {
+                JsonNode? node = await CallAsync(HttpMethod.Get, "/contents/" + repoPath + "?ref=" + Branch, null, ct);
+                sha = node?["sha"]?.GetValue<string>();
+                string? b64 = node?["content"]?.GetValue<string>();
+                if (b64 != null) current = Encoding.UTF8.GetString(Convert.FromBase64String(b64.Replace("\n", "").Replace("\r", "")));
+            }
+            catch (GitHubException ex) when (ex.Status == 404) { }
+
+            var body = new JsonObject
+            {
+                ["message"] = message + " [skip ci]",
+                ["content"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(change(current))),
+                ["branch"] = Branch,
+            };
+            if (sha != null) body["sha"] = sha;
+            await CallAsync(HttpMethod.Put, "/contents/" + repoPath, body, ct);
+        }
+
         private async Task<(string HeadSha, string TreeSha)> GetHeadAsync(CancellationToken ct)
         {
             JsonNode? reference = await CallAsync(HttpMethod.Get, "/git/ref/heads/" + Branch, null, ct);

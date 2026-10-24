@@ -403,6 +403,23 @@
                                 </ControlTemplate>
                             </Button.Template>
                         </Button>
+                        <!-- The group's Suno songs for the Jukebox mod -->
+                        <Button x:Name="JukeboxButton" Content="&#x266B; JUKEBOX" Click="Jukebox_Click" Height="34" Padding="12,0" Margin="0,0,6,0" Cursor="Hand"
+                                FontSize="12" FontWeight="Bold" BorderThickness="0" Background="Transparent" Foreground="#FFC928"
+                                ToolTip="Add our Suno songs to the in-game jukebox.">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="Bg" Background="#30FFC928" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter VerticalAlignment="Center" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bg" Property="Background" Value="#55FFC928" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
                         <!-- For mod creators: upload your own mod to the pack (asks for a creator key the first time) -->
                         <Button x:Name="CreatorButton" Content="CREATOR" Click="Creator_Click" Height="34" Padding="12,0" Margin="0,0,6,0" Cursor="Hand"
                                 FontSize="12" FontWeight="Bold" BorderThickness="0" Background="Transparent" Foreground="#9FB3D1"
