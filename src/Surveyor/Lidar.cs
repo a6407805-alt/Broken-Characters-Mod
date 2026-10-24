@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using EntityStates;
 using RoR2;
 using UnityEngine;
 using Random = UnityEngine.Random;
@@ -461,8 +462,12 @@ namespace Surveyor
             public bool Big;
         }
 
-        public static readonly string[] OdNames = { "SWEEP", "BURST", "FOCUS", "ECHO" };
-        public static int OdMode;                                  // chosen with the mode key, read by the Overdrive skill
+        // Scan modes, cycled with Q / E. They change the always-on scanner, and the Overdrive skill pushes the current one.
+        public static readonly string[] OdNames = { "CONE", "SWEEP", "WIDE", "FOCUS", "ECHO" };
+        private static readonly int[] OdKind = { 1, 0, 1, 2, 3 };    // which overdrive each mode becomes: 0 sweep, 1 burst, 2 focus, 3 echo
+        public static int OdMode;
+        private float _scanYaw, _echoPing, _peekReady, _modeFlash;
+        private bool _loggedPeekFx;
 
         private Dot[] _dots;
         private int _head, _count;
@@ -633,10 +638,11 @@ namespace Surveyor
 
         public void Overdrive(int mode)
         {
-            _odActive = mode;
+            int kind = OdKind[Mathf.Clamp(mode, 0, OdKind.Length - 1)];
+            _odActive = kind;
             _odStart = Time.time;
             Vector3 at = _body.corePosition + Vector3.up * 0.8f;
-            switch (mode)
+            switch (kind)
             {
                 case 0:     // SWEEP: a tall scan line spins all the way around her
                     _odUntil = Time.time + SvrPlugin.SweepSeconds.Value;
@@ -685,8 +691,21 @@ namespace Surveyor
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
-            KeyCode key;
-            if (TryKey(out key) && Input.GetKeyDown(key)) OdMode = (OdMode + 1) % OdNames.Length;
+            KeyCode next, prev, peek;
+            int n0 = OdNames.Length;
+            if (TryKey(SvrPlugin.ScanNextKey.Value, out next) && Input.GetKeyDown(next)) { OdMode = (OdMode + 1) % n0; _modeFlash = Time.time; Util.PlaySound("Play_UI_menuClick", gameObject); }
+            if (TryKey(SvrPlugin.ScanPrevKey.Value, out prev) && Input.GetKeyDown(prev)) { OdMode = (OdMode + n0 - 1) % n0; _modeFlash = Time.time; Util.PlaySound("Play_UI_menuClick", gameObject); }
+            // Peek on its own key, whatever is in the utility slot. It runs the Peek state on the Body machine,
+            // which is networked, so everyone sees the visor flip.
+            if (TryKey(SvrPlugin.PeekKey.Value, out peek) && Input.GetKeyDown(peek) && Time.time >= _peekReady && !Peeking)
+            {
+                EntityStateMachine esm = EntityStateMachine.FindByCustomName(gameObject, "Body");
+                if (esm)
+                {
+                    esm.SetInterruptState(new SvrPeekState(), InterruptPriority.Skill);
+                    _peekReady = Time.time + SvrPlugin.PeekCooldown.Value;
+                }
+            }
 
             _demon.Tick(dt, _body);
             Scan(dt);
@@ -711,10 +730,10 @@ namespace Surveyor
             if (SvrSenses.Hearing && Time.unscaledTime > _nextAudio) { _nextAudio = Time.unscaledTime + 2f; SvrAudio.Muffle(true); }
         }
 
-        private static bool TryKey(out KeyCode k)
+        private static bool TryKey(string name, out KeyCode k)
         {
-            k = KeyCode.V;
-            try { return Enum.TryParse(SvrPlugin.ModeKey.Value, true, out k); }
+            k = KeyCode.None;
+            try { return !string.IsNullOrEmpty(name) && Enum.TryParse(name.Trim(), true, out k) && k != KeyCode.None; }
             catch { return false; }
         }
 
@@ -731,12 +750,70 @@ namespace Surveyor
             Vector3 o = _input.aimOrigin;
             Vector3 aim = _input.aimDirection;
             float life = SvrPlugin.DotLife.Value * (sight < 1f ? 0.7f : 1f);
-            for (int i = 0; i < rays; i++)
+            switch (OdMode)
             {
-                _spin++;
-                if (Random.value < 0.18f) { Cast(o, Random.onUnitSphere, range * 0.35f, life, false); continue; }   // a little all around her
-                float f = ((_spin % 257) + Random.value) / 257f;
-                Cast(o, Cone(aim, 52f * Mathf.Sqrt(f), _spin * 2.39996f), range, life, false);
+                case 1:     // SWEEP: a lighthouse beam that circles her, plus a little ahead
+                    _scanYaw += 230f * dt;
+                    for (int i = 0; i < rays; i++)
+                    {
+                        _spin++;
+                        if (i % 4 == 0) { float f0 = ((_spin % 257) + Random.value) / 257f; Cast(o, Cone(aim, 30f * Mathf.Sqrt(f0), _spin * 2.39996f), range, life, false); continue; }
+                        float yaw = _scanYaw + Random.Range(-2.5f, 2.5f);
+                        float pitch = Mathf.Lerp(-55f, 65f, Random.value);
+                        Cast(o, Quaternion.Euler(-pitch, yaw, 0f) * Vector3.forward, range * 1.1f, life * 1.3f, false);
+                    }
+                    break;
+                case 2:     // WIDE: an even bubble all around her, shorter range
+                    for (int i = 0; i < rays; i++)
+                    {
+                        Vector3 d = Random.onUnitSphere;
+                        d.y *= 0.6f;
+                        Cast(o, d.normalized, range * 0.55f, life, false);
+                    }
+                    break;
+                case 3:     // FOCUS: a narrow, dense, long beam
+                    for (int i = 0; i < rays; i++)
+                    {
+                        _spin++;
+                        float f1 = ((_spin % 257) + Random.value) / 257f;
+                        Cast(o, Cone(aim, 13f * Mathf.Sqrt(f1), _spin * 2.39996f), range * 1.8f, life * 1.2f, false);
+                    }
+                    break;
+                case 4:     // ECHO: a shorter cone, and nearby enemies ping through walls every second
+                    for (int i = 0; i < (rays * 3) / 4; i++)
+                    {
+                        _spin++;
+                        float f2 = ((_spin % 257) + Random.value) / 257f;
+                        Cast(o, Cone(aim, 45f * Mathf.Sqrt(f2), _spin * 2.39996f), range * 0.7f, life, false);
+                    }
+                    if (Time.time >= _echoPing)
+                    {
+                        _echoPing = Time.time + 1.1f;
+                        try
+                        {
+                            SphereSearch s = new SphereSearch { origin = _body.corePosition, radius = 45f * sight, mask = LayerIndex.entityPrecise.mask };
+                            s.RefreshCandidates();
+                            s.FilterCandidatesByHurtBoxTeam(TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex));
+                            s.FilterCandidatesByDistinctHurtBoxEntities();
+                            foreach (HurtBox hb in s.GetHurtBoxes())
+                                if (hb && hb.healthComponent && hb.healthComponent.alive && !_tracked.Contains(hb.healthComponent) && _tracked.Count < 30)
+                                {
+                                    _tracked.Add(hb.healthComponent);
+                                    _trackedUntil.Add(Time.time + 0.45f);
+                                }
+                        }
+                        catch { }
+                    }
+                    break;
+                default:    // CONE: the spiral cone ahead, a little all around her
+                    for (int i = 0; i < rays; i++)
+                    {
+                        _spin++;
+                        if (Random.value < 0.18f) { Cast(o, Random.onUnitSphere, range * 0.35f, life, false); continue; }
+                        float f = ((_spin % 257) + Random.value) / 257f;
+                        Cast(o, Cone(aim, 52f * Mathf.Sqrt(f), _spin * 2.39996f), range, life, false);
+                    }
+                    break;
             }
         }
 
@@ -909,7 +986,7 @@ namespace Surveyor
                 {
                     Type layerType = PT("PostProcessLayer");
                     Component layer = layerType != null ? cam.GetComponent(layerType) : null;
-                    if (!layer) { _ppFailed = true; return; }
+                    if (!layer) { _ppFailed = true; SvrPlugin.Log.LogWarning("Peek: the camera has no post-processing layer, so only the white wash shows."); return; }
                     object vl = layerType.GetField("volumeLayer").GetValue(layer);
                     int mask = ((LayerMask)vl).value, lay = 0;
                     for (int i = 0; i < 32; i++) if ((mask & (1 << i)) != 0) { lay = i; break; }
@@ -931,6 +1008,7 @@ namespace Surveyor
                     SetPpWeight(0f);
                 }
                 SetPpWeight(_peekK);
+                if (!_loggedPeekFx) { _loggedPeekFx = true; SvrPlugin.Log.LogInfo("Peek: post-processing blur is on."); }
             }
             catch (Exception e)
             {
@@ -1166,10 +1244,21 @@ namespace Surveyor
             // Overdrive mode readout (only when the skill is equipped) and the visor timer.
             SkillLocator skl = _body.skillLocator;
             bool hasOd = skl && skl.special && skl.special.skillDef && skl.special.skillDef.skillName == SvrPlugin.T + "OVERDRIVE";
-            if (hasOd)
             {
-                GUI.color = OverdriveOn ? new Color(1f, 0.9f, 0.3f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.95f);
-                GUI.Label(new Rect(Screen.width * 0.03f, Screen.height * 0.715f, 400f * scale, 24f * scale), "OVERDRIVE: " + OdNames[OdMode % OdNames.Length] + "   [" + SvrPlugin.ModeKey.Value.ToUpperInvariant() + "] change", _label);
+                // scan mode readout (always): name, five pips, the keys; flashes when changed
+                bool flash = Time.time - _modeFlash < 0.6f;
+                float sx = Screen.width * 0.03f, sy = Screen.height * 0.712f;
+                GUI.color = flash ? new Color(1f, 1f, 1f, 1f) : (OverdriveOn ? new Color(1f, 0.9f, 0.3f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.95f));
+                string keys = "[" + SvrPlugin.ScanPrevKey.Value.ToUpperInvariant() + "/" + SvrPlugin.ScanNextKey.Value.ToUpperInvariant() + "]";
+                GUI.Label(new Rect(sx, sy, 420f * scale, 24f * scale), "SCAN: " + OdNames[OdMode % OdNames.Length] + "  " + keys + (hasOd ? "   R = OVERDRIVE" : ""), _label);
+                for (int i = 0; i < OdNames.Length; i++)
+                {
+                    GUI.color = i == OdMode ? new Color(0.6f, 1f, 0.4f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.25f);
+                    GUI.DrawTexture(new Rect(sx + i * 16f * scale, sy - 8f * scale, 12f * scale, 5f * scale), white);
+                }
+                float pr = _peekReady - Time.time;
+                GUI.color = new Color(0.9f, 0.95f, 1f, 0.85f);
+                GUI.Label(new Rect(sx, sy + 20f * scale, 420f * scale, 24f * scale), "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "]" + (pr > 0f ? "  " + pr.ToString("0") + "s" : "  ready"), _label);
             }
             if (Peeking)
             {
