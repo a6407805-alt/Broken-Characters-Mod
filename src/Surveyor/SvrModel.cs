@@ -168,6 +168,15 @@ namespace Surveyor
             _emTex.Apply(false, true);
         }
 
+        public static int PlayerModelLayer
+        {
+            get
+            {
+                int lay = LayerMask.NameToLayer("UIObject");
+                return lay >= 0 ? lay : 26;
+            }
+        }
+
         // ------------------------------------------------------------------ applying
 
         public static void Apply(Transform model)
@@ -175,9 +184,7 @@ namespace Surveyor
             if (!model || !SvrPlugin.UseCustomModel.Value || !Load()) return;
 
             Renderer[] originals = model.GetComponentsInChildren<Renderer>(true);
-            int layer = model.gameObject.layer;
-            foreach (Renderer r in originals)
-                if (r is SkinnedMeshRenderer) { layer = r.gameObject.layer; break; }
+            int layer = PlayerModelLayer;
             Material baseMat = StandardMaterial(model);
             Material mat = MakeMaterial(baseMat);
             if (!mat) { SvrPlugin.Log.LogWarning("Surveyor model: no Hopoo shader found, keeping the Commando model."); return; }
@@ -304,7 +311,7 @@ namespace Surveyor
             Transform grip = null;
             if (handGo && Bones.TryGetValue("foregrip", out BoneInfo fg))
             {
-                GameObject g = new GameObject("SvrForegrip");
+                GameObject g = new GameObject("SvrForegrip") { layer = layer };
                 g.transform.SetParent(handGo.transform, false);
                 g.transform.localPosition = fg.Head - handOrigin;
                 grip = g.transform;

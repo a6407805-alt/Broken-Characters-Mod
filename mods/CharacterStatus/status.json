@@ -123,8 +123,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.5.6",
-      "note": "Active WIP (v0.5.6): 4 directional focal cones (Needle 12°/180m, Narrow 26°/110m, Medium 48°/60m, Wide 85°/28m) replacing omni scan, ground item crosshair hover card & illumination, M2 vacuum pulls chests/barrels & items, toggleable visor peek with sensory fade-to-white & 12s cooldown, black rectangle artifact eliminated, enemy animated walking dots (no T-pose)"
+      "version": "0.5.7",
+      "note": "Active WIP (v0.5.7): Top-left HUD cluster clear of RoR2 chat, Shimmer Demon full health bar (damage with minigun to break containment shield, then suck up with vacuum once weakened below 35%), crystal clear Visor Peek with smooth 2.4s LiDAR reboot sequence on lowering visor, and 3D player suit model visible in third person with dedicated illumination light."
     }
   ]
 }
