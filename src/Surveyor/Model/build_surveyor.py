@@ -45,6 +45,7 @@ def ring(c, d, r, h, seg=18, r2=None):
     return place(cylinder(r, r if r2 is None else r2, h, seg), c, d, (0, 1, 0))
 
 def rbox(sx, sy, sz, e=0.22, move=(0, 0, 0), rot=(0, 0, 0), seg=14, rings=10):
+    e = max(e, 0.58)          # everything stays soft and rounded, like a pressure suit
     return transform(superellipsoid((sx / 2, sy / 2, sz / 2), e, e, seg, rings), rot=rot, move=move)
 
 def ell(r, move, e1=1.0, e2=1.0, rot=(0, 0, 0), seg=20, rings=14):
@@ -93,7 +94,7 @@ for k in list(BONES):
 SH = np.array(BONES["upper_arm.R"][0]); EL = np.array(BONES["forearm.R"][0]); WR = np.array(BONES["hand.R"][0]); HD = np.array(BONES["hand.R"][1])
 HIP = np.array(BONES["thigh.R"][0]); KN = np.array(BONES["shin.R"][0]); AN = np.array(BONES["foot.R"][0])
 GUN_DIR = (HD - WR) / np.linalg.norm(HD - WR)
-HC = np.array([0.0, 1.76, 0.0])           # helmet centre = visor hinge
+HC = np.array([0.0, 1.78, 0.0])           # helmet centre = visor hinge
 
 # ------------------------------------------------------------------ build
 
@@ -126,7 +127,7 @@ def build(visor_deg=0.0, spin_deg=0.0, barrel_deg=0.0):
         m.add("spine", rbox(0.025, 0.025, 0.012, 0.3, (-0.04 + 0.04 * i, 1.16, 0.15)), GREEN)
 
     # ---------------- chest: plates, yoke, collar, status lights
-    m.add("chest", ell((0.31, 0.21, 0.21), (0, 1.40, 0.03), 0.6, 0.6), ARMOR)
+    m.add("chest", ell((0.31, 0.21, 0.21), (0, 1.40, 0.03), 0.85, 0.85), ARMOR)
     m.add("chest", ell((0.21, 0.15, 0.06), (0, 1.40, 0.215), 0.4, 0.4), ARMOR_DK)
     m.add("chest", rbox(0.30, 0.025, 0.04, 0.3, (0, 1.30, 0.22)), ORANGE)
     for sx in (-1, 1):
@@ -154,69 +155,62 @@ def build(visor_deg=0.0, spin_deg=0.0, barrel_deg=0.0):
     m.add("neck", transform(torus(0.118, 0.03, 26, 8), move=(0, 1.52, 0)), METAL)
     m.add("neck", transform(torus(0.112, 0.022, 26, 8), move=(0, 1.58, 0)), SUIT)
 
-    # ---------------- head: helmet with a window, face inside, rim, pods
-    a, b, c = 0.215, 0.235, 0.235
-    dome = superellipsoid((a, b, c), 1, 1, 30, 20)
-    dome_w = transform(dome, move=tuple(HC))
-    def in_window(p, ax=0.165, ay_lo=-0.115, ay_hi=0.105):
+    # ---------------- head: a classic round bubble helmet with a big oval visor window, the face inside
+    a, b, c = 0.25, 0.265, 0.26
+    dome_w = transform(superellipsoid((a, b, c), 1, 1, 36, 24), move=tuple(HC))
+    def in_window(p, ax, ay, cy=0.0):
         d = p - HC
-        return d[2] > 0.07 and abs(d[0]) < ax and ay_lo < d[1] < ay_hi
-    m.add("head", cut(dome_w, lambda p: not in_window(p)), ARMOR)
-    inner = transform(superellipsoid((a * 0.94, b * 0.94, c * 0.94), 1, 1, 24, 16), move=tuple(HC))
-    m.add("head", cut(inner, lambda p: not in_window(p, 0.175, -0.125, 0.115)), RUBBER)     # dark inside of the helmet, open at the window so the face shows
+        return d[2] > 0.05 and (d[0] / ax) ** 2 + ((d[1] - cy) / ay) ** 2 < 1.0
+    WIN = (0.185, 0.17, -0.005)
+    m.add("head", cut(dome_w, lambda p: not in_window(p, *WIN)), ARMOR)
+    inner = transform(superellipsoid((a * 0.94, b * 0.94, c * 0.94), 1, 1, 28, 18), move=tuple(HC))
+    m.add("head", cut(inner, lambda p: not in_window(p, WIN[0] - 0.01, WIN[1] - 0.01, WIN[2])), RUBBER)    # dark inside, open at the window so the face shows
     zf = lambda x, y: c * math.sqrt(max(0.0, 1 - (x / a) ** 2 - (y / b) ** 2))
-    wc = (0, HC[1] - 0.005, HC[2])
-    m.add("head", tube(loop(wc, 0.165, 0.11, zf, 56, 4.0, 0.006), 0.013, 8), METAL)
-    # brow guard, crown rail, chin guard, rear vents
-    m.add("head", ell((0.19, 0.03, 0.085), (0, HC[1] + 0.14, 0.14), 0.6, 0.6, rot=(-14, 0, 0)), ARMOR_DK)
-    m.add("head", rbox(0.06, 0.04, 0.26, 0.3, (0, HC[1] + 0.235, -0.02)), ARMOR_DK)
-    m.add("head", rbox(0.03, 0.02, 0.05, 0.3, (0, HC[1] + 0.26, 0.08)), AMBER)
-    m.add("head", rbox(0.09, 0.012, 0.26, 0.3, (0, HC[1] + 0.228, -0.02)), ORANGE)
-    m.add("head", ell((0.13, 0.045, 0.07), (0, HC[1] - 0.15, 0.17), 0.5, 0.5, rot=(25, 0, 0)), ARMOR_DK)
-    for i in range(4):
-        m.add("head", rbox(0.16, 0.015, 0.03, 0.3, (0, HC[1] - 0.05 + 0.04 * i, -0.225)), RUBBER)
+    wc = (0, HC[1] + WIN[2], HC[2])
+    m.add("head", tube(loop(wc, WIN[0], WIN[1], zf, 56, 2.0, 0.008), 0.016, 8), METAL)          # the round rim around the window
+    # a thick neck-ring collar where the helmet clicks onto the suit, and two round ear caps
+    m.add("head", transform(torus(0.155, 0.034, 30, 10), move=(0, HC[1] - 0.225, 0.0)), ORANGE)
+    m.add("head", transform(torus(0.158, 0.02, 30, 8), move=(0, HC[1] - 0.262, 0.0)), METAL)
     for sx in (-1, 1):
-        m.add("head", ring((0.205 * sx, HC[1] - 0.02, 0.0), (sx, 0, 0), 0.07, 0.05, 18), METAL)           # comm pods
-        m.add("head", ring((0.245 * sx, HC[1] - 0.02, 0.0), (sx, 0, 0), 0.045, 0.02, 14), ARMOR_DK)
-        m.add("head", ell((0.012, 0.012, 0.012), (0.268 * sx, HC[1] - 0.02, 0.0)), GREEN if sx > 0 else AMBER)
-        m.add("head", ring((0.215 * sx, HC[1] + 0.05, -0.06), (0, 1, 0), 0.012, 0.16, 8), METAL) if sx > 0 else None   # antenna
+        m.add("head", ring((0.236 * sx, HC[1] - 0.01, -0.01), (sx, 0, 0), 0.058, 0.04, 22), ORANGE)
+        m.add("head", ring((0.272 * sx, HC[1] - 0.01, -0.01), (sx, 0, 0), 0.036, 0.016, 18), ARMOR_DK)
+        m.add("head", ell((0.014, 0.014, 0.014), (0.292 * sx, HC[1] - 0.01, -0.01)), GREEN if sx > 0 else AMBER)
     # the face under the visor: pale skin, milky blind eyes
-    m.add("head", ell((0.125, 0.15, 0.13), (0, HC[1] - 0.015, 0.045)), SKIN)
-    m.add("head", ell((0.13, 0.06, 0.13), (0, HC[1] + 0.085, 0.05)), ARMOR_DK)              # padded cap over the brow
+    m.add("head", ell((0.14, 0.165, 0.14), (0, HC[1] - 0.015, 0.05)), SKIN)
+    m.add("head", ell((0.145, 0.07, 0.14), (0, HC[1] + 0.09, 0.05)), SUIT)                  # padded cap over the brow
     for sx in (-1, 1):
-        m.add("head", ell((0.026, 0.02, 0.012), (0.052 * sx, HC[1] + 0.02, 0.168), 1, 1, seg=12, rings=8), EYE)
-        m.add("head", rbox(0.06, 0.012, 0.02, 0.3, (0.05 * sx, HC[1] + 0.055, 0.17), rot=(0, 0, -10 * sx)), DARKSKIN)
-    m.add("head", place(cylinder(0.022, 0.006, 0.05, 8), (0, HC[1] - 0.01, 0.168), (0, -0.2, 1), (0, 1, 0)), SKIN)   # nose
-    m.add("head", rbox(0.07, 0.012, 0.02, 0.3, (0, HC[1] - 0.085, 0.165)), DARKSKIN)                                # mouth
+        m.add("head", ell((0.028, 0.022, 0.012), (0.056 * sx, HC[1] + 0.02, 0.182), 1, 1, seg=12, rings=8), EYE)
+        m.add("head", rbox(0.065, 0.012, 0.02, 0.6, (0.055 * sx, HC[1] + 0.058, 0.184), rot=(0, 0, -10 * sx)), DARKSKIN)
+    m.add("head", place(cylinder(0.024, 0.006, 0.055, 8), (0, HC[1] - 0.01, 0.182), (0, -0.2, 1), (0, 1, 0)), SKIN)   # nose
+    m.add("head", rbox(0.075, 0.012, 0.02, 0.6, (0, HC[1] - 0.09, 0.178)), DARKSKIN)                                # mouth
 
-    # ---------------- visor (pivot part: hinge at the helmet centre, axis X)
+    # ---------------- visor (pivot part: hinge at the helmet centre, axis X): a big round dome of glass
     vs = tuple(HC)
-    shell = transform(superellipsoid((a + 0.028, b + 0.028, c + 0.028), 1, 1, 30, 20), move=tuple(HC))
-    keep = lambda p: in_window(p, 0.185, -0.13, 0.12)
-    glass = cut(shell, keep)
-    vis = []
-    vis.append((glass, GLASS))
-    zf2 = lambda x, y: (c + 0.03) * math.sqrt(max(0.0, 1 - (x / (a + 0.028)) ** 2 - (y / (b + 0.028)) ** 2))
-    vis.append((tube(loop((0, HC[1] - 0.005, HC[2]), 0.185, 0.125, zf2, 56, 4.0, 0.0), 0.014, 8), METAL))
-    # the scan line and HUD ticks glowing on the glass
+    o = 0.03
+    shell = transform(superellipsoid((a + o, b + o, c + o), 1, 1, 36, 24), move=tuple(HC))
+    glass = cut(shell, lambda p: in_window(p, WIN[0] + 0.022, WIN[1] + 0.022, WIN[2]))
+    vis = [(glass, GLASS)]
+    zf2 = lambda x, y: (c + o) * math.sqrt(max(0.0, 1 - (x / (a + o)) ** 2 - (y / (b + o)) ** 2))
+    vis.append((tube(loop(wc, WIN[0] + 0.022, WIN[1] + 0.022, zf2, 56, 2.0, 0.0), 0.017, 8), METAL))
+    # a curved scan line and HUD ticks glowing on the glass
     sl = []
     for i in range(25):
-        x = -0.16 + 0.32 * i / 24
-        y = 0.015
-        z = (c + 0.034) * math.sqrt(max(0.0, 1 - (x / (a + 0.028)) ** 2 - (y / (b + 0.028)) ** 2))
+        x = -0.15 + 0.30 * i / 24
+        y = 0.03 - 0.02 * (x / 0.15) ** 2
+        z = (c + o + 0.004) * math.sqrt(max(0.0, 1 - (x / (a + o)) ** 2 - (y / (b + o)) ** 2))
         sl.append((x, HC[1] + y, z))
     vis.append((tube(sl, 0.006, 6), GREEN))
     for i in range(5):
         x = -0.12 + 0.06 * i
-        y = -0.07
-        z = (c + 0.032) * math.sqrt(max(0.0, 1 - (x / (a + 0.028)) ** 2 - (y / (b + 0.028)) ** 2))
-        vis.append((transform(superellipsoid((0.012, 0.004, 0.004), 0.5, 0.5, 8, 6), move=(x, HC[1] + y, z)), GREEN))
+        y = -0.09 + 0.02 * (1 - abs(x) / 0.12)
+        z = (c + o + 0.002) * math.sqrt(max(0.0, 1 - (x / (a + o)) ** 2 - (y / (b + o)) ** 2))
+        vis.append((transform(superellipsoid((0.012, 0.005, 0.005), 0.6, 0.6, 8, 6), move=(x, HC[1] + y, z)), AMBER))
     for sx in (-1, 1):
-        vis.append((ring((0.232 * sx, HC[1], 0.0), (sx, 0, 0), 0.035, 0.02, 14), METAL))              # hinge knuckles
-        vis.append((ring((0.205 * sx, HC[1], 0.0), (sx, 0, 0), 0.02, 0.05, 10), ARMOR_DK))
-        vis.append((tube([(0.215 * sx, HC[1], 0.0), (0.205 * sx, HC[1] - 0.04, 0.12), (0.18 * sx, HC[1] - 0.1, 0.2)], 0.012, 6), METAL))   # arms to the glass
+        vis.append((ring((0.262 * sx, HC[1], 0.0), (sx, 0, 0), 0.04, 0.02, 18), METAL))              # hinge knuckles
+        vis.append((ring((0.236 * sx, HC[1], 0.0), (sx, 0, 0), 0.022, 0.05, 12), ARMOR_DK))
+        vis.append((tube([(0.248 * sx, HC[1], 0.0), (0.235 * sx, HC[1] - 0.05, 0.12), (0.2 * sx, HC[1] - 0.1, 0.2)], 0.013, 6), METAL))   # arms to the glass
     for mesh, col in vis:
-        m.add("head@visor", transform(mesh, rot=(0, 0, 0)) if visor_deg == 0 else _rot_about(mesh, vs, (1, 0, 0), visor_deg), col)
+        m.add("head@visor", mesh if visor_deg == 0 else _rot_about(mesh, vs, (1, 0, 0), visor_deg), col)
     m.pivots["head@visor"] = (vs, (vs[0] + 1, vs[1], vs[2]))
 
     # ---------------- spinning LiDAR dome on the backpack (pivot part, axis Y)
