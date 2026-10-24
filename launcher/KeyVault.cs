@@ -3,7 +3,6 @@
 //  downloads the locked copy of the key from the repo and unlocks it on their PC.
 //
 //    launcher/keys/extras.json             the extras key, locked with the extras password (set by the owner)
-//    launcher/keys/creators/<login>.json   one creator's key, locked with that creator's own password
 //
 //  The files are public, so the lock has to hold up on its own: AES-256-GCM with a key made from the password by
 //  PBKDF2-SHA256 (600,000 rounds, random salt). A long password matters; the window asks for 8+ characters.
@@ -35,8 +34,6 @@ namespace BrokenCharactersLauncher
             c.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("BrokenCharactersLauncher", "1.0"));
             return c;
         }
-
-        public static string CreatorPath(string login) => "launcher/keys/creators/" + login.Trim().ToLowerInvariant() + ".json";
 
         /// <summary>True for a real GitHub key; anything else typed into a key box is treated as a password.</summary>
         public static bool LooksLikeKey(string text) =>

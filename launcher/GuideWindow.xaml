@@ -151,7 +151,7 @@
                     <TextBlock Style="{StaticResource StepTitle}" Text="1. Open CREATOR" />
                     <TextBlock Style="{StaticResource StepBody}" Text="Click CREATOR at the top of the launcher." />
                     <TextBlock Style="{StaticResource StepTitle}" Text="2. Paste your creator key" />
-                    <TextBlock Style="{StaticResource StepBody}" Text="The first time, paste the creator key you generated (see below), or type your GitHub name and your key password, and press Save. It's remembered after that." />
+                    <TextBlock Style="{StaticResource StepBody}" Text="The first time, paste the creator key you made (see below) into the SIGN IN box and press SIGN IN. It's remembered after that." />
                     <TextBlock Style="{StaticResource StepTitle}" Text="3. Pick your mod's folder and publish" />
                     <TextBlock Style="{StaticResource StepBody}" Text="Choose the folder your mod lives in (it needs a src/&lt;YourMod&gt; or mods/&lt;YourMod&gt; subfolder) and press PUBLISH. It only touches the mod you own." />
                     <TextBlock Style="{StaticResource StepTitle}" Text="Quick upload (a .zip or .dll from MEGA, Discord...)" />
@@ -164,8 +164,12 @@
                         <Run Text="public_repo" FontFamily="Consolas" Foreground="White" />
                         <Run Text=", then paste the token into the CREATOR window's key box. The pack owner adds your name to the allow-list before your key will work." />
                     </TextBlock>
-                    <TextBlock Style="{StaticResource StepTitle}" Text="Use a password instead of the long key" />
-                    <TextBlock Style="{StaticResource StepBody}" Text="In CREATOR, press Key passwords... and lock your key with a password. On any other PC you then just type your GitHub name and that password. The owner can lock the extras key the same way, so friends only need the extras password." />
+                    <TextBlock Style="{StaticResource StepBody}">
+                        <Hyperlink NavigateUri="https://github.com/settings/tokens/new?scopes=public_repo&amp;description=Broken%20Characters%20creator%20key" RequestNavigate="CreateToken_RequestNavigate" Foreground="{StaticResource Accent}">
+                            <Run Text="Create a creator key on GitHub" FontWeight="Bold" />
+                        </Hyperlink>
+                        <Run Text=" (the same link is in CREATOR's sign-in box)." />
+                    </TextBlock>
 
                     <TextBlock Style="{StaticResource SectionHeader}" Text="Troubleshooting" />
                     <TextBlock Style="{StaticResource StepBody}" Text="Can't reach GitHub / no internet: if the pack is already installed, PLAY still works offline — you just won't get the newest update until you're back online." />
