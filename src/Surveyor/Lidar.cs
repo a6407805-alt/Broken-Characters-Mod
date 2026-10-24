@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Reflection;
 using RoR2;
 using UnityEngine;
-using UnityEngine.Rendering.PostProcessing;
 using Random = UnityEngine.Random;
 
 namespace Surveyor
@@ -493,12 +492,7 @@ namespace Surveyor
         private bool _warped;
         private float _warpFov;
         private Quaternion _warpRot;
-        private PostProcessVolume _ppVol;
-        private Bloom _bloom;
-        private DepthOfField _dof;
-        private ChromaticAberration _ca;
-        private ColorGrading _cg;
-        private LensDistortion _ld;
+        private Component _ppVol;                          // a Post-Process Volume, built by reflection (the game's NuGet package has no reference to it)
         private bool _ppFailed;
 
         private Camera _dimCam;
@@ -826,7 +820,7 @@ namespace Surveyor
                 ApplyPeekFx(cam);
                 return;
             }
-            if (_ppVol) _ppVol.weight = 0f;
+            SetPpWeight(0f);
 
             if (!SvrPlugin.DarkWorld.Value) { RestoreCamera(); return; }
             if (!_dimmed || _dimCam != cam)
@@ -856,6 +850,56 @@ namespace Surveyor
         }
 
         // Peek post-processing: heavy blur (depth of field), blown-out bloom and exposure, colour fringing, a bulging lens.
+        // Done by reflection so the build does not need the post-processing assembly; if it is missing only the screen wash is used.
+        private static Type PT(string name)
+        {
+            foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                Type t = null;
+                try { t = a.GetType("UnityEngine.Rendering.PostProcessing." + name, false); } catch { }
+                if (t != null) return t;
+            }
+            return null;
+        }
+
+        private static ScriptableObject Fx(string type, params object[] nameValue)
+        {
+            Type t = PT(type);
+            if (t == null) throw new Exception(type + " not found");
+            ScriptableObject o = ScriptableObject.CreateInstance(t);
+            Param(o, "enabled", true);
+            for (int i = 0; i + 1 < nameValue.Length; i += 2) Param(o, (string)nameValue[i], nameValue[i + 1]);
+            return o;
+        }
+
+        private static void Param(object effect, string field, object value)
+        {
+            FieldInfo f = effect.GetType().GetField(field, BindingFlags.Instance | BindingFlags.Public);
+            if (f == null) return;
+            object p = f.GetValue(effect);
+            if (p == null) return;
+            foreach (MethodInfo m in p.GetType().GetMethods())
+                if (m.Name == "Override" && m.GetParameters().Length == 1)
+                {
+                    object v = value;
+                    Type want = m.GetParameters()[0].ParameterType;
+                    if (want.IsEnum && value is string) v = Enum.Parse(want, (string)value);
+                    m.Invoke(p, new[] { v });
+                    return;
+                }
+        }
+
+        private void SetPpWeight(float w)
+        {
+            if (!_ppVol) return;
+            try
+            {
+                FieldInfo f = _ppVol.GetType().GetField("weight", BindingFlags.Instance | BindingFlags.Public);
+                if (f != null) f.SetValue(_ppVol, w);
+            }
+            catch { }
+        }
+
         private void ApplyPeekFx(Camera cam)
         {
             if (_ppFailed) return;
@@ -863,24 +907,30 @@ namespace Surveyor
             {
                 if (!_ppVol)
                 {
-                    PostProcessLayer layer = cam.GetComponent<PostProcessLayer>();
+                    Type layerType = PT("PostProcessLayer");
+                    Component layer = layerType != null ? cam.GetComponent(layerType) : null;
                     if (!layer) { _ppFailed = true; return; }
-                    int mask = layer.volumeLayer.value, lay = 0;
+                    object vl = layerType.GetField("volumeLayer").GetValue(layer);
+                    int mask = ((LayerMask)vl).value, lay = 0;
                     for (int i = 0; i < 32; i++) if ((mask & (1 << i)) != 0) { lay = i; break; }
-                    _bloom = ScriptableObject.CreateInstance<Bloom>();
-                    _bloom.enabled.Override(true); _bloom.intensity.Override(28f); _bloom.threshold.Override(0.25f); _bloom.diffusion.Override(10f);
-                    _dof = ScriptableObject.CreateInstance<DepthOfField>();
-                    _dof.enabled.Override(true); _dof.focusDistance.Override(0.35f); _dof.aperture.Override(32f); _dof.focalLength.Override(150f); _dof.kernelSize.Override(KernelSize.VeryLarge);
-                    _ca = ScriptableObject.CreateInstance<ChromaticAberration>();
-                    _ca.enabled.Override(true); _ca.intensity.Override(1f);
-                    _cg = ScriptableObject.CreateInstance<ColorGrading>();
-                    _cg.enabled.Override(true); _cg.postExposure.Override(2.6f); _cg.saturation.Override(-30f); _cg.contrast.Override(-25f);
-                    _ld = ScriptableObject.CreateInstance<LensDistortion>();
-                    _ld.enabled.Override(true); _ld.intensity.Override(-45f);
-                    _ppVol = PostProcessManager.instance.QuickVolume(lay, 300f, _bloom, _dof, _ca, _cg, _ld);
-                    _ppVol.weight = 0f;
+
+                    ScriptableObject[] list =
+                    {
+                        Fx("Bloom", "intensity", 28f, "threshold", 0.25f, "diffusion", 10f),
+                        Fx("DepthOfField", "focusDistance", 0.35f, "aperture", 32f, "focalLength", 150f, "kernelSize", "VeryLarge"),
+                        Fx("ChromaticAberration", "intensity", 1f),
+                        Fx("ColorGrading", "postExposure", 2.6f, "saturation", -30f, "contrast", -25f),
+                        Fx("LensDistortion", "intensity", -45f)
+                    };
+                    Array arr = Array.CreateInstance(PT("PostProcessEffectSettings"), list.Length);
+                    for (int i = 0; i < list.Length; i++) arr.SetValue(list[i], i);
+                    object mgr = PT("PostProcessManager").GetProperty("instance", BindingFlags.Static | BindingFlags.Public).GetValue(null, null);
+                    object vol = mgr.GetType().GetMethod("QuickVolume").Invoke(mgr, new object[] { lay, 300f, arr });
+                    _ppVol = vol as Component;
+                    if (!_ppVol) { _ppFailed = true; return; }
+                    SetPpWeight(0f);
                 }
-                _ppVol.weight = _peekK;
+                SetPpWeight(_peekK);
             }
             catch (Exception e)
             {
@@ -891,7 +941,7 @@ namespace Surveyor
 
         private void DropPeekFx()
         {
-            try { if (_ppVol) RuntimeUtilities.DestroyVolume(_ppVol, true, true); } catch { }
+            try { if (_ppVol) Destroy(_ppVol.gameObject); } catch { }
             _ppVol = null;
         }
 
