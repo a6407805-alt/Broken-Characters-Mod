@@ -86,7 +86,7 @@ namespace BrokenCharactersLauncher
             FolderText.Text = "Quick upload: " + (staged.Multi ? staged.Included.Count + " mods" : name);
             await RefreshAsync();
             if (staged.Skipped.Count > 0)
-                StatusLine.Text += "  (Skipped " + staged.Skipped.Count + " that aren't yours or aren't in the pack: " + QuickUpload.Short(staged.Skipped) + ")";
+                StatusLine.Text += "  (Skipped " + staged.Skipped.Count + " that aren't pack mods, like R2API: " + QuickUpload.Short(staged.Skipped) + ")";
         }
     }
 }
