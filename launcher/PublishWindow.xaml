@@ -2,12 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Broken Characters Mod - Creator"
-        Width="760" Height="720"
+        Width="600" Height="720"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
         ResizeMode="NoResize"
-        WindowStartupLocation="CenterScreen"
+        WindowStartupLocation="Manual"
+        ShowInTaskbar="False"
         FontFamily="Segoe UI"
         Loaded="Window_Loaded"
         Closing="Window_Closing">
@@ -95,6 +96,7 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -107,25 +109,38 @@
                 <Button Content="&#x2715;" Style="{StaticResource TitleButton}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,10,0" Click="Close_Click" ToolTip="Close" />
             </Grid>
 
-            <!-- ======================================================== step 0: creator key -->
-            <StackPanel x:Name="KeyPanel" Grid.Row="1" VerticalAlignment="Center" Visibility="Collapsed">
-                <TextBlock Text="Paste your creator key" Foreground="White" FontSize="26" FontWeight="Bold" />
-                <TextBlock Foreground="{StaticResource TextDim}" FontSize="15" TextWrapping="Wrap" Margin="0,10,0,0"
-                           Text="You only do this once. Paste your key (the long github_pat_... text), or if your key has a password, type your GitHub name and your password." />
-                <TextBlock Text="GitHub name (only if you use a password)" Foreground="White" FontSize="13" Margin="0,18,0,4" />
-                <TextBox x:Name="NameBox" Height="36" FontSize="15" VerticalContentAlignment="Center" Padding="6,0"
-                         Background="#30FFFFFF" Foreground="White" CaretBrush="White" BorderBrush="#60FFFFFF" />
-                <TextBlock Text="Key or password" Foreground="White" FontSize="13" Margin="0,12,0,0" />
-                <PasswordBox x:Name="KeyBox" Height="40" Margin="0,4,0,0" FontSize="15" VerticalContentAlignment="Center"
-                             Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" />
-                <TextBlock x:Name="KeyError" Foreground="#FF9A8C" FontSize="14" TextWrapping="Wrap" Margin="0,10,0,0" Visibility="Collapsed" />
-                <Button x:Name="SaveKeyButton" Content="SAVE KEY" Style="{StaticResource GoldButton}" Margin="0,22,0,0" Click="SaveKey_Click" />
-                <TextBlock Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap" Margin="0,16,0,0"
-                           Text="Just here to play? You don't need this window. Close it and press PLAY." />
-            </StackPanel>
+            <!-- ======================================================== step 0: sign in (compact, sits above the main panel) -->
+            <Border x:Name="KeyPanel" Grid.Row="1" Visibility="Collapsed" Background="#1AFFC928" BorderBrush="{StaticResource Accent}" BorderThickness="1"
+                    CornerRadius="6" Padding="14,10" Margin="0,4,0,12">
+                <StackPanel>
+                    <TextBlock Text="SIGN IN (ONCE)" Foreground="{StaticResource Accent}" FontSize="14" FontWeight="Black" />
+                    <TextBlock Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,8"
+                               Text="Paste your creator key, or type your GitHub name + key password. Then Pick files and Publish below unlock. Just here to play? Close this." />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="GitHub name (if password)" Foreground="White" FontSize="11" Margin="0,0,0,3" />
+                            <TextBox x:Name="NameBox" Height="32" FontSize="14" VerticalContentAlignment="Center" Padding="6,0"
+                                     Background="#30FFFFFF" Foreground="White" CaretBrush="White" BorderBrush="#60FFFFFF" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Key or password" Foreground="White" FontSize="11" Margin="0,0,0,3" />
+                            <PasswordBox x:Name="KeyBox" Height="32" FontSize="14" VerticalContentAlignment="Center"
+                                         Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" />
+                        </StackPanel>
+                        <Button Grid.Column="2" x:Name="SaveKeyButton" Content="SIGN IN" Style="{StaticResource GhostButton}" Margin="8,0,0,0"
+                                VerticalAlignment="Bottom" Height="32" Click="SaveKey_Click" />
+                    </Grid>
+                    <TextBlock x:Name="KeyError" Foreground="#FF9A8C" FontSize="13" TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed" />
+                </StackPanel>
+            </Border>
 
             <!-- ======================================================== main: pick folder, see changes, publish -->
-            <Grid x:Name="MainPanel" Grid.Row="1" Visibility="Collapsed">
+            <Grid x:Name="MainPanel" Grid.Row="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
