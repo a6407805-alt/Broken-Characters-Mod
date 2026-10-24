@@ -278,7 +278,63 @@ namespace Surveyor
         public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.Any; }
     }
 
-    // ================================================================ M2: Surveyor Lance
+    // ================================================================ M2: Industrial Poltergust Vacuum Cleaner
+
+    public class SvrVacuumState : BaseSkillState
+    {
+        private SvrLidar _lidar;
+        private float _soundTimer;
+
+        public override void OnEnter()
+        {
+            base.OnEnter();
+            _lidar = GetComponent<SvrLidar>();
+            PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
+            Util.PlaySound("Play_drone_repair", gameObject);
+            _soundTimer = 0.25f;
+        }
+
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+
+            Ray aim = GetAimRay();
+            StartAimMode(aim, 1.5f, false);
+
+            if (_lidar)
+            {
+                _lidar.VacuumHold(aim, Time.fixedDeltaTime, characterBody);
+            }
+
+            _soundTimer -= Time.fixedDeltaTime;
+            if (_soundTimer <= 0f)
+            {
+                _soundTimer = 0.35f;
+                Util.PlaySound("Play_drone_repair", gameObject);
+            }
+
+            if (isAuthority)
+            {
+                if (!inputBank || !inputBank.skill2.down)
+                {
+                    outer.SetNextStateToMain();
+                }
+            }
+        }
+
+        public override void OnExit()
+        {
+            if (_lidar != null && _lidar.Demon != null)
+            {
+                _lidar.Demon.TetherActive = false;
+            }
+            base.OnExit();
+        }
+
+        public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.Skill; }
+    }
+
+    // ================================================================ Alt M2: Surveyor Lance
 
     public class SvrLanceState : BaseSkillState
     {

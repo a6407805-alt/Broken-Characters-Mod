@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.5.2";
+        public const string PluginVersion = "0.5.3";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -203,8 +203,10 @@ namespace Surveyor
             LanguageAPI.Add(T + "PRIMARY_NAME", "Rotary Survey Gun");
             LanguageAPI.Add(T + "PRIMARY_DESC", "Hold to spool the barrels up over <style=cIsUtility>" + SpoolSeconds.Value.ToString("0.0#") + "s</style>, then fire up to <style=cIsDamage>" + MaxRate.Value.ToString("0") + " shots per second</style> for <style=cIsDamage>" +
                 (BulletDamage.Value * 100f).ToString("0") + "% damage</style> each. <style=cIsUtility>Slows you by " + (MoveSlow.Value * 100f).ToString("0") + "%</style> while spooled. A fully spooled burst can shove the Shimmer Demon back.");
-            LanguageAPI.Add(T + "SECONDARY_NAME", "Surveyor Lance");
-            LanguageAPI.Add(T + "SECONDARY_DESC", "Charge for " + LanceCharge.Value.ToString("0.0#") + "s, then fire a <style=cIsDamage>piercing lance for " + (LanceDamage.Value * 100f).ToString("0") + "% damage</style> that knocks enemies back and paints a line of LiDAR. <style=cIsUtility>Staggers the Shimmer Demon for " +
+            LanguageAPI.Add(T + "SECONDARY_NAME", "Industrial Poltergust Vacuum");
+            LanguageAPI.Add(T + "SECONDARY_DESC", "Channel high-flow vortex suction. Continuously pulls in <style=cIsUtility>all dropped items & pickups</style>, siphons and staggers enemies, and latches onto the <style=cDeath>Shimmer Demon</style> to reel it in and restore a stolen sense.");
+            LanguageAPI.Add(T + "LANCE_NAME", "Surveyor Lance");
+            LanguageAPI.Add(T + "LANCE_DESC", "Charge for " + LanceCharge.Value.ToString("0.0#") + "s, then fire a <style=cIsDamage>piercing lance for " + (LanceDamage.Value * 100f).ToString("0") + "% damage</style> that knocks enemies back and paints a line of LiDAR. <style=cIsUtility>Staggers the Shimmer Demon for " +
                 LanceStagger.Value.ToString("0.#") + "s.</style> Recoil pushes you back unless you are anchored.");
             LanguageAPI.Add(T + "UTILITY_NAME", "Hydraulic Slide");
             LanguageAPI.Add(T + "UTILITY_DESC", "<style=cIsUtility>Slide forward.</style> Keep <style=cIsUtility>holding the button</style> and she plants an <style=cIsDamage>Anchor</style> for up to " + AnchorSeconds.Value.ToString("0") +
@@ -330,6 +332,7 @@ namespace Surveyor
         private void CreateSkills()
         {
             ContentAddition.AddEntityState<SvrMinigunState>(out _);
+            ContentAddition.AddEntityState<SvrVacuumState>(out _);
             ContentAddition.AddEntityState<SvrLanceState>(out _);
             ContentAddition.AddEntityState<SvrSlideState>(out _);
             ContentAddition.AddEntityState<SvrAnchorState>(out _);
@@ -345,7 +348,9 @@ namespace Surveyor
             sl.passiveSkill.icon = SvrIcons.Get("passive", null);
 
             SkillDef primary = MakeSkill("PRIMARY", typeof(SvrMinigunState), "Weapon", 0f, false, true, InterruptPriority.Any, "primary", false);
-            SkillDef secondary = MakeSkill("SECONDARY", typeof(SvrLanceState), "Weapon", LanceCooldown.Value, true, true, InterruptPriority.Skill, "secondary", true);
+            SkillDef secondary = MakeSkill("SECONDARY", typeof(SvrVacuumState), "Weapon", 0f, false, false, InterruptPriority.Skill, "secondary", false);
+            secondary.cancelSprintingOnActivation = false;
+            SkillDef lance = MakeSkill("LANCE", typeof(SvrLanceState), "Weapon", LanceCooldown.Value, true, true, InterruptPriority.Skill, "secondary", true);
             SkillDef utility = MakeSkill("UTILITY", typeof(SvrSlideState), "Body", SlideCooldown.Value, true, false, InterruptPriority.PrioritySkill, "utility", true);
             SkillDef special = MakeSkill("SPECIAL", typeof(SvrPulseState), "Weapon", PulseCooldown.Value, true, true, InterruptPriority.Skill, "special", true);
             utility.cancelSprintingOnActivation = false;
@@ -354,7 +359,7 @@ namespace Surveyor
             SkillDef overdrive = MakeSkill("OVERDRIVE", typeof(SvrOverdriveState), "Weapon", OverdriveCooldown.Value, true, false, InterruptPriority.Skill, "overdrive", false);
 
             sl.primary = Slot("SurveyorPrimary", primary);
-            sl.secondary = Slot("SurveyorSecondary", secondary);
+            sl.secondary = Slot("SurveyorSecondary", secondary, lance);
             sl.utility = Slot("SurveyorUtility", utility, peek);
             sl.special = Slot("SurveyorSpecial", special, overdrive);
         }

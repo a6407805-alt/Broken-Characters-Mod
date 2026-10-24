@@ -478,6 +478,111 @@ namespace Surveyor
             return true;
         }
 
+        // Industrial Poltergust Vacuum Cleaner [M2]: continuously pulls in dropped items, staggers/pulls enemies, and locks onto the Shimmer Demon
+        public void VacuumHold(CharacterBody body, Ray aim, float dt)
+        {
+            if (!body) return;
+            Vector3 origin = aim.origin;
+            Vector3 fwd = aim.direction;
+
+            // 1) Sucks in the Shimmer Demon and builds capture progress
+            if (!Active)
+            {
+                if (_stageTime > 12f || SvrSenses.Lost > 0)
+                {
+                    Spawn(body.footPosition);
+                }
+            }
+
+            if (Active)
+            {
+                Vector3 toDemon = _center - origin;
+                float dDemon = toDemon.magnitude;
+                float angDemon = dDemon > 0.1f ? Vector3.Angle(fwd, toDemon) : 0f;
+                if (dDemon < 48f && (angDemon < 52f || dDemon < 12f))
+                {
+                    TetherActive = true;
+                    State = Mode.Stagger;
+                    _stagger = Mathf.Max(_stagger, 0.45f);
+
+                    // Pull Demon smoothly toward the Surveyor's vacuum nozzle
+                    Vector3 toPlayer = origin - Pos;
+                    toPlayer.y = 0f;
+                    if (toPlayer.sqrMagnitude > 0.5f)
+                    {
+                        Pos += toPlayer.normalized * (16f * dt);
+                        _center = Pos + Vector3.up * 1.4f;
+                    }
+
+                    CaptureProgress = Mathf.Clamp01(CaptureProgress + dt * 0.42f);
+
+                    if (CaptureProgress >= 0.99f || dDemon < 3.2f)
+                    {
+                        CaptureDemon(body, false);
+                    }
+                }
+                else
+                {
+                    CaptureProgress = Mathf.Max(0f, CaptureProgress - dt * 0.2f);
+                }
+            }
+
+            // 2) Sucks dropped items and pickups directly toward the player's feet (range 35m)
+            try
+            {
+                GenericPickupController[] gpcs = UnityEngine.Object.FindObjectsOfType<GenericPickupController>();
+                for (int i = 0; i < gpcs.Length; i++)
+                {
+                    GenericPickupController gpc = gpcs[i];
+                    if (!gpc || !gpc.gameObject.activeInHierarchy) continue;
+                    Vector3 toItem = gpc.transform.position - origin;
+                    float dItem = toItem.magnitude;
+                    if (dItem < 35f && (Vector3.Angle(fwd, toItem) < 55f || dItem < 8f))
+                    {
+                        gpc.transform.position = Vector3.MoveTowards(gpc.transform.position, body.footPosition + Vector3.up * 0.5f, 26f * dt);
+                    }
+                }
+                PickupPickerController[] ppcs = UnityEngine.Object.FindObjectsOfType<PickupPickerController>();
+                for (int i = 0; i < ppcs.Length; i++)
+                {
+                    PickupPickerController ppc = ppcs[i];
+                    if (!ppc || !ppc.gameObject.activeInHierarchy) continue;
+                    Vector3 toItem = ppc.transform.position - origin;
+                    float dItem = toItem.magnitude;
+                    if (dItem < 35f && (Vector3.Angle(fwd, toItem) < 55f || dItem < 8f))
+                    {
+                        ppc.transform.position = Vector3.MoveTowards(ppc.transform.position, body.footPosition + Vector3.up * 0.5f, 26f * dt);
+                    }
+                }
+            }
+            catch { }
+
+            // 3) Vacuum suction pull on nearby enemies in the forward cone
+            try
+            {
+                BullseyeSearch bs = new BullseyeSearch
+                {
+                    searchOrigin = origin,
+                    searchDirection = fwd,
+                    maxDistanceFilter = 34f,
+                    maxAngleFilter = 48f,
+                    teamMaskFilter = TeamMask.GetEnemyTeams(body.teamComponent.teamIndex),
+                    filterByLoS = false
+                };
+                bs.RefreshCandidates();
+                foreach (HurtBox hb in bs.GetResults())
+                {
+                    HealthComponent hc = hb ? hb.healthComponent : null;
+                    CharacterBody eb = hc ? hc.body : null;
+                    if (!eb || eb == body) continue;
+                    Vector3 pull = (origin - eb.corePosition).normalized;
+                    if (eb.characterMotor) eb.characterMotor.ApplyForce(pull * (1200f * dt), true, false);
+                    else if (eb.rigidbody) eb.rigidbody.AddForce(pull * (1200f * dt), ForceMode.Acceleration);
+                }
+            }
+            catch { }
+        }
+
         public void Pulse(Vector3 at, float radius)
         {
             if (!Active) return;
@@ -794,7 +899,7 @@ namespace Surveyor
             if (State != Mode.Stagger && Vector3.Distance(body.corePosition, _center) < SvrPlugin.DemonContactRange.Value + 0.6f) Feed();
         }
 
-        private void CaptureDemon(CharacterBody body, bool compressionBonus)
+        public void CaptureDemon(CharacterBody body, bool compressionBonus)
         {
             TrapActive = false;
             TetherActive = false;
@@ -1640,6 +1745,25 @@ namespace Surveyor
 
         public bool Peeking { get { return Time.time < _peekUntil; } }
         public bool OverdriveOn { get { return _odActive >= 0 && Time.time < _odUntil; } }
+        public SvrDemon Demon { get { return _demon; } }
+
+        public void VacuumHold(Ray aim, float dt, CharacterBody body)
+        {
+            if (_demon == null) return;
+            _demon.VacuumHold(body, aim, dt);
+
+            // Emit swirling vacuum suction dots in the point cloud flowing inward into the nozzle
+            Vector3 nozzle = aim.origin + transform.right * 0.35f - transform.up * 0.15f;
+            for (int i = 0; i < 6; i++)
+            {
+                float d = Random.Range(3f, 22f);
+                float spread = Random.Range(4f, 32f);
+                Vector3 dir = Cone(aim.direction, spread, Time.time * 24f + i * 1.57f);
+                Vector3 dotPos = nozzle + dir * d;
+                Color dotCol = (i & 1) == 0 ? new Color(0.22f, 0.95f, 1f, 1f) : new Color(1f, 0.75f, 0.2f, 1f);
+                AddDot(dotPos, dotCol, 0.18f, true);
+            }
+        }
         // ---------------------------------------------------------------- helpers
 
         private bool IsLocal()
@@ -3852,20 +3976,11 @@ namespace Surveyor
             float scale = Screen.height / 1080f;
             Color old = GUI.color;
 
-            // Ensure a pure, solid black canvas backdrop when DarkWorld is active and visor is down (squashes any camera/UI gray plane)
-            if (SvrPlugin.DarkWorld.Value && _peekK < 0.02f)
-            {
-                GUI.color = Color.black;
-                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), Texture2D.whiteTexture);
-            }
-
-            // Smoothly fade all LiDAR dots, 3D holograms, animated skeletons, and demon points from 100% -> 0% as Peek lifts the visor,
+            // Smoothly fade all LiDAR dots and demon points from 100% -> 0% as Peek lifts the visor,
             // and smoothly fade them back from 0% -> 100% as the visor lowers.
             float dotAlpha = Mathf.SmoothStep(1f, 0f, Mathf.Clamp01(_peekK * 1.15f));
             DrawDots(cam, scale, dotAlpha);
             DrawPulseWaves(cam, scale, dotAlpha);
-            DrawHologramTargets(cam, scale, dotAlpha);
-            DrawAnimatedSkeletons(cam, scale, dotAlpha);
             DrawDemon(cam, scale, dotAlpha);
             DrawPeekWash(scale);
             DrawHud(scale);
@@ -4270,10 +4385,11 @@ namespace Surveyor
             if (dotAlpha <= 0.005f) return;
             Texture2D white = Texture2D.whiteTexture;
 
-            // Draw the Ghost-Trap HUD marker and Proton/Poltergust capture streams when the trap is deployed
-            if (_demon.TrapActive)
+            // Draw the Ghost-Trap HUD marker and Proton/Poltergust capture streams when capturing or trap active
+            if (_demon.TrapActive || _demon.TetherActive || _demon.CaptureProgress > 0.02f)
             {
-                Vector3 tsp = cam.WorldToScreenPoint(_demon.TrapPos + Vector3.up * 0.35f);
+                Vector3 markerPos = _demon.TrapActive ? _demon.TrapPos + Vector3.up * 0.35f : _demon.TetherTargetPos + Vector3.up * 0.35f;
+                Vector3 tsp = cam.WorldToScreenPoint(markerPos);
                 if (tsp.z > 0.35f)
                 {
                     float tx = tsp.x, ty = Screen.height - tsp.y;
@@ -4285,8 +4401,8 @@ namespace Surveyor
                     DrawScreenLine(new Vector2(tx, ty + rad), new Vector2(tx - rad, ty), 2f * scale, white);
                     if (_label != null)
                     {
-                        string tTxt = _demon.TetherActive
-                            ? "CONTAINING DEMON " + Mathf.RoundToInt(_demon.CaptureProgress * 100f) + "%"
+                        string tTxt = _demon.TetherActive || _demon.CaptureProgress > 0.02f
+                            ? "VACUUMING DEMON " + Mathf.RoundToInt(_demon.CaptureProgress * 100f) + "%"
                             : "GHOST TRAP [OPEN]";
                         GUI.color = _demon.TetherActive ? new Color(0.25f, 1f, 0.55f, 0.95f * dotAlpha) : new Color(1f, 0.9f, 0.2f, 0.9f * dotAlpha);
                         GUI.Label(new Rect(tx + rad + 6f * scale, ty - 10f * scale, 220f * scale, 20f * scale), tTxt, _label);
@@ -4309,18 +4425,18 @@ namespace Surveyor
 
             bool hasLockedEnemy = _demon.LockedEnemy && _demon.LockedEnemy.alive && _demon.LockedEnemy.body;
             if (!_demon.Active && !hasLockedEnemy) return;
-            bool revealed = Time.time < _revealUntil || _demon.TrapActive;
+            bool revealed = Time.time < _revealUntil || _demon.TrapActive || _demon.TetherActive || _demon.CaptureProgress > 0.02f;
             bool blocked = !revealed && _demon.Active && Physics.Linecast(cam.transform.position, _demon.Center, LayerIndex.world.mask, QueryTriggerInteraction.Ignore);
             float vis = (blocked ? 0.18f : 0.95f) * dotAlpha;
             if (_demon.Active) _demon.FillWorld(_demonPoints, Time.time);
             else _demonPoints.Clear();
 
-            // Ghostbusters Proton Stream + Luigi's Mansion Poltergust Suction Vortex while capturing!
-            if (_demon.TrapActive && (_demon.TetherActive || _demon.CaptureProgress > 0.02f))
+            // Ghostbusters Proton Stream + Luigi's Mansion Poltergust Suction Vortex while capturing / vacuuming!
+            if (_demon.TetherActive || _demon.CaptureProgress > 0.02f)
             {
                 Vector3 muzzleWorld = _body.corePosition + cam.transform.right * 0.48f - cam.transform.up * 0.18f + cam.transform.forward * 0.55f;
                 Vector3 demonCenter = _demon.TetherTargetPos;
-                Vector3 trapWorld = _demon.TrapPos + Vector3.up * 0.25f;
+                Vector3 trapWorld = _demon.TrapActive ? _demon.TrapPos + Vector3.up * 0.25f : muzzleWorld;
 
                 // 1) Ghostbusters Proton Stream: crackling orange/red core beam + spiraling electric blue helix from gun to Demon
                 Vector3 prevCore = Vector3.zero, prevHelix = Vector3.zero;
@@ -4644,25 +4760,10 @@ namespace Surveyor
                 }
                 float pr = _peekReady - Time.time;
                 GUI.color = new Color(0.9f, 0.95f, 1f, 0.85f);
-                GUI.Label(new Rect(sx, sy + 36f * scale, 160f * scale, 24f * scale), "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "]" + (pr > 0f ? "  " + pr.ToString("0") + "s" : "  ready"), _label);
+                GUI.Label(new Rect(sx, sy + 36f * scale, 150f * scale, 24f * scale), "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "]" + (pr > 0f ? "  " + pr.ToString("0") + "s" : "  ready"), _label);
 
-                float rr = _repulsorReadyAt - Time.time;
-                GUI.color = new Color(0.45f, 0.96f, 1f, 0.88f);
-                GUI.Label(new Rect(sx + 135f * scale, sy + 36f * scale, 165f * scale, 24f * scale), "BLOW [" + SvrPlugin.RepulsorKey.Value.ToUpperInvariant() + "]" + (rr > 0f ? "  " + rr.ToString("0") + "s" : "  ready"), _label);
-
-                float tr = _demon.TrapReadyAt - Time.time;
-                string trapKeyStr = SvrPlugin.TrapKey.Value.ToUpperInvariant();
-                if (_demon.TrapActive)
-                {
-                    GUI.color = new Color(0.25f, 1f, 0.55f, 0.95f);
-                    GUI.Label(new Rect(sx + 275f * scale, sy + 36f * scale, 380f * scale, 24f * scale), "TRAP [" + trapKeyStr + "]  OPEN — AIM & FIRE + WASD STEER!", _label);
-                }
-                else
-                {
-                    GUI.color = SvrSenses.Lost > 0 ? new Color(1f, 0.88f, 0.25f, 0.95f) : new Color(0.82f, 0.95f, 1f, 0.82f);
-                    string trapSub = tr > 0f ? ("  " + tr.ToString("0") + "s") : (SvrSenses.Lost > 0 ? "  READY (CAPTURE DEMON -> RESTORE SENSE)" : "  ready");
-                    GUI.Label(new Rect(sx + 275f * scale, sy + 36f * scale, 420f * scale, 24f * scale), "TRAP [" + trapKeyStr + "]" + trapSub, _label);
-                }
+                GUI.color = new Color(0.35f, 0.95f, 1f, 0.92f);
+                GUI.Label(new Rect(sx + 155f * scale, sy + 36f * scale, 480f * scale, 24f * scale), "VACUUM [M2] — HOLD TO SUCK DEMON, ENEMIES & ITEMS", _label);
 
                 // Top-center banner when tapping Q switches scanner mode
                 if (sinceSwitch < 1.35f)
@@ -4706,8 +4807,8 @@ namespace Surveyor
                     GUI.Label(new Rect(px + 12f * scale, py + 7f * scale, pw - 20f * scale, 22f * scale), _upgradeToast, _label);
                 }
 
-                // Ghostbusters / Luigi's Mansion Containment & Wrestling Match HUD bar while Ghost-Trap is active
-                if (_demon.TrapActive)
+                // Ghostbusters / Luigi's Mansion Containment & Vacuuming HUD bar while Vacuuming Demon or Trap Active
+                if (_demon.TrapActive || _demon.TetherActive || _demon.CaptureProgress > 0.01f)
                 {
                     float cw = 520f * scale, ch = 66f * scale;
                     float cx = Screen.width * 0.5f - cw * 0.5f, cy = Screen.height * 0.22f;
@@ -4721,8 +4822,8 @@ namespace Surveyor
 
                     string strainTxt = _demon.StrainStacks > 0 ? (" · STRAIN x" + _demon.StrainStacks) : "";
                     string hdr = _demon.TetherActive
-                        ? "PROTON TETHER LOCKED (" + Mathf.RoundToInt(_demon.CaptureProgress * 100f) + "%)" + strainTxt
-                        : "GHOST TRAP OPEN — AIM AT DEMON/BOSS & HOLD FIRE TO CAPTURE!";
+                        ? "POLTERGUST VACUUM LOCKED (" + Mathf.RoundToInt(_demon.CaptureProgress * 100f) + "%)" + strainTxt
+                        : "HOLD [M2] TO VACUUM & REEL IN DEMON/GHOST!";
                     GUI.Label(new Rect(cx + 12f * scale, cy + 4f * scale, cw - 24f * scale, 20f * scale), hdr, _label);
 
                     if (_demon.TetherActive)
