@@ -7,6 +7,23 @@
       "audio": "https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/jukebox/mp3-my-sprinkler-goes-like-this.mp3",
       "added": "2026-10-24T03:32:00.7385216Z",
       "addedBy": "a6407805-alt"
+    },
+    {
+      "id": "mp3-jussipussi-edm",
+      "title": "Jussipussi EDM",
+      "artist": "DeAndre6969",
+      "audio": "https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/jukebox/mp3-jussipussi-edm.mp3",
+      "added": "2026-10-24T04:04:02.2083210Z",
+      "addedBy": "DeAndre6969"
+    },
+    {
+      "id": "mp3-bigger-problem",
+      "title": "mp3-bigger-problem",
+      "artist": "DeAndre6969",
+      "audio": "https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/jukebox/mp3-bigger-problem.mp3",
+      "added": "2026-10-24T04:04:03.5453391Z",
+      "addedBy": "DeAndre6969"
     }
-  ]
+  ],
+  "removed": []
 }
