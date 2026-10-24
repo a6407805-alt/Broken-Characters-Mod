@@ -1,8 +1,8 @@
 {
   "name": "Jukebox",
-  "version_number": "1.1.2",
+  "version_number": "1.1.3",
   "website_url": "",
-  "description": "Plays the group's Suno songs in game with a song vote, vote-to-skip, and HUD menu under the difficulty/objective tracker. Songs are added in the launcher's JUKEBOX window. Personal use.",
+  "description": "Plays the group's Suno songs in game with a song vote, vote-to-skip, keys 1 & 2 volume stepper/hold-ramp/preset toggle, and 150% Garage-Rock Boost gain ceiling. Personal use.",
   "dependencies": [
     "bbepis-BepInExPack-5.4.2121",
     "RiskofThunder-R2API_Core-5.3.0",

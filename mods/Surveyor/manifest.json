@@ -1,8 +1,8 @@
 {
   "name": "Surveyor",
-  "version_number": "0.4.4",
+  "version_number": "0.5.0",
   "website_url": "",
-  "description": "The Surveyor: a blind, armored engineer who sees only through a LiDAR point cloud, with 3D item silhouette scanning and a Ghost-Trap / Proton Tether to capture the Shimmer Demon and restore lost senses. Personal use.",
+  "description": "The Surveyor: blind heavy EVA engineer with middle-mouse LiDAR mode wheel/radial dial, 8 hidden LiDAR map upgrades, and Ghostbusters/Luigi's Mansion Proton Tether & Ghost-Trap capture. Personal use.",
   "dependencies": [
     "bbepis-BepInExPack-5.4.2121",
     "RiskofThunder-R2API_Core-5.3.0",

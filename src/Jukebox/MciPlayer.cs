@@ -88,12 +88,25 @@ namespace Jukebox
             }
         }
 
-        /// <summary>0-100 on a perceptual curve, mapped to MCI's 0-1000.</summary>
+        /// <summary>
+        /// 0-150 volume scale with a boosted master gain ceiling.
+        /// DirectShow MCI's 0-1000 scale is already logarithmic, so squaring it made mid volumes way too quiet.
+        /// Here 1-100 maps with a high-punch root curve up to 1000 (0 dB full scale), and 100-150 ("Garage-Rock Boost")
+        /// holds MCI at 1000 ceiling while GameMusic ducks heavy combat SFX so the track cuts right through gunfire.
+        /// </summary>
         public static void SetVolume(int volume)
         {
             if (!_open) return;
-            float v = Math.Max(0, Math.Min(100, volume)) / 100f;
-            Send("setaudio " + Alias + " volume to " + (int)(v * v * 1000f));
+            int clamped = Math.Max(0, Math.Min(150, volume));
+            if (clamped == 0)
+            {
+                Send("setaudio " + Alias + " volume to 0");
+                return;
+            }
+            float norm = Math.Min(100, clamped) / 100f;
+            int mciVol = (int)Math.Round(Math.Pow(norm, 0.48) * 1000.0);
+            if (clamped >= 95) mciVol = 1000;
+            Send("setaudio " + Alias + " volume to " + Math.Max(0, Math.Min(1000, mciVol)));
         }
 
         public static int PositionMs

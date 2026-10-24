@@ -31,7 +31,7 @@ namespace Jukebox
     {
         public const string PluginGUID = "com.brokencharacters.jukebox";
         public const string PluginName = "Jukebox";
-        public const string PluginVersion = "1.1.0";
+        public const string PluginVersion = "1.1.3";
 
         public static ManualLogSource Log;
         public static JukeboxPlugin Instance;
@@ -63,13 +63,21 @@ namespace Jukebox
 
         private int _volumeLast;
         private bool _draggingVolume;
+        private float _volHoldTimer;
+        private float _volRampNext;
+        private float _lastTapDownTime = -10f, _lastTapUpTime = -10f;
+        private float _volPillUntil = -10f;
+        private string _volPillTag = "";
+        public const int MaxVolume = 150;
+        public const int PresetGarageRock = 135;
+        public const int PresetTacticalLow = 30;
 
         private void Awake()
         {
             Log = Logger;
             Instance = this;
 
-            Volume = Config.Bind("Sound", "Volume", 60, new ConfigDescription("Jukebox volume 0-100 (the game's sliders don't affect it).", new AcceptableValueRange<int>(0, 100)));
+            Volume = Config.Bind("Sound", "Volume", 85, new ConfigDescription("Jukebox volume 0-150 (100-150 = Garage-Rock Boost ceiling that punches through heavy game SFX).", new AcceptableValueRange<int>(0, MaxVolume)));
             MuteGameMusic = Config.Bind("Sound", "MuteGameMusic", true, "Silence the game's own music while a jukebox song plays.");
             VoteOnStageStart = Config.Bind("Vote", "VoteOnStageStart", true, "Open a song vote when a stage starts (if nothing is playing).");
             VoteWhenSongEnds = Config.Bind("Vote", "VoteWhenSongEnds", true, "Open the next vote when a song ends.");
@@ -81,8 +89,8 @@ namespace Jukebox
             StartVoteKey = Config.Bind("Keys", "StartVote", KeyCode.J, "Ask for a song vote now.");
             SkipKey = Config.Bind("Keys", "Skip", KeyCode.N, "Vote to skip the current song.");
             StopKey = Config.Bind("Keys", "Stop", KeyCode.K, "Host: stop the music for everyone.");
-            VolumeUpKey = Config.Bind("Keys", "VolumeUp", KeyCode.Equals, "Jukebox volume up (hold Shift).");
-            VolumeDownKey = Config.Bind("Keys", "VolumeDown", KeyCode.Minus, "Jukebox volume down (hold Shift).");
+            VolumeDownKey = Config.Bind("Keys", "VolumeDown", KeyCode.Alpha1, "Jukebox volume down (tap = step, hold = ramp, double-tap = low tactical preset).");
+            VolumeUpKey = Config.Bind("Keys", "VolumeUp", KeyCode.Alpha2, "Jukebox volume up (tap = step, hold = ramp, double-tap = max garage-rock preset).");
             _volumeLast = Volume.Value;
 
             NetworkingAPI.RegisterMessageType<JbVoteStartMessage>();
@@ -127,6 +135,39 @@ namespace Jukebox
 
         // ================================================================== every frame
 
+        private void PlayKnobClick()
+        {
+            try
+            {
+                CharacterBody b = LocalUserManager.GetFirstLocalUser()?.cachedBody;
+                if (b && b.gameObject) Util.PlaySound("Play_UI_menuClick", b.gameObject);
+            }
+            catch { }
+        }
+
+        private void StepVolume(int delta, string tag = "")
+        {
+            int next = Mathf.Clamp(Volume.Value + delta, 0, MaxVolume);
+            if (next != Volume.Value || !string.IsNullOrEmpty(tag))
+            {
+                Volume.Value = next;
+                PlayKnobClick();
+            }
+            _volPillTag = !string.IsNullOrEmpty(tag)
+                ? tag
+                : (Volume.Value > 100 ? "GARAGE-ROCK BOOST" : (Volume.Value <= 35 ? "TACTICAL LOW" : "STANDARD GAIN"));
+            _volPillUntil = Time.unscaledTime + 2.2f;
+        }
+
+        private void ToggleVolumePreset()
+        {
+            bool goHigh = Volume.Value < 90;
+            Volume.Value = goHigh ? PresetGarageRock : PresetTacticalLow;
+            PlayKnobClick();
+            _volPillTag = goHigh ? "PRESET: MAX GARAGE-ROCK" : "PRESET: TACTICAL COMBAT LOW";
+            _volPillUntil = Time.unscaledTime + 2.5f;
+        }
+
         private void Update()
         {
             bool inRun = Run.instance != null;
@@ -142,15 +183,79 @@ namespace Jukebox
                 if (Input.GetKeyDown(StartVoteKey.Value)) RequestVote();
                 if (Input.GetKeyDown(SkipKey.Value)) CastSkipVote();
                 if (Input.GetKeyDown(StopKey.Value)) StopPressed();
+
+                KeyCode downK = VolumeDownKey.Value;
+                KeyCode upK = VolumeUpKey.Value;
+                bool downPressed = Input.GetKeyDown(downK);
+                bool upPressed = Input.GetKeyDown(upK);
+                bool downHeld = Input.GetKey(downK);
+                bool upHeld = Input.GetKey(upK);
+
+                // Simultaneous 1 + 2 press toggles between Max Garage-Rock and Low Tactical Combat preset
+                if ((downPressed && upHeld) || (upPressed && downHeld))
+                {
+                    ToggleVolumePreset();
+                    _volHoldTimer = -10f;
+                }
+                else if (downPressed)
+                {
+                    if (Time.unscaledTime - _lastTapDownTime < 0.26f)
+                    {
+                        Volume.Value = PresetTacticalLow;
+                        PlayKnobClick();
+                        _volPillTag = "PRESET: TACTICAL COMBAT LOW";
+                        _volPillUntil = Time.unscaledTime + 2.5f;
+                    }
+                    else
+                    {
+                        StepVolume(-5);
+                    }
+                    _lastTapDownTime = Time.unscaledTime;
+                    _volHoldTimer = 0f;
+                    _volRampNext = Time.unscaledTime + 0.28f;
+                }
+                else if (upPressed)
+                {
+                    if (Time.unscaledTime - _lastTapUpTime < 0.26f)
+                    {
+                        Volume.Value = PresetGarageRock;
+                        PlayKnobClick();
+                        _volPillTag = "PRESET: MAX GARAGE-ROCK";
+                        _volPillUntil = Time.unscaledTime + 2.5f;
+                    }
+                    else
+                    {
+                        StepVolume(5);
+                    }
+                    _lastTapUpTime = Time.unscaledTime;
+                    _volHoldTimer = 0f;
+                    _volRampNext = Time.unscaledTime + 0.28f;
+                }
+                else if ((downHeld ^ upHeld) && _volHoldTimer >= 0f)
+                {
+                    _volHoldTimer += Time.unscaledDeltaTime;
+                    if (Time.unscaledTime >= _volRampNext)
+                    {
+                        _volRampNext = Time.unscaledTime + 0.065f;
+                        StepVolume(upHeld ? 3 : -3);
+                    }
+                }
+                else
+                {
+                    _volHoldTimer = 0f;
+                }
+
+                // Legacy Shift + -/= support
                 bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-                if (shift && Input.GetKeyDown(VolumeUpKey.Value)) Volume.Value = Mathf.Min(100, Volume.Value + 10);
-                if (shift && Input.GetKeyDown(VolumeDownKey.Value)) Volume.Value = Mathf.Max(0, Volume.Value - 10);
+                if (shift && Input.GetKeyDown(KeyCode.Equals)) StepVolume(10);
+                if (shift && Input.GetKeyDown(KeyCode.Minus)) StepVolume(-10);
             }
 
             if (_volumeLast != Volume.Value)
             {
                 _volumeLast = Volume.Value;
                 MciPlayer.SetVolume(Volume.Value);
+                if (MciPlayer.Busy) GameMusic.ApplyBoostDuck(Volume.Value);
             }
 
             if (NetworkServer.active && inRun) HostTick();
@@ -366,6 +471,7 @@ namespace Jukebox
             if (song != null && song.Downloaded && MciPlayer.Play(song.Path, Volume.Value))
             {
                 if (MuteGameMusic.Value) GameMusic.Mute();
+                GameMusic.ApplyBoostDuck(Volume.Value);
             }
             else
             {
@@ -742,66 +848,105 @@ namespace Jukebox
                 cy += 4f * s;
             }
 
-            // ---- 4. In-game Volume Slider + [-]/[+] buttons ----
+            // ---- 4. In-game Volume Slider + [1]/[2] stepper & Preset Toggle ----
             Rect volRow = new Rect(innerX, cy, innerW, volH);
-            float lblW = 36f * s;
-            float btnW = 20f * s;
-            float valW = 34f * s;
-            ShadowLabel(new Rect(volRow.x + 2f * s, volRow.y, lblW, volRow.height), "VOL", _chipStyle, TextMuted);
+            float lblW = 48f * s;
+            float btnW = 19f * s;
+            float presetW = 36f * s;
+            float valW = 36f * s;
+            string kDown = KeyName(VolumeDownKey.Value);
+            string kUp = KeyName(VolumeUpKey.Value);
+            ShadowLabel(new Rect(volRow.x + 1f * s, volRow.y, lblW, volRow.height), "VOL " + kDown + "/" + kUp, _chipStyle, TextMuted);
 
             Rect minusRect = new Rect(volRow.x + lblW + 2f * s, volRow.y + 3f * s, btnW, volRow.height - 6f * s);
             if (ChipButton(minusRect, "−", TextBright, canClick, ev))
-                Volume.Value = Mathf.Max(0, Volume.Value - 5);
+                StepVolume(-5);
 
-            Rect trackHit = new Rect(minusRect.xMax + 6f * s, volRow.y + 2f * s,
-                volRow.width - lblW - btnW * 2f - valW - 20f * s, volRow.height - 4f * s);
+            Rect trackHit = new Rect(minusRect.xMax + 5f * s, volRow.y + 2f * s,
+                volRow.width - lblW - btnW * 2f - presetW - valW - 22f * s, volRow.height - 4f * s);
             Rect trackBar = new Rect(trackHit.x, volRow.y + (volRow.height - 6f * s) * 0.5f, trackHit.width, 6f * s);
 
             if (canClick && ev.type == EventType.MouseDown && ev.button == 0 && trackHit.Contains(ev.mousePosition))
             {
                 _draggingVolume = true;
-                Volume.Value = Mathf.RoundToInt(Mathf.Clamp01((ev.mousePosition.x - trackBar.x) / trackBar.width) * 100f);
+                Volume.Value = Mathf.RoundToInt(Mathf.Clamp01((ev.mousePosition.x - trackBar.x) / trackBar.width) * MaxVolume);
                 ev.Use();
             }
             else if (_draggingVolume && ev.type == EventType.MouseDrag)
             {
-                Volume.Value = Mathf.RoundToInt(Mathf.Clamp01((ev.mousePosition.x - trackBar.x) / trackBar.width) * 100f);
+                Volume.Value = Mathf.RoundToInt(Mathf.Clamp01((ev.mousePosition.x - trackBar.x) / trackBar.width) * MaxVolume);
                 ev.Use();
             }
             if (canClick && ev.type == EventType.ScrollWheel && volRow.Contains(ev.mousePosition))
             {
                 int step = ev.delta.y < 0f ? 5 : -5;
-                Volume.Value = Mathf.Clamp(Volume.Value + step, 0, 100);
+                StepVolume(step);
                 ev.Use();
             }
 
-            float volFrac = Mathf.Clamp01(Volume.Value / 100f);
+            float volFrac = Mathf.Clamp01(Volume.Value / (float)MaxVolume);
+            float stdMark = 100f / MaxVolume;
+            bool isBoosted = Volume.Value > 100;
             bool trackHov = canClick && (trackHit.Contains(ev.mousePosition) || _draggingVolume);
             Fill(trackBar, new Color(0.02f, 0.03f, 0.05f, 0.85f));
             Border(trackBar, trackHov ? Gold : BorderCol, 1f);
             if (volFrac > 0f)
                 Fill(new Rect(trackBar.x + 1f, trackBar.y + 1f, (trackBar.width - 2f) * volFrac, trackBar.height - 2f),
-                    trackHov ? Gold : Cyan);
+                    isBoosted ? Gold : (trackHov ? Gold : Cyan));
+            // 100% nominal gain tick mark on the 0..150% bar
+            Fill(new Rect(trackBar.x + trackBar.width * stdMark, trackBar.y - 1f, 1.5f * s, trackBar.height + 2f), new Color(1f, 1f, 1f, 0.45f));
 
             // Slider thumb
             float thumbW = 6f * s, thumbH = 12f * s;
             float thumbX = trackBar.x + trackBar.width * volFrac - thumbW * 0.5f;
             Rect thumb = new Rect(thumbX, volRow.y + (volRow.height - thumbH) * 0.5f, thumbW, thumbH);
-            Fill(thumb, trackHov ? Gold : TextBright);
+            Fill(thumb, isBoosted || trackHov ? Gold : TextBright);
             Border(thumb, new Color(0f, 0f, 0f, 0.7f), 1f);
 
-            Rect plusRect = new Rect(trackHit.xMax + 6f * s, volRow.y + 3f * s, btnW, volRow.height - 6f * s);
+            Rect plusRect = new Rect(trackHit.xMax + 5f * s, volRow.y + 3f * s, btnW, volRow.height - 6f * s);
             if (ChipButton(plusRect, "+", TextBright, canClick, ev))
-                Volume.Value = Mathf.Min(100, Volume.Value + 5);
+                StepVolume(5);
 
-            ShadowLabel(new Rect(plusRect.xMax + 2f * s, volRow.y, valW, volRow.height), Volume.Value + "%", _rightStyle,
-                Volume.Value == 0 ? TextWarn : TextBright);
+            Rect presetRect = new Rect(plusRect.xMax + 4f * s, volRow.y + 3f * s, presetW, volRow.height - 6f * s);
+            if (ChipButton(presetRect, Volume.Value >= 90 ? "MAX" : "LOW", Volume.Value >= 90 ? Gold : Cyan, canClick, ev))
+                ToggleVolumePreset();
+
+            ShadowLabel(new Rect(presetRect.xMax + 2f * s, volRow.y, valW, volRow.height), Volume.Value + "%", _rightStyle,
+                Volume.Value == 0 ? TextWarn : (isBoosted ? Gold : TextBright));
             cy += volH;
 
             // ---- 5. Toast notification line (if active) ----
             if (Time.unscaledTime < _toastUntil)
             {
                 ShadowLabel(new Rect(innerX + 2f * s, cy, innerW - 4f * s, toastH), _toast, _subStyle, Gold);
+            }
+
+            // ---- 6. Temporary On-Screen HUD Volume Pill (when tapping/holding 1 or 2) ----
+            if (Time.unscaledTime < _volPillUntil)
+            {
+                float pillAlpha = Mathf.Clamp01((_volPillUntil - Time.unscaledTime) * 2.2f);
+                float pw = 290f * s, ph = 42f * s;
+                float px = Screen.width * 0.5f - pw * 0.5f, py = 46f * s;
+                Rect pill = new Rect(px, py, pw, ph);
+                Fill(pill, new Color(0.10f, 0.14f, 0.19f, 0.92f * pillAlpha));
+                Border(pill, isBoosted ? new Color(Gold.r, Gold.g, Gold.b, pillAlpha) : new Color(Cyan.r, Cyan.g, Cyan.b, pillAlpha), 1.5f);
+                Fill(new Rect(pill.x, pill.y, 4f * s, pill.height), isBoosted ? Gold : Cyan);
+
+                string pillHdr = "♫ JUKEBOX VOL: " + Volume.Value + "%  ·  " + _volPillTag;
+                ShadowLabel(new Rect(pill.x + 10f * s, pill.y + 3f * s, pill.width - 16f * s, 18f * s), pillHdr, _hdrStyle, isBoosted ? Gold : TextBright);
+
+                // Segmented LED gain bar inside the pill
+                int segs = 15;
+                float segAreaW = pill.width - 20f * s;
+                float segW = (segAreaW - (segs - 1) * 2f * s) / segs;
+                int litSegs = Mathf.RoundToInt((Volume.Value / (float)MaxVolume) * segs);
+                for (int k = 0; k < segs; k++)
+                {
+                    Rect sr = new Rect(pill.x + 10f * s + k * (segW + 2f * s), pill.y + 24f * s, segW, 10f * s);
+                    bool lit = k < litSegs;
+                    Color sc = k >= 10 ? Gold : Cyan;
+                    Fill(sr, lit ? new Color(sc.r, sc.g, sc.b, 0.95f * pillAlpha) : new Color(0.03f, 0.05f, 0.08f, 0.7f * pillAlpha));
+                }
             }
         }
 
@@ -812,10 +957,11 @@ namespace Jukebox
         }
     }
 
-    /// <summary>Turns the game's Wwise music down while a jukebox song plays, then back to the player's setting.</summary>
+    /// <summary>Turns the game's Wwise music down while a jukebox song plays, and gently ducks heavy combat SFX in Garage-Rock Boost mode (100-150%).</summary>
     public static class GameMusic
     {
         private static bool _muted;
+        private static bool _sfxDucked;
         private static MethodInfo _setRtpc;
         private static bool _looked;
 
@@ -843,32 +989,61 @@ namespace Jukebox
             catch (Exception e) { JukeboxPlugin.Log?.LogWarning("Jukebox: music volume change failed: " + e.Message); }
         }
 
+        private static void SetSfxVolume(float value)
+        {
+            try { SetRtpc()?.Invoke(null, new object[] { "Volume_SFX", value }); }
+            catch { }
+        }
+
         public static void Mute()
         {
             SetMusicVolume(0f);
             _muted = true;
         }
 
-        public static void Restore()
+        public static void ApplyBoostDuck(int jukeboxVolume)
         {
-            if (!_muted) return;
-            _muted = false;
-            SetMusicVolume(PlayerMusicVolume());
+            if (jukeboxVolume > 100)
+            {
+                float userSfx = PlayerConVarVolume("volume_sfx", 80f);
+                float boostT = Mathf.Clamp01((jukeboxVolume - 100f) / 50f);
+                // Duck game SFX down to 42% of player setting at 150% Garage-Rock Boost so the song punches right through gunfire
+                SetSfxVolume(userSfx * Mathf.Lerp(0.85f, 0.42f, boostT));
+                _sfxDucked = true;
+            }
+            else if (_sfxDucked)
+            {
+                _sfxDucked = false;
+                SetSfxVolume(PlayerConVarVolume("volume_sfx", 80f));
+            }
         }
 
-        /// <summary>The player's own music slider (convar volume_music, 0-100).</summary>
-        private static float PlayerMusicVolume()
+        public static void Restore()
+        {
+            if (_muted)
+            {
+                _muted = false;
+                SetMusicVolume(PlayerConVarVolume("volume_music", 50f));
+            }
+            if (_sfxDucked)
+            {
+                _sfxDucked = false;
+                SetSfxVolume(PlayerConVarVolume("volume_sfx", 80f));
+            }
+        }
+
+        private static float PlayerConVarVolume(string conVarName, float fallback)
         {
             try
             {
                 object console = RoR2.Console.instance;
                 MethodInfo find = console?.GetType().GetMethod("FindConVar", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                object conVar = find?.Invoke(console, new object[] { "volume_music" });
+                object conVar = find?.Invoke(console, new object[] { conVarName });
                 string text = conVar?.GetType().GetMethod("GetString")?.Invoke(conVar, null) as string;
                 if (float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float v)) return v;
             }
             catch { }
-            return 50f;
+            return fallback;
         }
     }
 }

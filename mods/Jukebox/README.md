@@ -8,5 +8,5 @@ Plays the group's Suno songs in game, chosen by a vote.
 - A vote opens at the start of each stage and when a song ends. Press **7**, **8** or **9** to vote (or click a choice while paused).
 - Press **N** (or click **[N] SKIP** on the Jukebox HUD header) to vote to skip the current song.
 - **J** asks the host for a vote now. **K** (host) stops the music.
-- Drag the **VOL** slider on the HUD panel (or click **−** / **+** while paused, or use **Shift + =** / **Shift + −**) to adjust volume in game.
+- Drag the **VOL** slider on the HUD panel, or use keys **1** and **2** (tap to step 5%, hold to ramp continuously, double-tap or press **1+2** to snap between **135% MAX Garage-Rock** and **30% LOW Tactical Combat**) to adjust volume in game.
 - Everyone votes, the host counts, and every player hears the winner from their own copy. Windows only.

@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.4.4";
+        public const string PluginVersion = "0.5.0";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -46,7 +46,7 @@ namespace Surveyor
         public static ConfigEntry<int> MaxDots, RaysPerFrame, DotDivider;
         public static ConfigEntry<float> ScanRange, DotLife;
         public static ConfigEntry<float> PeekSeconds, PeekCooldown, OverdriveCooldown, SweepSeconds, FocusSeconds, EchoSeconds;
-        public static ConfigEntry<string> ScanNextKey, ScanPrevKey, PeekKey, TrapKey;
+        public static ConfigEntry<string> ScanNextKey, ScanPrevKey, PeekKey, TrapKey, RepulsorKey, MinionKey, CashInKey;
         public static ConfigEntry<float> TrapCooldown, TrapDuration, TrapPullSeconds;
         public static ConfigEntry<bool> UseCustomModel;
         public static ConfigEntry<float> ModelScale, HeavyStepShake;
@@ -73,6 +73,7 @@ namespace Surveyor
             RegisterSurvivor();
             RecalculateStatsAPI.GetStatCoefficients += Stats;
             SceneManager.activeSceneChanged += OnSceneChanged;
+            Run.onRunStartGlobal += OnRunStart;
 
             Logger.LogInfo(PluginName + " " + PluginVersion + " online.");
         }
@@ -80,6 +81,12 @@ namespace Surveyor
         private void OnDestroy()
         {
             SceneManager.activeSceneChanged -= OnSceneChanged;
+            Run.onRunStartGlobal -= OnRunStart;
+        }
+
+        private static void OnRunStart(Run r)
+        {
+            SvrUpgrades.ResetRun();
         }
 
         private static void OnSceneChanged(Scene a, Scene b)
@@ -131,10 +138,13 @@ namespace Surveyor
             ModelScale = Config.Bind("9. Model", "ModelScale_v1", 1.08f, "Size of the armoured suit on the Commando skeleton (1 = fitted to the skeleton).");
             HeavyMotion = Config.Bind("9. Model", "HeavyMotion_v1", true, "Heavy-gunner body language: both hands on the gun, gun lag, lean, sway, recoil.");
             HeavyStepShake = Config.Bind("9. Model", "StepShake_v1", 1f, "Camera thud on each heavy step and landing (0 = off).");
-            ScanNextKey = Config.Bind("8. Peek and Overdrive", "ScanNextKey_v1", "E", "Next scan mode: CONE, SWEEP, WIDE, FOCUS, ECHO. (E is also the game's interact key; change it here if that clashes.)");
-            ScanPrevKey = Config.Bind("8. Peek and Overdrive", "ScanPrevKey_v1", "Q", "Previous scan mode. (Q is also the game's equipment key.)");
+            ScanNextKey = Config.Bind("8. Peek and Overdrive", "ScanNextKey_v1", "E", "Next scan mode: CONE, SWEEP, WIDE, FOCUS, ECHO. Also scroll the Middle Mouse Wheel (hold MMB for Radial Dial, flick wheel for Thermal Echo override).");
+            ScanPrevKey = Config.Bind("8. Peek and Overdrive", "ScanPrevKey_v1", "Q", "Previous scan mode.");
             PeekKey = Config.Bind("8. Peek and Overdrive", "PeekKey_v1", "F", "Peek (visor off) on its own key, whatever skill is in the utility slot.");
-            TrapKey = Config.Bind("6. Shimmer Demon", "TrapKey_v1", "G", "Throw out a Ghost-Trap Containment Box. Hold M1 or M2 on the Shimmer Demon to tether and reel it into the trap to restore a lost sense.");
+            TrapKey = Config.Bind("6. Shimmer Demon", "TrapKey_v1", "G", "Throw out a Ghost-Trap Containment Box. Hold M1 or M2 on the Shimmer Demon and counter-steer with WASD to capture it and restore a lost sense.");
+            RepulsorKey = Config.Bind("6. Shimmer Demon", "RepulsorBlowKey_v1", "V", "Reverse-Flow Repulsor ('Blow' function): blast away swarms and reflect projectiles.");
+            MinionKey = Config.Bind("6. Shimmer Demon", "RedeployMinionKey_v1", "H", "Redeploy a captured spirit from your Containment Cell as a friendly 30s Spectral Hologram Guardian.");
+            CashInKey = Config.Bind("6. Shimmer Demon", "CashInTeleporterKey_v1", "B", "Cash in a captured spirit at the stage Teleporter for Gold, Item Scrap/Droplet, and Healing.");
             TrapCooldown = Config.Bind("6. Shimmer Demon", "TrapCooldown_v1", 20f, "Seconds between containment trap deployments.");
             TrapDuration = Config.Bind("6. Shimmer Demon", "TrapDuration_v1", 14f, "Seconds the containment trap stays open on the ground.");
             TrapPullSeconds = Config.Bind("6. Shimmer Demon", "TrapCaptureSeconds_v1", 2.2f, "Seconds of Proton-Tether beam & vacuum pull needed to slam the Shimmer Demon into the trap.");
@@ -164,10 +174,11 @@ namespace Surveyor
             SvrSpool sp = b.GetComponent<SvrSpool>();
             if (!sp || !b.hasEffectiveAuthority) return;
             float slow = 0f;
-            if (sp.Spool > 0.3f && sp.AnchorLeft <= 0f) slow += MoveSlow.Value;
+            if (sp.Spool > 0.3f && sp.AnchorLeft <= 0f && !SvrUpgrades.Has(SvrUpgrades.GYRO_HARNESS)) slow += MoveSlow.Value;
             if (SvrSenses.Touch) slow += 0.05f;
             if (SvrSenses.Balance) slow += BalanceSlow.Value;
             if (slow > 0f) a.moveSpeedMultAdd -= slow;
+            if (SvrUpgrades.Has(SvrUpgrades.COMPRESSION_PRESS)) a.armorAdd += 25f;
         }
 
         // ---------------------------------------------------------------- language
@@ -177,11 +188,11 @@ namespace Surveyor
             LanguageAPI.Add(T + "NAME", "The Surveyor");
             LanguageAPI.Add(T + "SUBTITLE", "Blind Engineer");
             LanguageAPI.Add(T + "DESCRIPTION",
-                "The Surveyor is a blind, heavily armored engineer stranded on Petrichor V. The world is black. She sees only what her scanner paints.<color=#CCD3E0>\r\n\r\n" +
-                "< ! > Your LiDAR draws the world in dots: red is close, yellow is mid, green is far. Shooting and shockwaves paint it fast. Press Q / E to switch how the scanner sweeps (Cone, Sweep, Wide, Focus, Echo). Press F to Peek: the visor lifts for a blurry, blown-out look at the real world.\r\n\r\n" +
-                "< ! > The minigun needs to spool. Hold the trigger and it rises to full fire rate, but you move slower while it is spun up. Anchor to spool faster.\r\n\r\n" +
-                "< ! > Something shimmering follows you. Only you can see it, and you cannot hurt it, but a fully spooled minigun, the Lance and the Shockwave push it back.\r\n\r\n" +
-                "< ! > If it touches you it eats a sense: Hearing, Sight, Touch or Balance. Press G to throw a Ghost-Trap Containment Box and hold your weapon on the Demon to tether and vacuum-capture it—restoring your stolen sense!</color>");
+                "The Surveyor is a blind, heavily armored engineer in a white, orange, and blue EVA rig. The world is black. She sees only what her LiDAR scanner paints.<color=#CCD3E0>\r\n\r\n" +
+                "< ! > Scroll the Middle Mouse Wheel (or Q / E) for stepped ratchet mode swaps, hold Middle Mouse for the Radial Crosshair Dial, or flick the wheel hard to snap straight to Thermal Echo mode. Press F to Peek.\r\n\r\n" +
+                "< ! > Scan the map to uncover LiDAR-Exclusive Hidden Tech Caches (Depleted-Uranium Slugs, Cryo-Quench Jacket, Plasma-Accelerator, Singularity Core, Reverse-Flow Repulsor [V], Aether-Leech, Spectral Compression Press).\r\n\r\n" +
+                "< ! > Press G to deploy a Ghost-Trap, lock your Proton Tether (M1/M2) onto the Shimmer Demon or weakened Elites/Bosses, and counter-steer with WASD to slam them into the containment cube—restoring a lost sense!\r\n\r\n" +
+                "< ! > Press H to redeploy a captured spirit as a 30s Spectral Hologram Guardian, or press B at the Teleporter to cash it in for Gold and Item Scrap!</color>");
             LanguageAPI.Add(T + "OUTRO", "..and so she left, still hearing the scanner ping.");
             LanguageAPI.Add(T + "FAIL", "..and so she vanished, and the dots went dark.");
             LanguageAPI.Add(T + "SKIN_DEFAULT", "Survey Plate");

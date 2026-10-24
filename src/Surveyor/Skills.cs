@@ -1,18 +1,93 @@
+using System.Collections.Generic;
 using EntityStates;
 using RoR2;
+using RoR2.Orbs;
+using RoR2.Projectile;
 using UnityEngine;
+using UnityEngine.Networking;
 
 namespace Surveyor
 {
-    // Damage is always dealt from the owner's own client (isAuthority); the Surveyor has no gold, items, buffs or summons,
-    // so nothing here needs the host. The LiDAR and the Shimmer Demon are local to her client.
+    // ================================================================ LiDAR-Exclusive Hidden Map Upgrades
+    // Hidden in service panels, crates, and drop pods across maps — only discoverable & interactable via the Surveyor's LiDAR scan.
 
-    // ================================================================ spool (state shared between presses of M1)
+    public static class SvrUpgrades
+    {
+        public const int DU_SLUG = 0;           // Minigun: Depleted-Uranium Slug Fed (slower fire, heavy AP slugs that shred armor/barriers)
+        public const int CRYO_JACKET = 1;       // Minigun: Cryo-Quench Cooling Jacket (liquid-nitrogen feed, no overheat, frost slow on hit)
+        public const int PLASMA_ACCEL = 2;      // Minigun: Overclocked Plasma-Accelerator (sustained fire arcs chain plasma lightning)
+        public const int GYRO_HARNESS = 3;      // Minigun: Gyroscopic Shoulder Harness (no move slow while firing, 50% less recoil kick)
+        public const int SINGULARITY_CORE = 4;  // Super Vac: Singularity Trap Core (trap pulls in nearby enemies & flying pests)
+        public const int REPULSOR_BLOW = 5;     // Super Vac: Reverse-Flow Repulsor ("Blow" function [V] blasts swarms & reflects projectiles)
+        public const int AETHER_LEECH = 6;      // Super Vac: Aether-Leech Field (siphons enemy shields/health into EVA suit barrier)
+        public const int COMPRESSION_PRESS = 7; // Containment Cell: Spectral Compression Press (dual capacity, shield armor, active-reload bonus)
+        public const int COUNT = 8;
 
-    /// <summary>How spun up the barrels are (0 to 1) and how long the anchor still holds. Lives on the body.</summary>
+        public static readonly string[] Names =
+        {
+            "DEPLETED-URANIUM SLUG FED",
+            "CRYO-QUENCH COOLING JACKET",
+            "OVERCLOCKED PLASMA-ACCELERATOR",
+            "GYROSCOPIC SHOULDER HARNESS",
+            "SINGULARITY TRAP CORE",
+            "REVERSE-FLOW REPULSOR [V]",
+            "AETHER-LEECH FIELD",
+            "SPECTRAL COMPRESSION PRESS"
+        };
+
+        public static readonly string[] ShortNames =
+        {
+            "DU-SLUG",
+            "CRYO-JACKET",
+            "PLASMA-ARC",
+            "GYRO-RIG",
+            "SINGULARITY",
+            "REPULSOR [V]",
+            "AETHER-LEECH",
+            "COMPRESSOR"
+        };
+
+        public static readonly string[] Descs =
+        {
+            "Heavy AP slugs (+75% dmg, shreds boss armor & barriers)",
+            "Liquid-N2 cooling (eliminates overheat + chills enemies)",
+            "Sustained spool arcs high-voltage plasma lightning",
+            "Zero move penalty while firing & -50% recoil climb",
+            "Ghost-Trap pulls nearby enemies & flying pests inward",
+            "Press [V] to blast swarms back & vaporize projectiles",
+            "Firing & tethering siphons energy into EVA suit barrier",
+            "Holds 2 spirits, +25 armor, & Gold-Zone active reload"
+        };
+
+        private static readonly bool[] _unlocked = new bool[COUNT];
+        public static int UnlockedCount { get; private set; }
+
+        public static bool Has(int id) => id >= 0 && id < COUNT && _unlocked[id];
+
+        public static void Unlock(int id)
+        {
+            if (id < 0 || id >= COUNT || _unlocked[id]) return;
+            _unlocked[id] = true;
+            UnlockedCount++;
+            SvrSenses.Version++;
+        }
+
+        public static void ResetRun()
+        {
+            for (int i = 0; i < COUNT; i++) _unlocked[i] = false;
+            UnlockedCount = 0;
+            SvrSenses.Version++;
+        }
+    }
+
+    // ================================================================ spool & industrial heat gauge (state shared between presses of M1)
+
+    /// <summary>How spun up the barrels are (0 to 1), industrial barrel heat (0 to 1), and how long the anchor still holds. Lives on the body.</summary>
     public class SvrSpool : MonoBehaviour
     {
         public float Spool;
+        public float Heat;
+        public bool Overheated;
         public float AnchorLeft;
         /// <summary>Recoil the model shows (SvrHeavy consumes it).</summary>
         public float KickPulse;
@@ -24,7 +99,15 @@ namespace Surveyor
         private void Awake() { _body = GetComponent<CharacterBody>(); }
 
         /// <summary>The minigun calls this every tick it is held, so the barrels do not wind down.</summary>
-        public void Held() { _idle = 0f; }
+        public void Held()
+        {
+            _idle = 0f;
+            float heatRate = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) ? 0.035f : 0.11f;
+            if (AnchorLeft > 0f) heatRate *= 0.65f;
+            Heat = Mathf.Clamp01(Heat + Time.fixedDeltaTime * heatRate);
+            if (Heat >= 0.99f && !SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET))
+                Overheated = true;
+        }
 
         private void FixedUpdate()
         {
@@ -32,10 +115,17 @@ namespace Surveyor
             float dt = Time.fixedDeltaTime;
             _idle += dt;
             if (AnchorLeft > 0f) AnchorLeft = Mathf.Max(0f, AnchorLeft - dt);
-            if (_idle > 0.15f && Spool > 0f)
-                Spool = Mathf.MoveTowards(Spool, 0f, dt / (SvrPlugin.SpoolSeconds.Value * 1.4f));
+            if (_idle > 0.15f)
+            {
+                float windDown = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) ? 2.4f : 1.4f;
+                if (Spool > 0f)
+                    Spool = Mathf.MoveTowards(Spool, 0f, dt / (SvrPlugin.SpoolSeconds.Value * windDown));
+                float coolRate = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) ? 0.55f : 0.28f;
+                Heat = Mathf.MoveTowards(Heat, 0f, dt * coolRate);
+                if (Overheated && Heat < 0.35f) Overheated = false;
+            }
 
-            bool slowed = Spool > 0.3f && AnchorLeft <= 0f;
+            bool slowed = Spool > 0.3f && AnchorLeft <= 0f && !SvrUpgrades.Has(SvrUpgrades.GYRO_HARNESS);
             if (slowed != _slowed || _senseVersion != SvrSenses.Version)
             {
                 _slowed = slowed;
@@ -52,6 +142,7 @@ namespace Surveyor
         private SvrSpool _spool;
         private SvrLidar _lidar;
         private float _timer;
+        private int _shotCounter;
         private GameObject _tracer, _hit;
 
         public override void OnEnter()
@@ -82,6 +173,8 @@ namespace Surveyor
             _timer -= Time.fixedDeltaTime;
             if (_timer > 0f) return;
             float rate = Mathf.Lerp(SvrPlugin.MinRate.Value, SvrPlugin.MaxRate.Value, Mathf.InverseLerp(0.2f, 1f, _spool.Spool)) * Mathf.Clamp(attackSpeedStat, 1f, 2f);
+            if (SvrUpgrades.Has(SvrUpgrades.DU_SLUG)) rate *= 0.78f;
+            if (_spool.Overheated) rate *= 0.55f;
             _timer += 1f / Mathf.Max(0.5f, rate);
             if (_timer < 0f) _timer = 0f;
             Shoot(aim, anchored);
@@ -89,14 +182,26 @@ namespace Surveyor
 
         private void Shoot(Ray aim, bool anchored)
         {
-            float spread = Mathf.Lerp(SvrPlugin.SpreadMax.Value, SvrPlugin.SpreadMin.Value, _spool.Spool) * SvrSenses.SpreadMult * (anchored ? 0.5f : 1f);
-            float dmg = damageStat * SvrPlugin.BulletDamage.Value * (anchored ? 1f + SvrPlugin.AnchorDamageBonus.Value : 1f);
+            _shotCounter++;
+            bool hasDu = SvrUpgrades.Has(SvrUpgrades.DU_SLUG);
+            bool hasCryo = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET);
+            bool hasPlasma = SvrUpgrades.Has(SvrUpgrades.PLASMA_ACCEL);
+            bool hasGyro = SvrUpgrades.Has(SvrUpgrades.GYRO_HARNESS);
+            bool hasLeech = SvrUpgrades.Has(SvrUpgrades.AETHER_LEECH);
+
+            float spread = Mathf.Lerp(SvrPlugin.SpreadMax.Value, SvrPlugin.SpreadMin.Value, _spool.Spool) * SvrSenses.SpreadMult * (anchored ? 0.5f : (hasGyro ? 0.72f : 1f));
+            float dmgMult = (anchored ? 1f + SvrPlugin.AnchorDamageBonus.Value : 1f) * (hasDu ? 1.75f : 1f);
+            float dmg = damageStat * SvrPlugin.BulletDamage.Value * dmgMult;
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
-            Util.PlaySound("Play_commando_M1", gameObject);
-            characterBody.AddSpreadBloom(0.12f);
-            float rk = anchored ? 0.45f : 1f;                  // heavy gun: the camera kicks with every round
+            Util.PlaySound(hasDu ? "Play_commando_M2" : "Play_commando_M1", gameObject);
+            characterBody.AddSpreadBloom(hasGyro ? 0.06f : 0.12f);
+            float rk = (anchored ? 0.45f : 1f) * (hasGyro ? 0.5f : 1f);     // heavy gun: the camera kicks with every round
             AddRecoil(-0.35f * rk, -0.75f * rk, -0.25f * rk, 0.25f * rk);
-            _spool.KickPulse += 0.22f;
+            _spool.KickPulse += hasDu ? 0.32f : 0.22f;
+
+            DamageTypeCombo dtCombo = DamageType.Generic;
+            if (hasCryo) dtCombo = DamageType.SlowOnHit;
+            if (hasPlasma && (_shotCounter % 4 == 0)) dtCombo = DamageType.Shock5s;
 
             new BulletAttack
             {
@@ -107,16 +212,65 @@ namespace Surveyor
                 minSpread = 0f,
                 maxSpread = spread,
                 damage = dmg,
-                force = 120f,
+                force = hasDu ? 280f : 120f,
                 tracerEffectPrefab = _tracer,
                 muzzleName = "MuzzleRight",
                 hitEffectPrefab = _hit,
                 isCrit = RollCrit(),
-                radius = 0.25f,
+                radius = hasDu ? 0.42f : 0.25f,
                 smartCollision = true,
                 maxDistance = SvrPlugin.MinigunRange.Value,
-                procCoefficient = 0.7f
+                procCoefficient = hasDu ? 0.9f : 0.7f,
+                damageType = dtCombo
             }.Fire();
+
+            // Depleted-Uranium Slug & Cryo-Jacket & Plasma-Accelerator on-hit effects
+            if (hasDu || hasCryo || hasPlasma || hasLeech)
+            {
+                try
+                {
+                    RaycastHit hit;
+                    if (Physics.Raycast(aim.origin, aim.direction, out hit, SvrPlugin.MinigunRange.Value, LayerIndex.entityPrecise.mask | LayerIndex.world.mask, QueryTriggerInteraction.Ignore))
+                    {
+                        HurtBox hb = hit.collider ? hit.collider.GetComponent<HurtBox>() : null;
+                        HealthComponent hc = hb ? hb.healthComponent : null;
+                        if (hc && hc.alive && hc.body && hc.body != characterBody)
+                        {
+                            if (hasLeech && characterBody.healthComponent)
+                                characterBody.healthComponent.AddBarrier(Mathf.Max(1.5f, characterBody.maxBarrier * 0.012f));
+
+                            if (NetworkServer.active)
+                            {
+                                if (hasDu) hc.body.AddTimedBuff(RoR2Content.Buffs.Pulverized, 4f);
+                                if (hasCryo) hc.body.AddTimedBuff(RoR2Content.Buffs.Slow80, 3.5f);
+                                if (hasPlasma && _spool.Spool > 0.6f && (_shotCounter % 3 == 0))
+                                {
+                                    LightningOrb orb = new LightningOrb
+                                    {
+                                        origin = hit.point,
+                                        damageValue = dmg * 0.85f,
+                                        isCrit = RollCrit(),
+                                        bouncesRemaining = 2,
+                                        teamIndex = TeamComponent.GetObjectTeam(gameObject),
+                                        attacker = gameObject,
+                                        procCoefficient = 0.5f,
+                                        lightningType = LightningOrb.LightningType.Ukulele,
+                                        range = 18f
+                                    };
+                                    orb.bouncedObjects = new List<HealthComponent> { hc };
+                                    HurtBox nextTarget = orb.PickNextTarget(hit.point);
+                                    if (nextTarget)
+                                    {
+                                        orb.target = nextTarget;
+                                        OrbManager.instance.AddOrb(orb);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
 
             if (_lidar) _lidar.Shot(aim, _spool.Spool, anchored);
         }

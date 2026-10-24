@@ -138,14 +138,34 @@ namespace Surveyor
         private Vector3 _lastPos;
         private static readonly Vector3[] Sph = BuildSphere();
 
-        // Ghostbusters / Luigi's Mansion containment trap + proton tether state
+        // Ghostbusters / Luigi's Mansion containment trap + proton tether + wrestling + payoff state
         public bool TrapActive;
         public Vector3 TrapPos;
         public float TrapUntil, TrapReadyAt;
         public float CaptureProgress; // 0 .. 1
         public bool TetherActive;
+        public int StrainStacks;      // 0 .. 10 stacking "Containment Strain" debuff
+        public float StrainDecay;
+        public int PullDir;           // -1 = pulling Left (steer D), +1 = pulling Right (steer A), 0 = surging Back (steer S)
+        public float PullSwitchTimer;
+        public bool CounterSteering;
+        public HealthComponent LockedEnemy; // optional Elite/Boss enemy locked by the Proton Tether
+        public int StoredSpirits;
+        public bool MinionActive;
+        public float MinionUntil, MinionFireTimer;
+        public Vector3 MinionPos;
         public string LastRestoredSense;
         public float LastRestoredUntil;
+
+        public int MaxStoredSpirits { get { return SvrUpgrades.Has(SvrUpgrades.COMPRESSION_PRESS) ? 2 : 1; } }
+        public Vector3 TetherTargetPos
+        {
+            get
+            {
+                if (LockedEnemy && LockedEnemy.alive && LockedEnemy.body) return LockedEnemy.body.corePosition;
+                return _center;
+            }
+        }
 
         public bool Active { get { return State != Mode.Dormant && State != Mode.Gone; } }
         public Vector3 Center { get { return _center; } }
@@ -373,6 +393,16 @@ namespace Surveyor
 
         public void DeployTrap(CharacterBody body, InputBankTest input)
         {
+            // Active-Reload Compression Slam: if a trap is already active and CaptureProgress is in the Gold Zone [0.64 .. 0.88],
+            // pressing [G] slams the Spectral Compression Press shut immediately for bonus healing & gold!
+            if (TrapActive && CaptureProgress >= 0.64f && CaptureProgress <= 0.89f && (Active || (LockedEnemy && LockedEnemy.alive)))
+            {
+                if (body.healthComponent) body.healthComponent.HealFraction(0.35f, default);
+                if (body.master) body.master.GiveMoney((uint)Mathf.RoundToInt(45f * (Run.instance ? Run.instance.difficultyCoefficient : 1f)));
+                CaptureDemon(body, true);
+                return;
+            }
+
             Vector3 fwd = input ? input.aimDirection : body.gameObject.transform.forward;
             fwd.y = 0f;
             if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward;
@@ -385,6 +415,9 @@ namespace Surveyor
             TrapReadyAt = Time.time + SvrPlugin.TrapCooldown.Value;
             CaptureProgress = 0f;
             TetherActive = false;
+            LockedEnemy = null;
+            PullDir = Random.value < 0.5f ? -1 : 1;
+            PullSwitchTimer = 1.1f;
             Util.PlaySound("Play_engi_M2_throw", body.gameObject);
 
             // If the Demon isn't currently on the field (and we have a stolen sense to recover, or want to bust it),
@@ -401,6 +434,48 @@ namespace Surveyor
                 _chain = 0f;
                 _center = Pos + Vector3.up * 1.4f;
             }
+        }
+
+        public bool RedeployMinion(CharacterBody body)
+        {
+            if (StoredSpirits <= 0 || !body) return false;
+            StoredSpirits--;
+            MinionActive = true;
+            MinionUntil = Time.time + 30f;
+            MinionPos = body.corePosition + body.gameObject.transform.forward * 2.8f + Vector3.up * 1.2f;
+            MinionFireTimer = 0.2f;
+            Util.PlaySound("Play_UI_obj_casinoChest_open", body.gameObject);
+            LastRestoredSense = "SPECTRAL GUARDIAN DEPLOYED (30s)";
+            LastRestoredUntil = Time.time + 3.0f;
+            return true;
+        }
+
+        public bool CashInAtTeleporter(CharacterBody body, Vector3 tpPos)
+        {
+            if (StoredSpirits <= 0 || !body) return false;
+            StoredSpirits--;
+            Util.PlaySound("Play_UI_shrineSuccess", body.gameObject);
+            float diff = Run.instance ? Mathf.Max(1f, Run.instance.difficultyCoefficient) : 1f;
+            uint gold = (uint)Mathf.RoundToInt(125f * diff);
+            if (body.master) body.master.GiveMoney(gold);
+            if (body.healthComponent) body.healthComponent.HealFraction(0.45f, default);
+
+            try
+            {
+                if (UnityEngine.Networking.NetworkServer.active && Run.instance && Run.instance.availableTier1DropList != null && Run.instance.availableTier1DropList.Count > 0)
+                {
+                    List<PickupIndex> pool = (Random.value < 0.35f && Run.instance.availableTier2DropList.Count > 0)
+                        ? Run.instance.availableTier2DropList
+                        : Run.instance.availableTier1DropList;
+                    PickupIndex drop = pool[Random.Range(0, pool.Count)];
+                    PickupDropletController.CreatePickupDroplet(drop, tpPos + Vector3.up * 2.2f, Vector3.up * 14f + Random.insideUnitSphere * 3f);
+                }
+            }
+            catch { }
+
+            LastRestoredSense = "TELEPORTER CASH-IN (+$" + gold + " & LOOT)";
+            LastRestoredUntil = Time.time + 3.5f;
+            return true;
         }
 
         public void Pulse(Vector3 at, float radius)
@@ -445,7 +520,85 @@ namespace Surveyor
             {
                 TrapActive = false;
                 TetherActive = false;
+                LockedEnemy = null;
                 CaptureProgress = 0f;
+            }
+
+            // Friendly Spectral / Holographic Guardian minion (deployed with [H] for 30s)
+            if (MinionActive)
+            {
+                if (Time.time >= MinionUntil)
+                {
+                    MinionActive = false;
+                }
+                else
+                {
+                    float orbitAng = Time.time * 1.4f;
+                    Vector3 goal = body.corePosition + new Vector3(Mathf.Cos(orbitAng) * 3.4f, 1.4f + Mathf.Sin(Time.time * 3f) * 0.25f, Mathf.Sin(orbitAng) * 3.4f);
+                    MinionPos = Vector3.Lerp(MinionPos, goal, 1f - Mathf.Exp(-6f * dt));
+                    MinionFireTimer -= dt;
+                    if (MinionFireTimer <= 0f)
+                    {
+                        MinionFireTimer = 0.65f;
+                        try
+                        {
+                            SphereSearch ss = new SphereSearch { origin = MinionPos, radius = 38f, mask = LayerIndex.entityPrecise.mask };
+                            ss.RefreshCandidates();
+                            ss.FilterCandidatesByHurtBoxTeam(TeamMask.GetEnemyTeams(body.teamComponent.teamIndex));
+                            ss.FilterCandidatesByDistinctHurtBoxEntities();
+                            foreach (HurtBox hb in ss.GetHurtBoxes())
+                            {
+                                if (hb && hb.healthComponent && hb.healthComponent.alive)
+                                {
+                                    RoR2.Orbs.LightningOrb orb = new RoR2.Orbs.LightningOrb
+                                    {
+                                        origin = MinionPos + Vector3.up * 0.8f,
+                                        target = hb,
+                                        attacker = body.gameObject,
+                                        damageValue = body.damage * 2.8f,
+                                        isCrit = body.RollCrit(),
+                                        teamIndex = body.teamComponent.teamIndex,
+                                        lightningType = RoR2.Orbs.LightningOrb.LightningType.Ukulele,
+                                        procCoefficient = 0.7f
+                                    };
+                                    RoR2.Orbs.OrbManager.instance.AddOrb(orb);
+                                    break;
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+
+            // Singularity Trap Core upgrade: deployed Ghost-Trap pulls nearby enemies and flying pests inward
+            if (TrapActive && SvrUpgrades.Has(SvrUpgrades.SINGULARITY_CORE))
+            {
+                try
+                {
+                    SphereSearch ss = new SphereSearch { origin = TrapPos, radius = 15f, mask = LayerIndex.entityPrecise.mask };
+                    ss.RefreshCandidates();
+                    ss.FilterCandidatesByHurtBoxTeam(TeamMask.GetEnemyTeams(body.teamComponent.teamIndex));
+                    ss.FilterCandidatesByDistinctHurtBoxEntities();
+                    foreach (HurtBox hb in ss.GetHurtBoxes())
+                    {
+                        CharacterBody eb = hb && hb.healthComponent ? hb.healthComponent.body : null;
+                        if (!eb || eb == body) continue;
+                        Vector3 pull = (TrapPos + Vector3.up * 0.8f) - eb.corePosition;
+                        if (pull.sqrMagnitude > 1f)
+                        {
+                            if (eb.characterMotor) eb.characterMotor.rootMotion += pull.normalized * (11f * dt);
+                            else if (eb.rigidbody) eb.rigidbody.velocity = Vector3.Lerp(eb.rigidbody.velocity, pull.normalized * 10f, 5f * dt);
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Passive barrier trickle while holding a spirit with Spectral Compression Press
+            if (StoredSpirits > 0 && SvrUpgrades.Has(SvrUpgrades.COMPRESSION_PRESS) && body.healthComponent)
+            {
+                body.healthComponent.AddBarrier(body.maxBarrier * 0.015f * dt);
             }
 
             if (!SvrPlugin.DemonEnabled.Value) { State = Mode.Dormant; TetherActive = false; return; }
@@ -467,49 +620,120 @@ namespace Surveyor
                 return;
             }
 
-            // Ghostbusters Proton-Tether & Luigi's Mansion Vacuum Trap logic:
-            // When the Ghost-Trap is active on the ground, aiming near the Demon while holding M1 or M2 fires the
-            // Proton Tether stream, dragging the struggling Demon into the trap's vortex cone.
+            // Ghostbusters Proton-Tether & Luigi's Mansion Vacuum Trap + WASD Wrestling Match logic:
             TetherActive = false;
+            CounterSteering = false;
             float trapDist = TrapActive ? Vector3.Distance(new Vector3(Pos.x, TrapPos.y, Pos.z), TrapPos) : 999f;
-            if (TrapActive && input != null)
+            if (input != null)
             {
                 Ray aim = new Ray(input.aimOrigin, input.aimDirection);
                 Vector3 toDemon = _center - aim.origin;
                 float dDemon = toDemon.magnitude;
                 float angle = dDemon > 0.1f ? Vector3.Angle(aim.direction, toDemon) : 0f;
                 bool firing = input.skill1.down || input.skill2.down;
-                if (firing && dDemon < 65f && angle < 24f)
+                if (firing && dDemon < 65f && angle < 25f)
                 {
-                    TetherActive = true;
-                    State = Mode.Stagger;
-                    _stagger = Mathf.Max(_stagger, 0.45f);
+                    StrainDecay = 1.6f;
+                    if (Random.value < dt * 4.5f && StrainStacks < 10) StrainStacks++;
+                    if (TrapActive)
+                    {
+                        TetherActive = true;
+                        LockedEnemy = null;
+                        State = Mode.Stagger;
+                        _stagger = Mathf.Max(_stagger, 0.45f);
+                        if (SvrUpgrades.Has(SvrUpgrades.AETHER_LEECH) && body.healthComponent)
+                            body.healthComponent.AddBarrier(body.maxBarrier * 0.045f * dt);
+                    }
                 }
+                else if (TrapActive && firing)
+                {
+                    // Check if aiming at a weakened Elite / Boss near the trap
+                    try
+                    {
+                        BullseyeSearch bs = new BullseyeSearch
+                        {
+                            searchOrigin = aim.origin,
+                            searchDirection = aim.direction,
+                            maxDistanceFilter = 55f,
+                            maxAngleFilter = 22f,
+                            teamMaskFilter = TeamMask.GetEnemyTeams(body.teamComponent.teamIndex),
+                            filterByLoS = false,
+                            sortMode = BullseyeSearch.SortMode.Angle
+                        };
+                        bs.RefreshCandidates();
+                        foreach (HurtBox hb in bs.GetResults())
+                        {
+                            HealthComponent hc = hb ? hb.healthComponent : null;
+                            if (hc && hc.alive && hc.body && (hc.body.isElite || hc.body.isBoss || hc.body.isChampion) && hc.combinedHealthFraction < 0.65f)
+                            {
+                                LockedEnemy = hc;
+                                TetherActive = true;
+                                StrainDecay = 1.6f;
+                                if (Random.value < dt * 4.5f && StrainStacks < 10) StrainStacks++;
+                                break;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            if (StrainDecay > 0f)
+            {
+                StrainDecay -= dt;
+                if (StrainDecay <= 0f) StrainStacks = 0;
+            }
+
+            // Wrestling Match: target bucks Left (-1), Right (+1), or Back (0); player counter-steers with WASD!
+            if (TrapActive && TetherActive)
+            {
+                PullSwitchTimer -= dt;
+                if (PullSwitchTimer <= 0f)
+                {
+                    PullSwitchTimer = Random.Range(0.95f, 1.45f);
+                    int r = Random.Range(0, 3);
+                    PullDir = r == 0 ? -1 : (r == 1 ? 1 : 0);
+                }
+                if (PullDir < 0) CounterSteering = Input.GetKey(KeyCode.D);
+                else if (PullDir > 0) CounterSteering = Input.GetKey(KeyCode.A);
+                else CounterSteering = Input.GetKey(KeyCode.S);
             }
 
             if (TrapActive && (TetherActive || trapDist < 9.5f))
             {
-                Vector3 toTrap = TrapPos - Pos;
+                Vector3 targetPos = (LockedEnemy && LockedEnemy.alive && LockedEnemy.body) ? LockedEnemy.body.footPosition : Pos;
+                Vector3 toTrap = TrapPos - targetPos;
                 Vector3 flatTrap = new Vector3(toTrap.x, 0f, toTrap.z);
                 float td = flatTrap.magnitude;
-                // Spiral vortex pull into the trap
+
+                // Spiral vortex pull into the trap (boosted by Containment Strain stacks and WASD Counter-Steering)
+                float strainMult = 1f + StrainStacks * 0.06f;
+                float steerMult = CounterSteering ? 1.85f : 1f;
                 Vector3 pullDir = td > 0.05f ? flatTrap / td : Vector3.zero;
                 Vector3 swirl = new Vector3(-pullDir.z, 0f, pullDir.x);
-                float pullSpeed = (TetherActive ? 13.5f : 5.5f) + CaptureProgress * 7f;
-                Pos += (pullDir + swirl * (TetherActive ? 0.38f : 0.2f)) * pullSpeed * dt;
-                Yaw += (TetherActive ? 540f : 220f) * dt;
+                float pullSpeed = ((TetherActive ? 13.5f : 5.5f) + CaptureProgress * 7f) * strainMult * (CounterSteering ? 1.35f : 1f);
+
+                if (LockedEnemy && LockedEnemy.alive && LockedEnemy.body)
+                {
+                    if (LockedEnemy.body.characterMotor)
+                        LockedEnemy.body.characterMotor.rootMotion += (pullDir + swirl * 0.25f) * (pullSpeed * 0.8f * dt);
+                }
+                else
+                {
+                    Pos += (pullDir + swirl * (TetherActive ? 0.38f : 0.2f)) * pullSpeed * dt;
+                    Yaw += (TetherActive ? 540f : 220f) * dt;
+                    Pos.y = Mathf.MoveTowards(Pos.y, TrapPos.y + (1f - CaptureProgress) * 0.6f, 12f * dt);
+                    _center = Pos + Vector3.up * Mathf.Lerp(1.4f, 0.35f, CaptureProgress);
+                    Animate(dt);
+                }
 
                 float pullDur = Mathf.Max(0.8f, SvrPlugin.TrapPullSeconds.Value);
-                float rate = (TetherActive ? 1f : 0.35f) * (td < 4.5f ? 1.35f : 0.85f) / pullDur;
+                float rate = (TetherActive ? 1f : 0.35f) * (td < 4.5f ? 1.35f : 0.85f) * strainMult * steerMult / pullDur;
                 CaptureProgress = Mathf.Clamp01(CaptureProgress + rate * dt);
-
-                Pos.y = Mathf.MoveTowards(Pos.y, TrapPos.y + (1f - CaptureProgress) * 0.6f, 12f * dt);
-                _center = Pos + Vector3.up * Mathf.Lerp(1.4f, 0.35f, CaptureProgress);
-                Animate(dt);
 
                 if (CaptureProgress >= 1f || (td < 1.35f && CaptureProgress > 0.65f))
                 {
-                    CaptureDemon(body);
+                    CaptureDemon(body, false);
                 }
                 return;
             }
@@ -554,7 +778,8 @@ namespace Surveyor
                     break;
             }
 
-            if (speed > 0f && wish.sqrMagnitude > 0.0001f) Pos += wish.normalized * speed * dt;
+            float strainSlow = Mathf.Lerp(1f, 0.45f, StrainStacks / 10f);
+            if (speed > 0f && wish.sqrMagnitude > 0.0001f) Pos += wish.normalized * (speed * strainSlow * dt);
 
             // It phases through walls and climbs: follows the ground, and rises to her level when it is close.
             float gy = GroundY(Pos, Pos.y);
@@ -569,13 +794,30 @@ namespace Surveyor
             if (State != Mode.Stagger && Vector3.Distance(body.corePosition, _center) < SvrPlugin.DemonContactRange.Value + 0.6f) Feed();
         }
 
-        private void CaptureDemon(CharacterBody body)
+        private void CaptureDemon(CharacterBody body, bool compressionBonus)
         {
             TrapActive = false;
             TetherActive = false;
             CaptureProgress = 0f;
-            State = Mode.Gone;
-            _goneTimer = SvrPlugin.DemonRespawn.Value * 1.25f;
+            StrainStacks = 0;
+
+            if (LockedEnemy && LockedEnemy.alive)
+            {
+                try
+                {
+                    if (UnityEngine.Networking.NetworkServer.active)
+                        LockedEnemy.Suicide(body.gameObject, body.gameObject, DamageType.VoidDeath);
+                }
+                catch { }
+                LockedEnemy = null;
+            }
+            else
+            {
+                State = Mode.Gone;
+                _goneTimer = SvrPlugin.DemonRespawn.Value * 1.25f;
+            }
+
+            StoredSpirits = Mathf.Min(MaxStoredSpirits, StoredSpirits + 1);
             Util.PlaySound("Play_UI_obj_casinoChest_open", body.gameObject);
             try
             {
@@ -585,15 +827,16 @@ namespace Surveyor
             catch { }
 
             string restored = SvrSenses.RestoreOne();
-            LastRestoredSense = restored ?? "ALL SENSES";
-            LastRestoredUntil = Time.time + 3.5f;
+            string slamTag = compressionBonus ? " [PERFECT COMPRESSION SLAM!]" : "";
+            LastRestoredSense = (restored ?? "SPIRIT") + slamTag + " · [H] GUARDIAN / [B] CASH-IN";
+            LastRestoredUntil = Time.time + 4.2f;
             if (restored != null)
             {
-                try { Chat.AddMessage("<color=#58ff8a>SHIMMER DEMON CONTAINED! Restored lost sense: " + restored + ".</color>"); } catch { }
+                try { Chat.AddMessage("<color=#58ff8a>ENTITY CONTAINED!" + slamTag + " Restored lost sense: " + restored + ". Press [H] to deploy Guardian or [B] at Teleporter to cash in!</color>"); } catch { }
             }
             else
             {
-                try { Chat.AddMessage("<color=#58ff8a>SHIMMER DEMON CONTAINED! Ectoplasmic trap sealed.</color>"); } catch { }
+                try { Chat.AddMessage("<color=#58ff8a>ENTITY CONTAINED!" + slamTag + " Stored in Containment Cell (" + StoredSpirits + "/" + MaxStoredSpirits + "). Press [H] for Guardian or [B] at Teleporter!</color>"); } catch { }
             }
         }
 
@@ -636,6 +879,29 @@ namespace Surveyor
         public static int OdMode;
         private float _scanYaw, _sweepRing, _echoPing, _focusLockNext, _peekReady, _modeFlash;
         private bool _loggedPeekFx, _peekNeedBurst;
+
+        // Middle Mouse Wheel Mode Swapping (Ratchet Click, Radial Snap Dial, Quick-Flip Override)
+        private bool _radialOpen;
+        private Vector2 _radialCursor;
+        private int _radialHoverMode;
+        private float _lastScrollTime = -10f;
+        private int _lastScrollDir;
+        private float _quickFlipBannerUntil = -10f;
+        private float _repulsorReadyAt;
+
+        // LiDAR-Exclusive Hidden Map Upgrades (Service Panels, Crates, Drop Pods — only visible & interactable via Surveyor LiDAR)
+        private struct FieldTechCache
+        {
+            public Vector3 Pos;
+            public int UpgradeId;
+            public int ShapeKind; // 0 = Drop Pod, 1 = Hex Crate, 2 = Service Panel
+            public bool Collected;
+        }
+        private readonly List<FieldTechCache> _techCaches = new List<FieldTechCache>(4);
+        private bool _techSpawned;
+        private int _nearCacheIdx = -1;
+        private string _upgradeToast = "";
+        private float _upgradeToastUntil = -10f;
 
         // Tracked stage gameplay objects (chests, shrines, shops, barrels, dropped items, teleporter)
         private class CachedMeshData
@@ -1384,20 +1650,192 @@ namespace Surveyor
             }
         }
 
+        private void SpawnFieldTechCaches()
+        {
+            if (_techSpawned || !_body) return;
+            _techSpawned = true;
+            _techCaches.Clear();
+
+            List<int> pool = new List<int>(SvrUpgrades.COUNT);
+            for (int i = 0; i < SvrUpgrades.COUNT; i++)
+                if (!SvrUpgrades.Has(i)) pool.Add(i);
+            if (pool.Count == 0)
+            {
+                for (int i = 0; i < SvrUpgrades.COUNT; i++) pool.Add(i);
+            }
+
+            Vector3 origin = _body.footPosition;
+            TeleporterInteraction tp = FindObjectOfType<TeleporterInteraction>();
+            Vector3 tpPos = tp ? tp.transform.position : origin + Vector3.forward * 55f;
+
+            int count = Mathf.Min(3, pool.Count);
+            for (int i = 0; i < count; i++)
+            {
+                int pickIdx = Random.Range(0, pool.Count);
+                int upgId = pool[pickIdx];
+                pool.RemoveAt(pickIdx);
+
+                float ang = (i / (float)count) * 6.28318f + Random.Range(-0.45f, 0.45f);
+                float dist = Random.Range(24f, 62f);
+                Vector3 anchor = (i == 0) ? Vector3.Lerp(origin, tpPos, 0.45f) : origin;
+                Vector3 candidate = anchor + new Vector3(Mathf.Cos(ang) * dist, 0f, Mathf.Sin(ang) * dist);
+                RaycastHit hit;
+                if (Physics.Raycast(candidate + Vector3.up * 45f, Vector3.down, out hit, 140f, LayerIndex.world.mask, QueryTriggerInteraction.Ignore))
+                    candidate = hit.point;
+                else
+                    candidate.y = origin.y;
+
+                _techCaches.Add(new FieldTechCache
+                {
+                    Pos = candidate,
+                    UpgradeId = upgId,
+                    ShapeKind = i % 3,
+                    Collected = false
+                });
+            }
+        }
+
+        private void FireRepulsorBlow()
+        {
+            _repulsorReadyAt = Time.time + (SvrUpgrades.Has(SvrUpgrades.REPULSOR_BLOW) ? 4.5f : 7.5f);
+            Util.PlaySound("Play_commando_R", gameObject);
+            Vector3 o = _input ? _input.aimOrigin : _body.corePosition;
+            Vector3 aim = _input ? _input.aimDirection : transform.forward;
+
+            // Paint a high-pressure cyan/white repulsor vortex cone in the LiDAR point cloud
+            for (int i = 0; i < 180; i++)
+            {
+                float d = Random.Range(2f, 26f);
+                Vector3 dir = Cone(aim, 38f, i * 2.39996f);
+                AddDot(o + dir * d, (i & 1) == 0 ? new Color(0.35f, 0.96f, 1f, 1f) : new Color(0.9f, 1f, 1f, 1f), 1.6f, true);
+            }
+
+            // Knock back swarms & reset bosses in the forward cone
+            try
+            {
+                BullseyeSearch bs = new BullseyeSearch
+                {
+                    searchOrigin = o,
+                    searchDirection = aim,
+                    maxDistanceFilter = 28f,
+                    maxAngleFilter = 44f,
+                    teamMaskFilter = TeamMask.GetEnemyTeams(_body.teamComponent.teamIndex),
+                    filterByLoS = false
+                };
+                bs.RefreshCandidates();
+                foreach (HurtBox hb in bs.GetResults())
+                {
+                    HealthComponent hc = hb ? hb.healthComponent : null;
+                    CharacterBody eb = hc ? hc.body : null;
+                    if (!eb || eb == _body) continue;
+                    Vector3 push = (eb.corePosition - o).normalized + Vector3.up * 0.25f;
+                    float f = SvrUpgrades.Has(SvrUpgrades.REPULSOR_BLOW) ? 3800f : 2400f;
+                    if (eb.characterMotor) eb.characterMotor.ApplyForce(push * f, true, false);
+                    else if (eb.rigidbody) eb.rigidbody.AddForce(push * f, ForceMode.Impulse);
+                }
+            }
+            catch { }
+
+            // Deflect / vaporize enemy projectiles in the forward repulsor blast
+            try
+            {
+                RoR2.Projectile.ProjectileController[] projs = FindObjectsOfType<RoR2.Projectile.ProjectileController>();
+                for (int i = 0; i < projs.Length; i++)
+                {
+                    RoR2.Projectile.ProjectileController pc = projs[i];
+                    if (!pc || !pc.gameObject.activeInHierarchy) continue;
+                    if (pc.teamFilter && pc.teamFilter.teamIndex == _body.teamComponent.teamIndex) continue;
+                    Vector3 toP = pc.transform.position - o;
+                    if (toP.magnitude < 24f && Vector3.Angle(aim, toP) < 48f)
+                    {
+                        for (int k = 0; k < 12; k++)
+                            AddDot(pc.transform.position + Random.insideUnitSphere * 0.4f, new Color(0.4f, 1f, 1f, 1f), 1.4f, true);
+                        Destroy(pc.gameObject);
+                    }
+                }
+            }
+            catch { }
+
+            _demon.Pulse(o, 26f);
+        }
+
         private void Update()
         {
             if (!_body) return;
             _local = IsLocal();
             if (!_local) { RestoreCamera(); return; }
-            if (!Alive) return;
+            if (!Alive) { _radialOpen = false; return; }
 
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
-            KeyCode next, prev, peek, trapKey;
+            if (!_techSpawned && Time.timeSinceLevelLoad > 2.5f) SpawnFieldTechCaches();
+
+            KeyCode next, prev, peek, trapKey, repKey, minKey, cashKey;
             int n0 = OdNames.Length;
             if (TryKey(SvrPlugin.ScanNextKey.Value, out next) && Input.GetKeyDown(next)) { OdMode = (OdMode + 1) % n0; TriggerModeBurst(); }
             if (TryKey(SvrPlugin.ScanPrevKey.Value, out prev) && Input.GetKeyDown(prev)) { OdMode = (OdMode + n0 - 1) % n0; TriggerModeBurst(); }
+
+            // ---- Middle Mouse Wheel Mode Swapping (Ratchet Click, Radial Snap Dial, Quick-Flip Override) ----
+            if (Input.GetMouseButtonDown(2))
+            {
+                _radialOpen = true;
+                _radialCursor = Vector2.zero;
+                _radialHoverMode = OdMode;
+                Util.PlaySound("Play_UI_menuClick", gameObject);
+            }
+            else if (_radialOpen && Input.GetMouseButton(2))
+            {
+                _radialCursor.x += Input.GetAxisRaw("Mouse X") * 14f;
+                _radialCursor.y -= Input.GetAxisRaw("Mouse Y") * 14f;
+                if (_radialCursor.magnitude > 90f) _radialCursor = _radialCursor.normalized * 90f;
+                if (_radialCursor.magnitude > 16f)
+                {
+                    float ang = Mathf.Atan2(_radialCursor.y, _radialCursor.x) * Mathf.Rad2Deg; // -180..180, -90 is top
+                    float norm = (ang + 90f + 360f) % 360f;
+                    int idx = Mathf.RoundToInt(norm / (360f / n0)) % n0;
+                    if (idx != _radialHoverMode)
+                    {
+                        _radialHoverMode = idx;
+                        Util.PlaySound("Play_UI_menuClick", gameObject);
+                    }
+                }
+            }
+            else if (_radialOpen && !Input.GetMouseButton(2))
+            {
+                _radialOpen = false;
+                if (_radialHoverMode != OdMode)
+                {
+                    OdMode = _radialHoverMode;
+                    TriggerModeBurst();
+                }
+            }
+
+            float scroll = Input.mouseScrollDelta.y;
+            if (!_radialOpen && Mathf.Abs(scroll) > 0.05f && !Cursor.visible)
+            {
+                int dir = scroll > 0f ? -1 : 1;
+                bool hardFlick = Mathf.Abs(scroll) >= 2.2f || (dir == _lastScrollDir && (Time.unscaledTime - _lastScrollTime) < 0.16f);
+                _lastScrollTime = Time.unscaledTime;
+                _lastScrollDir = dir;
+
+                if (hardFlick)
+                {
+                    // Quick-Flip Override: hard scroll flick snaps directly to combat/thermal ECHO mode!
+                    OdMode = 4;
+                    _quickFlipBannerUntil = Time.time + 1.8f;
+                    _revealUntil = Mathf.Max(_revealUntil, Time.time + 2.5f);
+                    TriggerModeBurst();
+                }
+                else
+                {
+                    // Stepped Ratchet Click
+                    OdMode = (OdMode + dir + n0) % n0;
+                    Util.PlaySound("Play_UI_menuClick", gameObject);
+                    TriggerModeBurst();
+                }
+            }
+
             // Peek on its own key, whatever is in the utility slot. It runs the Peek state on the Body machine,
             // which is networked, so everyone sees the visor flip.
             if (TryKey(SvrPlugin.PeekKey.Value, out peek) && Input.GetKeyDown(peek) && Time.time >= _peekReady && !Peeking)
@@ -1409,16 +1847,73 @@ namespace Surveyor
                     _peekReady = Time.time + SvrPlugin.PeekCooldown.Value;
                 }
             }
-            // Ghost-Trap [G]: throws out a Ghostbusters / Luigi's Mansion containment trap on the floor ahead.
-            if (TryKey(SvrPlugin.TrapKey.Value, out trapKey) && Input.GetKeyDown(trapKey) && Time.time >= _demon.TrapReadyAt)
+            // Ghost-Trap [G]: throws out a Ghostbusters / Luigi's Mansion containment trap on the floor ahead (or triggers Active-Reload Compression Slam).
+            if (TryKey(SvrPlugin.TrapKey.Value, out trapKey) && Input.GetKeyDown(trapKey) && (Time.time >= _demon.TrapReadyAt || _demon.TrapActive))
             {
                 _demon.DeployTrap(_body, _input);
-                _revealUntil = Mathf.Max(_revealUntil, Time.time + SvrPlugin.TrapDuration.Value);
-                for (int i = 0; i < 120; i++)
+                if (_demon.TrapActive)
                 {
-                    float ang = (i / 120f) * 6.28318f;
-                    Vector3 rp = _demon.TrapPos + new Vector3(Mathf.Cos(ang) * 1.4f, 0.1f + Random.value * 0.4f, Mathf.Sin(ang) * 1.4f);
-                    AddDot(rp, (i & 1) == 0 ? new Color(1f, 0.88f, 0.12f, 1f) : new Color(0.2f, 1f, 0.55f, 1f), 1.8f, true);
+                    _revealUntil = Mathf.Max(_revealUntil, Time.time + SvrPlugin.TrapDuration.Value);
+                    for (int i = 0; i < 120; i++)
+                    {
+                        float ang = (i / 120f) * 6.28318f;
+                        Vector3 rp = _demon.TrapPos + new Vector3(Mathf.Cos(ang) * 1.4f, 0.1f + Random.value * 0.4f, Mathf.Sin(ang) * 1.4f);
+                        AddDot(rp, (i & 1) == 0 ? new Color(1f, 0.88f, 0.12f, 1f) : new Color(0.2f, 1f, 0.55f, 1f), 1.8f, true);
+                    }
+                }
+            }
+            // Reverse-Flow Repulsor ("Blow" Function) [V]: blasts away swarms & reflects projectiles
+            if (TryKey(SvrPlugin.RepulsorKey.Value, out repKey) && Input.GetKeyDown(repKey) && Time.time >= _repulsorReadyAt)
+            {
+                FireRepulsorBlow();
+            }
+            // Redeploy Captured Spirit as 30s Friendly Spectral Hologram Guardian [H]
+            if (TryKey(SvrPlugin.MinionKey.Value, out minKey) && Input.GetKeyDown(minKey) && _demon.StoredSpirits > 0)
+            {
+                _demon.RedeployMinion(_body);
+            }
+            // Cash in Captured Spirit at the Teleporter [B]
+            if (TryKey(SvrPlugin.CashInKey.Value, out cashKey) && Input.GetKeyDown(cashKey) && _demon.StoredSpirits > 0)
+            {
+                TeleporterInteraction tp = FindObjectOfType<TeleporterInteraction>();
+                if (tp && Vector3.Distance(_body.corePosition, tp.transform.position) < 12f)
+                {
+                    _demon.CashInAtTeleporter(_body, tp.transform.position);
+                }
+            }
+
+            // Check & paint LiDAR-Exclusive Hidden Tech Caches
+            _nearCacheIdx = -1;
+            for (int cIdx = 0; cIdx < _techCaches.Count; cIdx++)
+            {
+                FieldTechCache fc = _techCaches[cIdx];
+                if (fc.Collected) continue;
+                float dCache = Vector3.Distance(_body.corePosition, fc.Pos);
+                if (dCache < 4.8f) _nearCacheIdx = cIdx;
+                if (dCache < SvrPlugin.ScanRange.Value * 1.35f && _peekK < 0.65f)
+                {
+                    for (int k = 0; k < 4; k++)
+                    {
+                        float ang = Time.time * 4f + k * 1.57f + cIdx;
+                        float r = fc.ShapeKind == 0 ? 0.85f : 0.7f;
+                        float h = Random.Range(0.1f, fc.ShapeKind == 0 ? 2.1f : 1.25f);
+                        Color tc = (k & 1) == 0 ? new Color(1f, 0.82f, 0.18f, 1f) : new Color(0.25f, 1f, 0.9f, 1f);
+                        AddDot(fc.Pos + new Vector3(Mathf.Cos(ang) * r, h, Mathf.Sin(ang) * r), tc, 0.45f, true);
+                    }
+                }
+            }
+            if (_nearCacheIdx >= 0 && Input.GetKeyDown(KeyCode.E))
+            {
+                FieldTechCache fc = _techCaches[_nearCacheIdx];
+                fc.Collected = true;
+                _techCaches[_nearCacheIdx] = fc;
+                SvrUpgrades.Unlock(fc.UpgradeId);
+                Util.PlaySound("Play_UI_shrineSuccess", gameObject);
+                _upgradeToast = "INSTALLED: " + SvrUpgrades.Names[fc.UpgradeId] + " — " + SvrUpgrades.Descs[fc.UpgradeId];
+                _upgradeToastUntil = Time.time + 4.8f;
+                for (int i = 0; i < 180; i++)
+                {
+                    AddDot(fc.Pos + Random.onUnitSphere * Random.Range(0.3f, 3.5f), (i & 1) == 0 ? new Color(1f, 0.86f, 0.2f, 1f) : new Color(0.25f, 1f, 0.9f, 1f), 2.2f, true);
                 }
             }
 
@@ -1432,6 +1927,20 @@ namespace Surveyor
                     Vector3 d = Random.onUnitSphere;
                     d.y = Mathf.Abs(d.y);
                     AddDot(_demon.TrapPos + d * Random.Range(0.2f, 4.5f), (i & 1) == 0 ? new Color(0.25f, 1f, 0.55f, 1f) : new Color(0.3f, 0.95f, 1f, 1f), 2.6f, true);
+                }
+            }
+
+            // Paint the Friendly Spectral Hologram Guardian in the 3D point cloud while active
+            if (_demon.MinionActive && _peekK < 0.65f)
+            {
+                Vector3 mp = _demon.MinionPos;
+                for (int i = 0; i < 14; i++)
+                {
+                    float h = Random.Range(-0.9f, 0.9f);
+                    float r = 0.38f * (1f - 0.35f * Mathf.Abs(h));
+                    float ang = Time.time * 12f + i * 0.45f;
+                    Color mc = (i & 1) == 0 ? new Color(0.25f, 1f, 0.72f, 1f) : new Color(0.35f, 0.9f, 1f, 1f);
+                    AddDot(mp + new Vector3(Mathf.Cos(ang) * r, h, Mathf.Sin(ang) * r), mc, 0.22f, true);
                 }
             }
 
@@ -2428,12 +2937,40 @@ namespace Surveyor
                 ComputeConvexHull(_hullPts, _hullOut);
                 if (_hullOut.Count >= 3)
                 {
+                    float minHX = float.MaxValue, minHY = float.MaxValue, maxHX = float.MinValue, maxHY = float.MinValue;
                     GUI.color = edgeGlow;
                     for (int h = 0; h < _hullOut.Count; h++)
                     {
                         Vector2 p0 = _hullOut[h];
                         Vector2 p1 = _hullOut[(h + 1) % _hullOut.Count];
                         DrawScreenLine(p0, p1, thick, white);
+                        if (p0.x < minHX) minHX = p0.x;
+                        if (p0.y < minHY) minHY = p0.y;
+                        if (p0.x > maxHX) maxHX = p0.x;
+                        if (p0.y > maxHY) maxHY = p0.y;
+                    }
+                    // For item drops (Kind == 3), add a clean, distinct outer border/outline frame with corner ticks around the silhouette
+                    if (p.Kind == 3)
+                    {
+                        float pad = 4.5f * scale;
+                        Rect outer = new Rect(minHX - pad, minHY - pad, (maxHX - minHX) + pad * 2f, (maxHY - minHY) + pad * 2f);
+                        GUI.color = new Color(bc.r, bc.g, bc.b, a * 0.55f);
+                        GUI.DrawTexture(new Rect(outer.x, outer.y, outer.width, 1.2f * scale), white);
+                        GUI.DrawTexture(new Rect(outer.x, outer.yMax - 1.2f * scale, outer.width, 1.2f * scale), white);
+                        GUI.DrawTexture(new Rect(outer.x, outer.y, 1.2f * scale, outer.height), white);
+                        GUI.DrawTexture(new Rect(outer.xMax - 1.2f * scale, outer.y, 1.2f * scale, outer.height), white);
+                        float ct = 5f * scale;
+                        GUI.color = edgeGlow;
+                        GUI.DrawTexture(new Rect(outer.x - 1f, outer.y - 1f, ct, 2.2f * scale), white);
+                        GUI.DrawTexture(new Rect(outer.x - 1f, outer.y - 1f, 2.2f * scale, ct), white);
+                        GUI.DrawTexture(new Rect(outer.xMax - ct + 1f, outer.y - 1f, ct, 2.2f * scale), white);
+                        GUI.DrawTexture(new Rect(outer.xMax - 2.2f * scale + 1f, outer.y - 1f, 2.2f * scale, ct), white);
+                        GUI.DrawTexture(new Rect(outer.x - 1f, outer.yMax - 2.2f * scale + 1f, ct, 2.2f * scale), white);
+                        GUI.DrawTexture(new Rect(outer.x - 1f, outer.yMax - ct + 1f, 2.2f * scale, ct), white);
+                        GUI.DrawTexture(new Rect(outer.xMax - ct + 1f, outer.yMax - 2.2f * scale + 1f, ct, 2.2f * scale), white);
+                        GUI.DrawTexture(new Rect(outer.xMax - 2.2f * scale + 1f, outer.yMax - ct + 1f, 2.2f * scale, ct), white);
+                        maxX = outer.xMax;
+                        anchorY = outer.center.y;
                     }
                     // Also draw a few internal 3D mesh feature edges so the 3D form inside the silhouette reads clearly
                     if (dist < 28f && p.Outline != null && p.Outline.Parts.Count > 0)
@@ -2489,6 +3026,43 @@ namespace Surveyor
                 GUI.color = bc;
                 GUI.Label(new Rect(lx + 6f * scale, ly, tw, th), txt, _label);
             }
+
+            // Draw LiDAR-Exclusive Hidden Map Tech Caches (Service Panels, Crates, Drop Pods)
+            for (int cIdx = 0; cIdx < _techCaches.Count; cIdx++)
+            {
+                FieldTechCache fc = _techCaches[cIdx];
+                if (fc.Collected) continue;
+                float dist = Vector3.Distance(me, fc.Pos);
+                if (dist > tagRange * 1.35f) continue;
+                Vector3 sp = cam.WorldToScreenPoint(fc.Pos + Vector3.up * 0.9f);
+                if (sp.z <= 0.5f) continue;
+                float sx = sp.x, sy = Screen.height - sp.y;
+                if (sx < 20f || sx > Screen.width - 20f || sy < 20f || sy > Screen.height - 20f) continue;
+
+                float a = Mathf.Clamp01(1.2f - dist / (tagRange * 1.35f)) * dotAlpha;
+                Color gold = new Color(1f, 0.85f, 0.22f, a);
+                Color cyan = new Color(0.28f, 1f, 0.92f, a);
+                float rad = 12f * scale;
+                GUI.color = gold;
+                Vector2 prev = Vector2.zero;
+                for (int k = 0; k <= 6; k++)
+                {
+                    float ang = k * (6.2831853f / 6f) + Time.time * 0.8f;
+                    Vector2 cur = new Vector2(sx + Mathf.Cos(ang) * rad, sy + Mathf.Sin(ang) * rad);
+                    if (k > 0) DrawScreenLine(prev, cur, 2f * scale, white);
+                    prev = cur;
+                }
+                string cTxt = "[HIDDEN TECH] " + SvrUpgrades.ShortNames[fc.UpgradeId] + " · " + Mathf.RoundToInt(dist) + "m";
+                float tw = (cTxt.Length * 7.6f + 12f) * scale, th = 18f * scale;
+                float lx = sx + rad + 8f * scale, ly = sy - th * 0.5f;
+                GUI.color = new Color(0.02f, 0.05f, 0.08f, a * 0.82f);
+                GUI.DrawTexture(new Rect(lx, ly, tw, th), white);
+                GUI.color = cyan;
+                GUI.DrawTexture(new Rect(lx, ly, 3f * scale, th), white);
+                GUI.color = gold;
+                GUI.Label(new Rect(lx + 6f * scale, ly, tw, th), cTxt, _label);
+            }
+
             _label.fontSize = origFs;
         }
 
@@ -2521,17 +3095,32 @@ namespace Surveyor
                 }
             }
 
-            if (!_demon.Active) return;
+            // Draw Friendly Spectral Hologram Guardian HUD tag if active
+            if (_demon.MinionActive)
+            {
+                Vector3 msp = cam.WorldToScreenPoint(_demon.MinionPos + Vector3.up * 1.15f);
+                if (msp.z > 0.35f && _label != null)
+                {
+                    float mx = msp.x, my = Screen.height - msp.y;
+                    float rem = Mathf.Max(0f, _demon.MinionUntil - Time.time);
+                    GUI.color = new Color(0.28f, 1f, 0.82f, 0.92f * dotAlpha);
+                    GUI.Label(new Rect(mx - 85f * scale, my - 12f * scale, 220f * scale, 20f * scale), "SPECTRAL GUARDIAN · " + rem.ToString("0") + "s", _label);
+                }
+            }
+
+            bool hasLockedEnemy = _demon.LockedEnemy && _demon.LockedEnemy.alive && _demon.LockedEnemy.body;
+            if (!_demon.Active && !hasLockedEnemy) return;
             bool revealed = Time.time < _revealUntil || _demon.TrapActive;
-            bool blocked = !revealed && Physics.Linecast(cam.transform.position, _demon.Center, LayerIndex.world.mask, QueryTriggerInteraction.Ignore);
+            bool blocked = !revealed && _demon.Active && Physics.Linecast(cam.transform.position, _demon.Center, LayerIndex.world.mask, QueryTriggerInteraction.Ignore);
             float vis = (blocked ? 0.18f : 0.95f) * dotAlpha;
-            _demon.FillWorld(_demonPoints, Time.time);
+            if (_demon.Active) _demon.FillWorld(_demonPoints, Time.time);
+            else _demonPoints.Clear();
 
             // Ghostbusters Proton Stream + Luigi's Mansion Poltergust Suction Vortex while capturing!
             if (_demon.TrapActive && (_demon.TetherActive || _demon.CaptureProgress > 0.02f))
             {
                 Vector3 muzzleWorld = _body.corePosition + cam.transform.right * 0.48f - cam.transform.up * 0.18f + cam.transform.forward * 0.55f;
-                Vector3 demonCenter = _demon.Center;
+                Vector3 demonCenter = _demon.TetherTargetPos;
                 Vector3 trapWorld = _demon.TrapPos + Vector3.up * 0.25f;
 
                 // 1) Ghostbusters Proton Stream: crackling orange/red core beam + spiraling electric blue helix from gun to Demon
@@ -2646,7 +3235,7 @@ namespace Surveyor
             }
         }
 
-        // Blown-out visor-off look: white wash, light bleeding in from the edges, streaks, and a smooth dark fade when closing.
+        // Blown-out visor-off look: frosted static/glitch blind overlay, white wash, chromatic edge refraction, and smooth dark fade when closing.
         private void DrawPeekWash(float scale)
         {
             float now = Time.time;
@@ -2665,25 +3254,72 @@ namespace Surveyor
 
             float flick = 0.88f + 0.12f * Mathf.Sin(now * 23f) + (Random.value < 0.04f ? 0.25f : 0f);
             float wash = 0.26f * k * flick;
-            GUI.color = new Color(1f, 0.97f, 0.9f, Mathf.Clamp01(wash));
+            GUI.color = new Color(0.95f, 0.98f, 1f, Mathf.Clamp01(wash));
             GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), white);
+
+            // Frosted helmet-glass vignette + chromatic edge refraction
             for (int i = 0; i < 7; i++)
             {
                 float inset = i * 0.035f;
                 float a = (0.16f - i * 0.02f) * k * flick;
                 if (a <= 0f) continue;
-                GUI.color = new Color(1f, 0.98f, 0.92f, a);
+                GUI.color = (i == 0) ? new Color(0.75f, 0.94f, 1f, a * 1.2f) : new Color(1f, 0.98f, 0.92f, a);
                 float bx = Screen.width * inset, by = Screen.height * inset;
                 GUI.DrawTexture(new Rect(0f, 0f, Screen.width, by + 6f), white);
                 GUI.DrawTexture(new Rect(0f, Screen.height - by - 6f, Screen.width, by + 6f), white);
                 GUI.DrawTexture(new Rect(0f, 0f, bx + 6f, Screen.height), white);
                 GUI.DrawTexture(new Rect(Screen.width - bx - 6f, 0f, bx + 6f, Screen.height), white);
             }
-            for (int i = 0; i < 6; i++)
+            // Frosted static & horizontal scanline glitch bars
+            for (int i = 0; i < 9; i++)
             {
-                GUI.color = new Color(1f, 1f, 1f, Random.Range(0.1f, 0.35f) * k);
+                bool cyanTint = (i & 1) == 0;
+                GUI.color = cyanTint
+                    ? new Color(0.75f, 0.96f, 1f, Random.Range(0.08f, 0.28f) * k)
+                    : new Color(1f, 0.92f, 0.88f, Random.Range(0.1f, 0.32f) * k);
                 float bw = Random.Range(0.25f, 1f) * Screen.width;
-                GUI.DrawTexture(new Rect(Random.value * (Screen.width - bw), Random.value * Screen.height, bw, Random.Range(2f, 16f) * scale), white);
+                GUI.DrawTexture(new Rect(Random.value * (Screen.width - bw), Random.value * Screen.height, bw, Random.Range(1.5f, 14f) * scale), white);
+            }
+        }
+
+        // Draws one of the five tactical LiDAR scanner mode icons (0=CONE, 1=SWEEP, 2=WIDE, 3=FOCUS, 4=ECHO)
+        private static void DrawModeIcon(Vector2 center, float r, int mode, Color col, float scale, Texture2D white)
+        {
+            GUI.color = col;
+            float t = Mathf.Max(1.5f, 2f * scale);
+            switch (mode % 5)
+            {
+                case 0: // CONE: wide 65-deg flood wedge + base dot
+                    DrawScreenLine(center + new Vector2(0f, r * 0.7f), center + new Vector2(-r * 0.85f, -r * 0.65f), t, white);
+                    DrawScreenLine(center + new Vector2(0f, r * 0.7f), center + new Vector2(r * 0.85f, -r * 0.65f), t, white);
+                    DrawScreenLine(center + new Vector2(-r * 0.85f, -r * 0.65f), center + new Vector2(0f, -r * 0.9f), t, white);
+                    DrawScreenLine(center + new Vector2(0f, -r * 0.9f), center + new Vector2(r * 0.85f, -r * 0.65f), t, white);
+                    break;
+                case 1: // SWEEP: twin opposing radar rotor blades + ring
+                    DrawScreenLine(center + new Vector2(-r * 0.85f, -r * 0.85f), center + new Vector2(r * 0.85f, r * 0.85f), t, white);
+                    DrawScreenLine(center + new Vector2(-r * 0.85f, r * 0.85f), center + new Vector2(r * 0.85f, -r * 0.85f), t * 0.75f, white);
+                    GUI.DrawTexture(new Rect(center.x - 2.5f * scale, center.y - 2.5f * scale, 5f * scale, 5f * scale), white);
+                    break;
+                case 2: // WIDE: 360 omni-dome diamond + inner core
+                    DrawScreenLine(center + new Vector2(0f, -r), center + new Vector2(r, 0f), t, white);
+                    DrawScreenLine(center + new Vector2(r, 0f), center + new Vector2(0f, r), t, white);
+                    DrawScreenLine(center + new Vector2(0f, r), center + new Vector2(-r, 0f), t, white);
+                    DrawScreenLine(center + new Vector2(-r, 0f), center + new Vector2(0f, -r), t, white);
+                    GUI.DrawTexture(new Rect(center.x - 3f * scale, center.y - 3f * scale, 6f * scale, 6f * scale), white);
+                    break;
+                case 3: // FOCUS: sniper crosshair + tight vertical beam
+                    DrawScreenLine(center + new Vector2(0f, -r), center + new Vector2(0f, r), t, white);
+                    DrawScreenLine(center + new Vector2(-r, 0f), center + new Vector2(r, 0f), t, white);
+                    GUI.DrawTexture(new Rect(center.x - r * 0.45f, center.y - r * 0.45f, r * 0.9f, r * 0.9f), white);
+                    break;
+                default: // ECHO: seismic concentric sonar chevrons
+                    for (int w = 0; w < 3; w++)
+                    {
+                        float rw = r * (0.4f + w * 0.3f);
+                        DrawScreenLine(center + new Vector2(-rw, rw * 0.3f), center + new Vector2(0f, -rw * 0.7f), t, white);
+                        DrawScreenLine(center + new Vector2(0f, -rw * 0.7f), center + new Vector2(rw, rw * 0.3f), t, white);
+                    }
+                    break;
             }
         }
 
@@ -2708,40 +3344,95 @@ namespace Surveyor
             int fs = Mathf.RoundToInt(15f * scale);
             _label.fontSize = Mathf.Max(10, fs);
 
-            // Sensor status strip (the four senses) and the spool gauge.
+            // Sensor status strip (the four senses) + Containment Cell Spirit Charge counter
             float x = Screen.width * 0.03f, y = Screen.height * 0.745f;
             DrawSense("SEE", SvrSenses.Sight, ref x, y, scale);
             DrawSense("HEAR", SvrSenses.Hearing, ref x, y, scale);
             DrawSense("TOUCH", SvrSenses.Touch, ref x, y, scale);
             DrawSense("BAL", SvrSenses.Balance, ref x, y, scale);
-
-            SvrSpool sp = _body.GetComponent<SvrSpool>();
-            if (sp && (sp.Spool > 0.01f || sp.AnchorLeft > 0f))
+            if (_demon.StoredSpirits > 0 || _demon.MinionActive)
             {
-                float w = 170f * scale, h = 8f * scale;
+                string cellTxt = _demon.MinionActive
+                    ? "GUARDIAN ACTIVE (" + Mathf.CeilToInt(_demon.MinionUntil - Time.time) + "s)"
+                    : "CELL: " + _demon.StoredSpirits + "/" + _demon.MaxStoredSpirits + " [H] GUARDIAN · [B] CASH-IN";
+                float cw = (cellTxt.Length * 8.2f + 16f) * scale;
+                GUI.color = new Color(0.02f, 0.06f, 0.08f, 0.75f);
+                GUI.DrawTexture(new Rect(x, y, cw, 24f * scale), white);
+                GUI.color = new Color(0.28f, 1f, 0.85f, 0.96f);
+                GUI.DrawTexture(new Rect(x, y, 3f * scale, 24f * scale), white);
+                GUI.Label(new Rect(x + 7f * scale, y, cw, 24f * scale), cellTxt, _label);
+            }
+
+            // Segmented Industrial Minigun Heat & Spool Gauge
+            SvrSpool sp = _body.GetComponent<SvrSpool>();
+            if (sp && (sp.Spool > 0.01f || sp.Heat > 0.02f || sp.AnchorLeft > 0f))
+            {
+                float w = 210f * scale, h = 10f * scale;
                 float bx = Screen.width * 0.5f - w * 0.5f, by = Screen.height * 0.64f;
-                GUI.color = new Color(0f, 0f, 0f, 0.55f);
-                GUI.DrawTexture(new Rect(bx - 2f, by - 2f, w + 4f, h + 4f), white);
-                GUI.color = sp.AnchorLeft > 0f ? new Color(1f, 0.85f, 0.2f, 0.95f) : new Color(0.55f, 1f, 0.3f, 0.95f);
-                GUI.DrawTexture(new Rect(bx, by, w * sp.Spool, h), white);
-                GUI.color = new Color(0.8f, 1f, 0.7f, 0.9f);
-                GUI.Label(new Rect(bx, by + h + 2f, w, 20f * scale), sp.AnchorLeft > 0f ? "SPOOL  ANCHORED" : "SPOOL", _label);
+                GUI.color = new Color(0.02f, 0.04f, 0.06f, 0.72f);
+                GUI.DrawTexture(new Rect(bx - 4f * scale, by - 4f * scale, w + 8f * scale, h + 28f * scale), white);
+
+                const int segs = 12;
+                float segGap = 2.5f * scale;
+                float segW = (w - (segs - 1) * segGap) / segs;
+                int litSpool = Mathf.RoundToInt(sp.Spool * segs);
+                for (int sIdx = 0; sIdx < segs; sIdx++)
+                {
+                    Rect sr = new Rect(bx + sIdx * (segW + segGap), by, segW, h);
+                    bool lit = sIdx < litSpool;
+                    Color segCol = sp.Overheated
+                        ? new Color(1f, 0.25f, 0.18f, 0.95f)
+                        : (sp.AnchorLeft > 0f
+                            ? new Color(1f, 0.86f, 0.2f, 0.95f)
+                            : Color.Lerp(new Color(0.45f, 1f, 0.35f, 0.95f), new Color(1f, 0.52f, 0.15f, 0.95f), sp.Heat));
+                    GUI.color = lit ? segCol : new Color(0.15f, 0.2f, 0.24f, 0.65f);
+                    GUI.DrawTexture(sr, white);
+                }
+
+                // Thin thermal load bar right below the segmented spool gauge
+                GUI.color = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) ? new Color(0.35f, 0.95f, 1f, 0.9f) : new Color(1f, 0.38f, 0.12f, 0.9f);
+                GUI.DrawTexture(new Rect(bx, by + h + 2f * scale, w * Mathf.Clamp01(sp.Heat), 2.5f * scale), white);
+
+                string spoolTag = sp.Overheated ? "THERMAL OVERLOAD!" : (sp.AnchorLeft > 0f ? "SPOOL · ANCHORED" : (SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) ? "SPOOL · CRYO-COOLED" : "SPOOL · HEAT " + Mathf.RoundToInt(sp.Heat * 100f) + "%"));
+                GUI.color = sp.Overheated ? new Color(1f, 0.35f, 0.25f, 0.98f) : new Color(0.82f, 1f, 0.75f, 0.92f);
+                GUI.Label(new Rect(bx, by + h + 4f * scale, w + 40f * scale, 20f * scale), spoolTag, _label);
+            }
+
+            // Installed LiDAR-Exclusive Hidden Tech Upgrade badges
+            if (SvrUpgrades.UnlockedCount > 0)
+            {
+                float ux = Screen.width * 0.03f, uy = Screen.height * 0.782f;
+                for (int u = 0; u < SvrUpgrades.COUNT; u++)
+                {
+                    if (!SvrUpgrades.Has(u)) continue;
+                    string uName = SvrUpgrades.ShortNames[u];
+                    float uw = (uName.Length * 7.8f + 12f) * scale;
+                    GUI.color = new Color(0.03f, 0.06f, 0.09f, 0.75f);
+                    GUI.DrawTexture(new Rect(ux, uy, uw, 18f * scale), white);
+                    Color uCol = u < 4 ? new Color(1f, 0.84f, 0.25f, 0.95f) : new Color(0.3f, 0.96f, 1f, 0.95f);
+                    GUI.color = uCol;
+                    GUI.DrawTexture(new Rect(ux, uy, 2.5f * scale, 18f * scale), white);
+                    GUI.Label(new Rect(ux + 5f * scale, uy - 2f * scale, uw, 20f * scale), uName, _label);
+                    ux += uw + 5f * scale;
+                }
             }
 
             // Overdrive mode readout (only when the skill is equipped) and the visor timer.
             SkillLocator skl = _body.skillLocator;
             bool hasOd = skl && skl.special && skl.special.skillDef && skl.special.skillDef.skillName == SvrPlugin.T + "OVERDRIVE";
             {
-                // scan mode readout (always): name, subtitle, five pips, the keys; flashes when changed
+                // scan mode readout (always): tactical mode icon, name, subtitle, five pips, the keys; flashes when changed
                 int mIdx = OdMode % OdNames.Length;
                 float sinceSwitch = Time.time - _modeFlash;
                 bool flash = sinceSwitch < 0.75f;
                 float sx = Screen.width * 0.03f, sy = Screen.height * 0.692f;
-                GUI.color = flash ? new Color(1f, 1f, 1f, 1f) : (OverdriveOn ? new Color(1f, 0.9f, 0.3f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.95f));
-                string keys = "[" + SvrPlugin.ScanPrevKey.Value.ToUpperInvariant() + "/" + SvrPlugin.ScanNextKey.Value.ToUpperInvariant() + "]";
-                GUI.Label(new Rect(sx, sy, 480f * scale, 24f * scale), "SCAN: " + OdNames[mIdx] + "  " + keys + (hasOd ? "   R = OVERDRIVE" : ""), _label);
+                Color modeCol = flash ? new Color(1f, 1f, 1f, 1f) : (OverdriveOn ? new Color(1f, 0.9f, 0.3f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.95f));
+                DrawModeIcon(new Vector2(sx + 10f * scale, sy + 12f * scale), 9f * scale, mIdx, modeCol, scale, white);
+                GUI.color = modeCol;
+                string keys = "[MMB-WHEEL / " + SvrPlugin.ScanPrevKey.Value.ToUpperInvariant() + "/" + SvrPlugin.ScanNextKey.Value.ToUpperInvariant() + "]";
+                GUI.Label(new Rect(sx + 26f * scale, sy, 520f * scale, 24f * scale), "SCAN: " + OdNames[mIdx] + "  " + keys + (hasOd ? "   R = OVERDRIVE" : ""), _label);
                 GUI.color = new Color(0.75f, 0.98f, 0.85f, 0.85f);
-                GUI.Label(new Rect(sx, sy + 18f * scale, 520f * scale, 22f * scale), OdDescs[mIdx], _label);
+                GUI.Label(new Rect(sx + 26f * scale, sy + 18f * scale, 520f * scale, 22f * scale), OdDescs[mIdx], _label);
                 for (int i = 0; i < OdNames.Length; i++)
                 {
                     GUI.color = i == mIdx ? new Color(0.6f, 1f, 0.4f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.25f);
@@ -2749,71 +3440,156 @@ namespace Surveyor
                 }
                 float pr = _peekReady - Time.time;
                 GUI.color = new Color(0.9f, 0.95f, 1f, 0.85f);
-                GUI.Label(new Rect(sx, sy + 36f * scale, 220f * scale, 24f * scale), "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "]" + (pr > 0f ? "  " + pr.ToString("0") + "s" : "  ready"), _label);
+                GUI.Label(new Rect(sx, sy + 36f * scale, 160f * scale, 24f * scale), "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "]" + (pr > 0f ? "  " + pr.ToString("0") + "s" : "  ready"), _label);
+
+                float rr = _repulsorReadyAt - Time.time;
+                GUI.color = new Color(0.45f, 0.96f, 1f, 0.88f);
+                GUI.Label(new Rect(sx + 135f * scale, sy + 36f * scale, 165f * scale, 24f * scale), "BLOW [" + SvrPlugin.RepulsorKey.Value.ToUpperInvariant() + "]" + (rr > 0f ? "  " + rr.ToString("0") + "s" : "  ready"), _label);
 
                 float tr = _demon.TrapReadyAt - Time.time;
                 string trapKeyStr = SvrPlugin.TrapKey.Value.ToUpperInvariant();
                 if (_demon.TrapActive)
                 {
                     GUI.color = new Color(0.25f, 1f, 0.55f, 0.95f);
-                    GUI.Label(new Rect(sx + 165f * scale, sy + 36f * scale, 360f * scale, 24f * scale), "TRAP [" + trapKeyStr + "]  OPEN — AIM & FIRE AT DEMON!", _label);
+                    GUI.Label(new Rect(sx + 275f * scale, sy + 36f * scale, 380f * scale, 24f * scale), "TRAP [" + trapKeyStr + "]  OPEN — AIM & FIRE + WASD STEER!", _label);
                 }
                 else
                 {
                     GUI.color = SvrSenses.Lost > 0 ? new Color(1f, 0.88f, 0.25f, 0.95f) : new Color(0.82f, 0.95f, 1f, 0.82f);
                     string trapSub = tr > 0f ? ("  " + tr.ToString("0") + "s") : (SvrSenses.Lost > 0 ? "  READY (CAPTURE DEMON -> RESTORE SENSE)" : "  ready");
-                    GUI.Label(new Rect(sx + 165f * scale, sy + 36f * scale, 420f * scale, 24f * scale), "TRAP [" + trapKeyStr + "]" + trapSub, _label);
+                    GUI.Label(new Rect(sx + 275f * scale, sy + 36f * scale, 420f * scale, 24f * scale), "TRAP [" + trapKeyStr + "]" + trapSub, _label);
                 }
 
-                // Top-center banner when Q / E switches scanner mode
+                // Middle-Mouse Radial Crosshair Dial (when holding Middle Mouse Button)
+                if (_radialOpen)
+                {
+                    Vector2 center = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+                    float dialRad = 115f * scale;
+                    GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.82f);
+                    GUI.DrawTexture(new Rect(center.x - dialRad * 1.25f, center.y - dialRad * 1.25f, dialRad * 2.5f, dialRad * 2.5f), white);
+                    for (int i = 0; i < OdNames.Length; i++)
+                    {
+                        float angDeg = -90f + i * (360f / OdNames.Length);
+                        float angRad = angDeg * Mathf.Deg2Rad;
+                        Vector2 node = center + new Vector2(Mathf.Cos(angRad), Mathf.Sin(angRad)) * dialRad;
+                        bool sel = i == _radialHoverMode;
+                        Color nc = sel ? new Color(1f, 0.88f, 0.25f, 1f) : new Color(0.45f, 0.95f, 0.65f, 0.75f);
+                        GUI.color = sel ? new Color(0.16f, 0.24f, 0.18f, 0.95f) : new Color(0.05f, 0.09f, 0.12f, 0.85f);
+                        GUI.DrawTexture(new Rect(node.x - 42f * scale, node.y - 22f * scale, 84f * scale, 44f * scale), white);
+                        DrawModeIcon(node + new Vector2(0f, -6f * scale), 10f * scale, i, nc, scale, white);
+                        GUI.color = nc;
+                        GUI.Label(new Rect(node.x - 32f * scale, node.y + 4f * scale, 76f * scale, 20f * scale), OdNames[i], _label);
+                    }
+                    // Needle from center toward cursor
+                    GUI.color = new Color(1f, 0.88f, 0.25f, 0.95f);
+                    DrawScreenLine(center, center + _radialCursor * scale, 2.5f * scale, white);
+                    GUI.Label(new Rect(center.x - 95f * scale, center.y + dialRad + 28f * scale, 240f * scale, 22f * scale), "RADIAL SNAP: " + OdNames[_radialHoverMode], _label);
+                }
+
+                // Top-center banner when Q / E or Scroll Wheel switches scanner mode
                 if (sinceSwitch < 1.35f)
                 {
                     float bAlpha = Mathf.Clamp01(1.35f - sinceSwitch);
-                    float bw = 460f * scale, bh = 46f * scale;
+                    float bw = 480f * scale, bh = 46f * scale;
                     float bx = Screen.width * 0.5f - bw * 0.5f, by = Screen.height * 0.16f;
-                    GUI.color = new Color(0f, 0f, 0f, 0.7f * bAlpha);
+                    bool isQuickFlip = Time.time < _quickFlipBannerUntil;
+                    GUI.color = new Color(0f, 0f, 0f, 0.75f * bAlpha);
                     GUI.DrawTexture(new Rect(bx, by, bw, bh), white);
-                    GUI.color = new Color(0.6f, 1f, 0.4f, 0.95f * bAlpha);
+                    GUI.color = isQuickFlip ? new Color(1f, 0.45f, 0.15f, 0.98f * bAlpha) : new Color(0.6f, 1f, 0.4f, 0.95f * bAlpha);
                     GUI.DrawTexture(new Rect(bx, by, bw, 2.5f * scale), white);
-                    GUI.Label(new Rect(bx + 14f * scale, by + 4f * scale, bw - 20f * scale, 22f * scale), "SCANNER MODE: " + OdNames[mIdx], _label);
+                    DrawModeIcon(new Vector2(bx + 20f * scale, by + 23f * scale), 11f * scale, mIdx, GUI.color, scale, white);
+                    string bannerHdr = isQuickFlip ? "QUICK-FLIP OVERRIDE -> THERMAL ECHO!" : ("SCANNER MODE: " + OdNames[mIdx]);
+                    GUI.Label(new Rect(bx + 38f * scale, by + 4f * scale, bw - 44f * scale, 22f * scale), bannerHdr, _label);
                     GUI.color = new Color(0.85f, 1f, 0.9f, 0.9f * bAlpha);
-                    GUI.Label(new Rect(bx + 14f * scale, by + 22f * scale, bw - 20f * scale, 22f * scale), OdDescs[mIdx], _label);
+                    GUI.Label(new Rect(bx + 38f * scale, by + 22f * scale, bw - 44f * scale, 22f * scale), OdDescs[mIdx], _label);
                 }
 
-                // Ghostbusters / Luigi's Mansion Containment HUD bar while Ghost-Trap is active
+                // Prompt when standing next to a LiDAR-Exclusive Hidden Tech Cache
+                if (_nearCacheIdx >= 0 && _nearCacheIdx < _techCaches.Count && !_techCaches[_nearCacheIdx].Collected)
+                {
+                    int upgId = _techCaches[_nearCacheIdx].UpgradeId;
+                    float pw = 540f * scale, ph = 46f * scale;
+                    float px = Screen.width * 0.5f - pw * 0.5f, py = Screen.height * 0.56f;
+                    GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.88f);
+                    GUI.DrawTexture(new Rect(px, py, pw, ph), white);
+                    GUI.color = new Color(1f, 0.86f, 0.2f, 0.98f);
+                    GUI.DrawTexture(new Rect(px, py, pw, 2.5f * scale), white);
+                    GUI.Label(new Rect(px + 14f * scale, py + 4f * scale, pw - 24f * scale, 22f * scale), "PRESS [E] TO INSTALL HIDDEN LIDAR TECH: " + SvrUpgrades.Names[upgId], _label);
+                    GUI.color = new Color(0.35f, 0.98f, 1f, 0.92f);
+                    GUI.Label(new Rect(px + 14f * scale, py + 23f * scale, pw - 24f * scale, 20f * scale), SvrUpgrades.Descs[upgId], _label);
+                }
+                else if (Time.time < _upgradeToastUntil)
+                {
+                    float uAlpha = Mathf.Clamp01(_upgradeToastUntil - Time.time);
+                    float pw = 560f * scale, ph = 36f * scale;
+                    float px = Screen.width * 0.5f - pw * 0.5f, py = Screen.height * 0.28f;
+                    GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.85f * uAlpha);
+                    GUI.DrawTexture(new Rect(px, py, pw, ph), white);
+                    GUI.color = new Color(1f, 0.86f, 0.2f, 0.98f * uAlpha);
+                    GUI.DrawTexture(new Rect(px, py, pw, 2.5f * scale), white);
+                    GUI.Label(new Rect(px + 12f * scale, py + 7f * scale, pw - 20f * scale, 22f * scale), _upgradeToast, _label);
+                }
+
+                // Ghostbusters / Luigi's Mansion Containment & Wrestling Match HUD bar while Ghost-Trap is active
                 if (_demon.TrapActive)
                 {
-                    float cw = 480f * scale, ch = 48f * scale;
+                    float cw = 520f * scale, ch = 66f * scale;
                     float cx = Screen.width * 0.5f - cw * 0.5f, cy = Screen.height * 0.22f;
-                    GUI.color = new Color(0.02f, 0.04f, 0.06f, 0.82f);
+                    GUI.color = new Color(0.02f, 0.04f, 0.06f, 0.86f);
                     GUI.DrawTexture(new Rect(cx, cy, cw, ch), white);
-                    Color topBarCol = _demon.TetherActive ? new Color(0.22f, 1f, 0.52f, 0.98f) : new Color(1f, 0.86f, 0.15f, 0.95f);
+                    Color topBarCol = _demon.CounterSteering
+                        ? new Color(0.25f, 1f, 0.55f, 1f)
+                        : (_demon.TetherActive ? new Color(0.3f, 0.95f, 1f, 0.98f) : new Color(1f, 0.86f, 0.15f, 0.95f));
                     GUI.color = topBarCol;
                     GUI.DrawTexture(new Rect(cx, cy, cw, 2.5f * scale), white);
 
+                    string strainTxt = _demon.StrainStacks > 0 ? (" · STRAIN x" + _demon.StrainStacks) : "";
                     string hdr = _demon.TetherActive
-                        ? "PROTON TETHER LOCKED — REELING IN DEMON (" + Mathf.RoundToInt(_demon.CaptureProgress * 100f) + "%)"
-                        : "GHOST TRAP OPEN — AIM AT THE DEMON & HOLD FIRE TO CAPTURE!";
-                    GUI.Label(new Rect(cx + 12f * scale, cy + 4f * scale, cw - 24f * scale, 22f * scale), hdr, _label);
+                        ? "PROTON TETHER LOCKED (" + Mathf.RoundToInt(_demon.CaptureProgress * 100f) + "%)" + strainTxt
+                        : "GHOST TRAP OPEN — AIM AT DEMON/BOSS & HOLD FIRE TO CAPTURE!";
+                    GUI.Label(new Rect(cx + 12f * scale, cy + 4f * scale, cw - 24f * scale, 20f * scale), hdr, _label);
 
-                    float barW = cw - 24f * scale, barH = 11f * scale;
-                    float barX = cx + 12f * scale, barY = cy + 29f * scale;
+                    if (_demon.TetherActive)
+                    {
+                        string steerPrompt = _demon.PullDir < 0
+                            ? "<<< TARGET PULLING LEFT — COUNTER-STEER [D]!"
+                            : (_demon.PullDir > 0
+                                ? "TARGET PULLING RIGHT — COUNTER-STEER [A]! >>>"
+                                : "^^^ TARGET SURGING BACK — PULL BACK [S]! ^^^");
+                        if (_demon.CounterSteering) steerPrompt = "WRESTLING BONUS 2.2x! REELING TARGET IN FAST!";
+                        GUI.color = _demon.CounterSteering ? new Color(0.25f, 1f, 0.55f, 1f) : new Color(1f, 0.78f, 0.25f, 0.95f);
+                        GUI.Label(new Rect(cx + 12f * scale, cy + 23f * scale, cw - 24f * scale, 20f * scale), steerPrompt, _label);
+                    }
+
+                    float barW = cw - 24f * scale, barH = 12f * scale;
+                    float barX = cx + 12f * scale, barY = cy + 46f * scale;
                     GUI.color = new Color(0.12f, 0.16f, 0.2f, 0.9f);
                     GUI.DrawTexture(new Rect(barX, barY, barW, barH), white);
-                    GUI.color = _demon.TetherActive ? new Color(0.25f, 1f, 0.55f, 0.95f) : new Color(1f, 0.45f, 0.12f, 0.85f);
+
+                    // Gold Active-Reload Compression Slam Zone [64% .. 89%]
+                    GUI.color = new Color(1f, 0.86f, 0.18f, 0.45f);
+                    GUI.DrawTexture(new Rect(barX + barW * 0.64f, barY - 2f * scale, barW * 0.25f, barH + 4f * scale), white);
+
+                    GUI.color = _demon.CounterSteering ? new Color(0.25f, 1f, 0.55f, 0.98f) : (_demon.TetherActive ? new Color(0.3f, 0.92f, 1f, 0.95f) : new Color(1f, 0.45f, 0.12f, 0.85f));
                     GUI.DrawTexture(new Rect(barX, barY, barW * Mathf.Clamp01(_demon.CaptureProgress), barH), white);
+
+                    if (_demon.CaptureProgress >= 0.64f && _demon.CaptureProgress <= 0.89f)
+                    {
+                        GUI.color = new Color(1f, 0.95f, 0.35f, 1f);
+                        GUI.Label(new Rect(barX + barW * 0.62f, barY - 18f * scale, 180f * scale, 18f * scale), "[G] SLAM!", _label);
+                    }
                 }
                 else if (Time.time < _demon.LastRestoredUntil)
                 {
                     float rAlpha = Mathf.Clamp01(_demon.LastRestoredUntil - Time.time);
-                    float cw = 480f * scale, ch = 44f * scale;
+                    float cw = 520f * scale, ch = 44f * scale;
                     float cx = Screen.width * 0.5f - cw * 0.5f, cy = Screen.height * 0.22f;
                     GUI.color = new Color(0.02f, 0.06f, 0.04f, 0.82f * rAlpha);
                     GUI.DrawTexture(new Rect(cx, cy, cw, ch), white);
                     GUI.color = new Color(0.25f, 1f, 0.55f, 0.98f * rAlpha);
                     GUI.DrawTexture(new Rect(cx, cy, cw, 3f * scale), white);
                     string msg = !string.IsNullOrEmpty(_demon.LastRestoredSense)
-                        ? ("GHOST CONTAINED — RESTORED " + _demon.LastRestoredSense + "!")
+                        ? ("GHOST CONTAINED — " + _demon.LastRestoredSense)
                         : "GHOST CONTAINED — ALL SENSES INTACT!";
                     GUI.Label(new Rect(cx + 14f * scale, cy + 10f * scale, cw - 24f * scale, 24f * scale), msg, _label);
                 }
