@@ -710,7 +710,7 @@ namespace BrokenCharactersLauncher
             LaunchGame();
         }
 
-        /// <summary>The left-edge GUIDE tab: opens the install/update/publish guide in its own window inside the launcher.</summary>
+        /// <summary>The GUIDE button (title bar, left of STEAM PLAY): opens the install/update/publish guide in its own window inside the launcher.</summary>
         private void GuideTab_Click(object sender, RoutedEventArgs e)
         {
             new GuideWindow { Owner = this }.ShowDialog();
