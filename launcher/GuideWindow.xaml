@@ -100,7 +100,7 @@
 
             <!-- scrollable guide content -->
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0">
-                <StackPanel>
+                <StackPanel Margin="0,0,22,0">
 
                     <TextBlock Style="{StaticResource SectionHeader}" Text="Installing (first time)" Margin="0,8,0,6" />
                     <TextBlock Style="{StaticResource StepTitle}" Text="1. Download the launcher" />
