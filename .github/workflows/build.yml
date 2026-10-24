@@ -139,7 +139,7 @@ jobs:
 
   launcher:
     # The Warframe-style launcher (launcher/): a self-contained Windows exe. A failure here never blocks the pack.
-    # Also built on dev (published only to the dev pre-release as Broken-Characters-Mod-dev.exe).
+    # Also built on dev, only to catch errors early. There is one launcher for everyone (published from main).
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -252,10 +252,6 @@ jobs:
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          name: Launcher
-      - uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
           name: Launcher-Preview
       - name: Publish as the dev pre-release
         env:
@@ -263,7 +259,6 @@ jobs:
         run: |
           mv Broken-Characters-Mod.zip Broken-Characters-Mod-dev.zip
           files="Broken-Characters-Mod-dev.zip"
-          if [ -f Broken-Characters-Mod.exe ]; then mv Broken-Characters-Mod.exe Broken-Characters-Mod-dev.exe; files="$files Broken-Characters-Mod-dev.exe"; fi
           for f in launcher-preview.png jukebox-preview.png; do [ -f "$f" ] && files="$files $f"; done
           notes="DEV build from commit ${GITHUB_SHA::7} (dev branch). Work in progress, for testing only - not the real pack."
           if gh release view dev -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then

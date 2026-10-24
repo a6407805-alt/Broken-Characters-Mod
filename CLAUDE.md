@@ -38,7 +38,7 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 ## Dev branch (work in progress, owner's fast test loop)
 - Unfinished changes go on the `dev` branch, never `main`. A push to `dev` builds the mods and the launcher (no
   installer test) and publishes `Broken-Characters-Mod-dev.zip` to the `dev` pre-release. Launchers/updaters read only
-  `latest`, so dev builds never reach friends. The dev launcher is `Broken-Characters-Mod-dev.exe` on the same pre-release. Merge `dev` into `main` when a change is finished.
+  `latest`, so dev builds never reach friends. There is ONE launcher for everyone (from main); never publish a separate dev launcher. Merge `dev` into `main` when a change is finished.
 - Fetch: `https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/dev/Broken-Characters-Mod-dev.zip`.
 - Hot reload: ScriptEngine is installed on the owner's PC (`BepInEx\plugins\ScriptEngine\`). A mod being
   hot-reloaded lives in `BepInEx\scripts\` (F6 reloads it) and must NOT also be in `plugins\`. Only code reloads;
