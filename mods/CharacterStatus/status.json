@@ -1,0 +1,114 @@
+{
+  "characters": [
+    {
+      "name": "CARMAX SPECIALIST",
+      "status": "yellow",
+      "match": [
+        "carmax"
+      ]
+    },
+    {
+      "name": "AUDI TECHNICIAN",
+      "status": "yellow",
+      "match": [
+        "auditechnician",
+        "auditech"
+      ]
+    },
+    {
+      "name": "BILLY BIGSUITS",
+      "status": "green",
+      "match": [
+        "billybigsuits",
+        "billy"
+      ]
+    },
+    {
+      "name": "WILBUR",
+      "status": "yellow",
+      "match": [
+        "wilbur"
+      ]
+    },
+    {
+      "name": "BROTHER",
+      "status": "green",
+      "match": [
+        "oatsbrother",
+        "brother"
+      ]
+    },
+    {
+      "name": "ASHWING DRAKE",
+      "status": "red",
+      "match": [
+        "ashwing"
+      ]
+    },
+    {
+      "name": "NIDUS",
+      "status": "yellow",
+      "match": [
+        "nidus"
+      ]
+    },
+    {
+      "name": "PHANTOM ASSASSIN",
+      "status": "yellow",
+      "match": [
+        "phantomassassin",
+        "phantom"
+      ]
+    },
+    {
+      "name": "INFESTED GENERAL",
+      "status": "yellow",
+      "match": [
+        "infestedgeneral"
+      ]
+    },
+    {
+      "name": "GRAVITOS",
+      "status": "red",
+      "match": [
+        "gravitos"
+      ]
+    },
+    {
+      "name": "CLAY REBEL",
+      "status": "green",
+      "match": [
+        "clayrebel",
+        "rebel"
+      ]
+    },
+    {
+      "name": "EMBERWARDEN",
+      "status": "yellow",
+      "match": [
+        "emberwarden"
+      ]
+    },
+    {
+      "name": "REAPER",
+      "status": "green",
+      "match": [
+        "reaper"
+      ]
+    },
+    {
+      "name": "THE DUELIST",
+      "status": "yellow",
+      "match": [
+        "duelist"
+      ]
+    },
+    {
+      "name": "THE SURVEYOR",
+      "status": "red",
+      "match": [
+        "surveyor"
+      ]
+    }
+  ]
+}

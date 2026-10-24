@@ -218,6 +218,15 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Status tag: green = complete, yellow = in progress, red = early / untested -->
+                        <Border Visibility="{Binding StatusVisibility}" Background="{Binding StatusBrush}" CornerRadius="3"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,14,22,0" Padding="7,1">
+                            <Border.RenderTransform>
+                                <SkewTransform AngleX="12" />
+                            </Border.RenderTransform>
+                            <TextBlock Text="{Binding StatusText}" Foreground="#101010" FontSize="10" FontWeight="Black" />
+                        </Border>
+
                         <!-- NEW badge for the most recent additions -->
                         <Border Visibility="{Binding NewBadgeVisibility}" Background="{StaticResource Accent}" CornerRadius="3"
                                 HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14,14,0,0" Padding="7,1">
