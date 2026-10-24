@@ -33,37 +33,92 @@ namespace BrokenCharactersLauncher
             return Regex.Replace(name, @"[^A-Za-z0-9_.\-]", "");
         }
 
-        /// <summary>Copies the picked files/zips/folders into a fresh temp folder as mods/&lt;modName&gt;/. Returns that folder.</summary>
-        public static string Stage(IReadOnlyList<string> picked, string modName)
+        /// <summary>What Stage made: the folder to scan, and (for a whole plugins folder) which mods went in or were skipped.</summary>
+        public sealed class Result
+        {
+            public string Folder { get; init; } = "";
+            public List<string> Included { get; } = new List<string>();
+            public List<string> Skipped { get; } = new List<string>();
+            public bool Multi => Included.Count > 1 || Skipped.Count > 0;
+        }
+
+        /// <summary>
+        /// Copies the picked files/zips/folders into a fresh temp folder shaped like the repo (mods/&lt;Mod&gt;/...).
+        /// One mod: everything goes under <paramref name="modName"/>. A whole plugins/BepInEx folder (many mods): each
+        /// mod folder that is already in the pack (and that this person may update, <paramref name="knownMods"/>) goes
+        /// under its own name; everything else (R2API, other people's mods...) is skipped.
+        /// </summary>
+        public static Result Stage(IReadOnlyList<string> picked, string modName, IReadOnlyCollection<string> knownMods)
         {
             try { if (Directory.Exists(StageRoot)) Directory.Delete(StageRoot, true); }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { } // an old copy still open: harmless
 
             string root = Path.Combine(StageRoot, Guid.NewGuid().ToString("N"));
-            string dest = Path.Combine(root, "mods", modName);
-            Directory.CreateDirectory(dest);
+            var result = new Result { Folder = root };
+            Directory.CreateDirectory(Path.Combine(root, "mods"));
 
             foreach (string p in picked)
             {
                 string ext = Path.GetExtension(p).ToLowerInvariant();
-                if (Directory.Exists(p)) CopyTree(ModRoot(p), dest);
+                string? source = null;
+                if (Directory.Exists(p)) source = ModRoot(p);
                 else if (ext == ".zip")
                 {
                     string unzip = Path.Combine(root, "unzip-" + Guid.NewGuid().ToString("N"));
                     ZipFile.ExtractToDirectory(p, unzip); // refuses entries that point outside the folder
-                    CopyTree(ModRoot(unzip), dest);
+                    source = ModRoot(unzip);
                 }
                 else if (OtherArchives.Contains(ext))
                     throw new InvalidOperationException(Path.GetFileName(p) + " is a " + ext + " file. Right-click it and Extract (7-Zip or WinRAR), then pick what came out.");
-                else File.Copy(p, Path.Combine(dest, Path.GetFileName(p)), true);
+
+                if (source != null && IsManyMods(source)) StageMany(source, root, knownMods, result);
+                else
+                {
+                    if (!IsValidName(modName)) throw new InvalidOperationException("Type the mod name first (letters, numbers, - _ . only).");
+                    string dest = Path.Combine(root, "mods", modName);
+                    Directory.CreateDirectory(dest);
+                    if (source != null) CopyTree(source, dest);
+                    else File.Copy(p, Path.Combine(dest, Path.GetFileName(p)), true);
+                    if (!result.Included.Contains(modName, StringComparer.OrdinalIgnoreCase)) result.Included.Add(modName);
+                }
             }
 
-            if (!Directory.EnumerateFiles(dest, "*", SearchOption.AllDirectories).Any())
-                throw new InvalidOperationException("There were no files in what you picked.");
-            return root;
+            if (!Directory.EnumerateFiles(Path.Combine(root, "mods"), "*", SearchOption.AllDirectories).Any())
+                throw new InvalidOperationException(result.Skipped.Count > 0
+                    ? "None of those mods are ones you can update in the pack (skipped: " + Short(result.Skipped) + ")."
+                    : "There were no files in what you picked.");
+            return result;
         }
 
-        /// <summary>Digs past wrapper folders ("MyMod-1.0\", "BepInEx\plugins\MyMod\") to the mod's own files.</summary>
+        /// <summary>A folder holding several mods (like BepInEx\plugins): more than one subfolder with a dll in it.</summary>
+        private static bool IsManyMods(string dir) =>
+            Directory.GetDirectories(dir).Count(d => Directory.EnumerateFiles(d, "*.dll", SearchOption.AllDirectories).Any()) > 1;
+
+        private static void StageMany(string dir, string root, IReadOnlyCollection<string> knownMods, Result result)
+        {
+            string? Known(string name) => knownMods.FirstOrDefault(m => m.Equals(name, StringComparison.OrdinalIgnoreCase));
+            foreach (string sub in Directory.GetDirectories(dir))
+            {
+                string name = Path.GetFileName(sub);
+                string? mod = Known(name);
+                if (mod == null) { result.Skipped.Add(name); continue; }
+                CopyTree(sub, Path.Combine(root, "mods", mod));
+                if (!result.Included.Contains(mod)) result.Included.Add(mod);
+            }
+            foreach (string file in Directory.GetFiles(dir, "*.dll")) // loose dlls right in plugins\
+            {
+                string? mod = Known(Path.GetFileNameWithoutExtension(file));
+                if (mod == null) { result.Skipped.Add(Path.GetFileName(file)); continue; }
+                Directory.CreateDirectory(Path.Combine(root, "mods", mod));
+                File.Copy(file, Path.Combine(root, "mods", mod, Path.GetFileName(file)), true);
+                if (!result.Included.Contains(mod)) result.Included.Add(mod);
+            }
+        }
+
+        public static string Short(List<string> names) => string.Join(", ", names.Take(6)) + (names.Count > 6 ? " and " + (names.Count - 6) + " more" : "");
+
+        /// <summary>Digs past wrapper folders ("MyMod-1.0\", "BepInEx\plugins\MyMod\") to the mod's own files, or to the
+        /// plugins folder itself when it holds many mods.</summary>
         private static string ModRoot(string dir)
         {
             for (int i = 0; i < 8; i++)
@@ -73,14 +128,6 @@ namespace BrokenCharactersLauncher
                 string[] files = Directory.GetFiles(dir);
                 string[] dirs = Directory.GetDirectories(dir);
                 if (files.Length == 0 && dirs.Length == 1) { dir = dirs[0]; continue; }
-                if (files.Length == 0 && dirs.Length > 1)
-                {
-                    var withDlls = dirs.Where(d => Directory.EnumerateFiles(d, "*.dll", SearchOption.AllDirectories).Any())
-                                       .Select(Path.GetFileName).ToList();
-                    if (withDlls.Count > 1)
-                        throw new InvalidOperationException("That has " + withDlls.Count + " mods inside (" + string.Join(", ", withDlls.Take(5)) +
-                                                            (withDlls.Count > 5 ? ", ..." : "") + "). Upload one mod at a time: pick just that mod's folder or files.");
-                }
                 break;
             }
             return dir;
