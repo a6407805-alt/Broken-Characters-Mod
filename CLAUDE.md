@@ -61,8 +61,9 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
   unlocked by the guide's password box or the EXTRAS box. Creator keys have NO passwords (owner removed them).
 
 ## Jukebox (src/Jukebox + launcher JUKEBOX window)
-- Songs are Suno links in `launcher/jukebox.json` on main (no audio in the repo). The launcher edits it with the
-  creator key (`Publisher.UpdateTextFileAsync`, commits with `[skip ci]`); players without a key get a local list.
+- Every song is shared (no only-me). ADD downloads the Suno mp3 once and uploads it to the `jukebox` release; dropped
+  MP3s are uploaded too. `launcher/jukebox.json` lists them (`audio` = release URL) plus `removed` ids (Remove = gone
+  for everyone, every PC deletes its copy). Edited with the creator key, `[skip ci]`. Only PCs with the extras key sync.
 - Launcher downloads `cdn1.suno.ai/<id>.mp3` to `%APPDATA%\BrokenCharacters\Jukebox\` and writes `playlist.json`
   (`JukeboxLibrary.cs`). The mod plays mp3 directly with winmm `type mpegvideo` (`MciPlayer.cs`), volume via setaudio.
 - Votes: host picks 3, players press 7/8/9, host tallies (R2API.Networking messages in `SongLibrary.cs`), each PC plays
