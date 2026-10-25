@@ -406,67 +406,11 @@ namespace Surveyor
             if (!Active) return;
             float diff = Run.instance ? Mathf.Max(1f, Run.instance.difficultyCoefficient) : 1f;
             TakeDamage(320f * diff, aim.origin);
-
-            if (TrapActive && Near(aim, 150f))
-            {
-                // When a Ghost-Trap is open, a Lance hit reels the Demon straight toward the trap and adds capture progress!
-                Vector3 toTrap = TrapPos - Pos;
-                toTrap.y = 0f;
-                if (toTrap.sqrMagnitude > 0.01f) Pos += toTrap.normalized * Mathf.Min(12f, toTrap.magnitude * 0.65f);
-                _stagger = Mathf.Max(_stagger, SvrPlugin.LanceStagger.Value);
-                State = Mode.Stagger;
-                CaptureProgress = Mathf.Clamp01(CaptureProgress + 0.35f);
-                return;
-            }
-            if (Near(aim, 150f)) Knock(aim.origin, 10f, SvrPlugin.LanceStagger.Value);
+            if (Near(aim, 150f)) Knock(aim.origin, 10f, SvrPlugin.MinigunStagger.Value);
         }
 
         public void DeployTrap(CharacterBody body, InputBankTest input)
         {
-            // Active-Reload Compression Slam: if a trap is already active and CaptureProgress is in the Gold Zone [0.64 .. 0.88],
-            // pressing [G] slams the Spectral Compression Press shut immediately for bonus healing & gold!
-            if (TrapActive && CaptureProgress >= 0.64f && CaptureProgress <= 0.89f && (Active || (LockedEnemy && LockedEnemy.alive)))
-            {
-                if (body.healthComponent) body.healthComponent.HealFraction(0.35f, default);
-                if (body.master) body.master.GiveMoney((uint)Mathf.RoundToInt(45f * (Run.instance ? Run.instance.difficultyCoefficient : 1f)));
-                CaptureDemon(body, true);
-                return;
-            }
-
-            Vector3 fwd = input ? input.aimDirection : body.gameObject.transform.forward;
-            fwd.y = 0f;
-            if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward;
-            fwd.Normalize();
-            Vector3 p = body.footPosition + fwd * 8.5f;
-            p.y = GroundY(p, body.footPosition.y);
-            TrapPos = p;
-            TrapActive = true;
-            TrapUntil = Time.time + SvrPlugin.TrapDuration.Value;
-            TrapReadyAt = Time.time + SvrPlugin.TrapCooldown.Value;
-            CaptureProgress = 0f;
-            TetherActive = false;
-            LockedEnemy = null;
-            PullDir = Random.value < 0.5f ? -1 : 1;
-            PullSwitchTimer = 1.1f;
-            Util.PlaySound("Play_engi_M2_throw", body.gameObject);
-
-            // If the Demon isn't currently on the field (and we have a stolen sense to recover, or want to bust it),
-            // the Ghost-Trap's ectoplasmic lure immediately draws the Demon out nearby!
-            if (!Active)
-            {
-                float a = Random.value * 6.28f;
-                Vector3 sp = p + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * Random.Range(16f, 24f);
-                sp.y = GroundY(sp, body.footPosition.y);
-                Pos = sp;
-                _lastPos = sp;
-                State = Mode.Stalk;
-                _modeTimer = 14f;
-                _chain = 0f;
-                _center = Pos + Vector3.up * 1.4f;
-                float diff = Run.instance ? Mathf.Max(1f, Run.instance.difficultyCoefficient) : 1f;
-                MaxHp = 1000f * diff;
-                CurrentHp = MaxHp;
-            }
         }
 
         public bool RedeployMinion(CharacterBody body)
@@ -663,67 +607,13 @@ namespace Surveyor
 
         public void Tick(float dt, CharacterBody body, InputBankTest input)
         {
-            if (TrapActive && Time.time >= TrapUntil)
-            {
-                TrapActive = false;
-                TetherActive = false;
-                LockedEnemy = null;
-                CaptureProgress = 0f;
-            }
-
-            // Friendly Spectral / Holographic Guardian minion (deployed with [H] for 30s)
-            if (MinionActive)
-            {
-                if (Time.time >= MinionUntil)
-                {
-                    MinionActive = false;
-                }
-                else
-                {
-                    float orbitAng = Time.time * 1.4f;
-                    Vector3 goal = body.corePosition + new Vector3(Mathf.Cos(orbitAng) * 3.4f, 1.4f + Mathf.Sin(Time.time * 3f) * 0.25f, Mathf.Sin(orbitAng) * 3.4f);
-                    MinionPos = Vector3.Lerp(MinionPos, goal, 1f - Mathf.Exp(-6f * dt));
-                    MinionFireTimer -= dt;
-                    if (MinionFireTimer <= 0f)
-                    {
-                        MinionFireTimer = 0.65f;
-                        try
-                        {
-                            SphereSearch ss = new SphereSearch { origin = MinionPos, radius = 38f, mask = LayerIndex.entityPrecise.mask };
-                            ss.RefreshCandidates();
-                            ss.FilterCandidatesByHurtBoxTeam(TeamMask.GetEnemyTeams(body.teamComponent.teamIndex));
-                            ss.FilterCandidatesByDistinctHurtBoxEntities();
-                            foreach (HurtBox hb in ss.GetHurtBoxes())
-                            {
-                                if (hb && hb.healthComponent && hb.healthComponent.alive)
-                                {
-                                    RoR2.Orbs.LightningOrb orb = new RoR2.Orbs.LightningOrb
-                                    {
-                                        origin = MinionPos + Vector3.up * 0.8f,
-                                        target = hb,
-                                        attacker = body.gameObject,
-                                        damageValue = body.damage * 2.8f,
-                                        isCrit = body.RollCrit(),
-                                        teamIndex = body.teamComponent.teamIndex,
-                                        lightningType = RoR2.Orbs.LightningOrb.LightningType.Ukulele,
-                                        procCoefficient = 0.7f
-                                    };
-                                    RoR2.Orbs.OrbManager.instance.AddOrb(orb);
-                                    break;
-                                }
-                            }
-                        }
-                        catch { }
-                    }
-                }
-            }
-
-            // Singularity Trap Core upgrade: deployed Ghost-Trap pulls nearby enemies and flying pests inward
-            if (TrapActive && SvrUpgrades.Has(SvrUpgrades.SINGULARITY_CORE))
+            // Singularity Vortex upgrade: while vacuuming, pulls nearby enemies and flying pests inward
+            if (SvrUpgrades.Has(SvrUpgrades.SINGULARITY_CORE) && input != null && input.skill2.down)
             {
                 try
                 {
-                    SphereSearch ss = new SphereSearch { origin = TrapPos, radius = 15f, mask = LayerIndex.entityPrecise.mask };
+                    Vector3 vacCenter = body.corePosition + body.gameObject.transform.forward * 4.5f;
+                    SphereSearch ss = new SphereSearch { origin = vacCenter, radius = 16f, mask = LayerIndex.entityPrecise.mask };
                     ss.RefreshCandidates();
                     ss.FilterCandidatesByHurtBoxTeam(TeamMask.GetEnemyTeams(body.teamComponent.teamIndex));
                     ss.FilterCandidatesByDistinctHurtBoxEntities();
@@ -731,11 +621,11 @@ namespace Surveyor
                     {
                         CharacterBody eb = hb && hb.healthComponent ? hb.healthComponent.body : null;
                         if (!eb || eb == body) continue;
-                        Vector3 pull = (TrapPos + Vector3.up * 0.8f) - eb.corePosition;
-                        if (pull.sqrMagnitude > 1f)
+                        Vector3 pull = vacCenter - eb.corePosition;
+                        if (pull.sqrMagnitude > 0.5f)
                         {
-                            if (eb.characterMotor) eb.characterMotor.rootMotion += pull.normalized * (11f * dt);
-                            else if (eb.rigidbody) eb.rigidbody.velocity = Vector3.Lerp(eb.rigidbody.velocity, pull.normalized * 10f, 5f * dt);
+                            if (eb.characterMotor) eb.characterMotor.rootMotion += pull.normalized * (14f * dt);
+                            else if (eb.rigidbody) eb.rigidbody.velocity = Vector3.Lerp(eb.rigidbody.velocity, pull.normalized * 12f, 5f * dt);
                         }
                     }
                 }
@@ -767,126 +657,53 @@ namespace Surveyor
                 return;
             }
 
-            // Ghostbusters Proton-Tether & Luigi's Mansion Vacuum Trap + WASD Wrestling Match logic:
+            // Direct Heavy Vacuum (M2) capture of the Shimmer Demon (no floor traps):
             TetherActive = false;
             CounterSteering = false;
-            float trapDist = TrapActive ? Vector3.Distance(new Vector3(Pos.x, TrapPos.y, Pos.z), TrapPos) : 999f;
             if (input != null)
             {
                 Ray aim = new Ray(input.aimOrigin, input.aimDirection);
                 Vector3 toDemon = _center - aim.origin;
                 float dDemon = toDemon.magnitude;
                 float angle = dDemon > 0.1f ? Vector3.Angle(aim.direction, toDemon) : 0f;
-                bool firing = input.skill1.down || input.skill2.down;
-                if (firing && dDemon < 65f && angle < 25f)
-                {
-                    StrainDecay = 1.6f;
-                    if (Random.value < dt * 4.5f && StrainStacks < 10) StrainStacks++;
-                    if (TrapActive)
-                    {
-                        TetherActive = true;
-                        LockedEnemy = null;
-                        State = Mode.Stagger;
-                        _stagger = Mathf.Max(_stagger, 0.45f);
-                        if (SvrUpgrades.Has(SvrUpgrades.AETHER_LEECH) && body.healthComponent)
-                            body.healthComponent.AddBarrier(body.maxBarrier * 0.045f * dt);
-                    }
-                }
-                else if (TrapActive && firing)
-                {
-                    // Check if aiming at a weakened Elite / Boss near the trap
-                    try
-                    {
-                        BullseyeSearch bs = new BullseyeSearch
-                        {
-                            searchOrigin = aim.origin,
-                            searchDirection = aim.direction,
-                            maxDistanceFilter = 55f,
-                            maxAngleFilter = 22f,
-                            teamMaskFilter = TeamMask.GetEnemyTeams(body.teamComponent.teamIndex),
-                            filterByLoS = false,
-                            sortMode = BullseyeSearch.SortMode.Angle
-                        };
-                        bs.RefreshCandidates();
-                        foreach (HurtBox hb in bs.GetResults())
-                        {
-                            HealthComponent hc = hb ? hb.healthComponent : null;
-                            if (hc && hc.alive && hc.body && (hc.body.isElite || hc.body.isBoss || hc.body.isChampion) && hc.combinedHealthFraction < 0.65f)
-                            {
-                                LockedEnemy = hc;
-                                TetherActive = true;
-                                StrainDecay = 1.6f;
-                                if (Random.value < dt * 4.5f && StrainStacks < 10) StrainStacks++;
-                                break;
-                            }
-                        }
-                    }
-                    catch { }
-                }
-            }
+                bool vacuuming = input.skill2.down;
 
-            if (StrainDecay > 0f)
-            {
-                StrainDecay -= dt;
-                if (StrainDecay <= 0f) StrainStacks = 0;
-            }
-
-            // Wrestling Match: target bucks Left (-1), Right (+1), or Back (0); player counter-steers with WASD!
-            if (TrapActive && TetherActive)
-            {
-                PullSwitchTimer -= dt;
-                if (PullSwitchTimer <= 0f)
+                if (vacuuming && dDemon < 55f && angle < 32f)
                 {
-                    PullSwitchTimer = Random.Range(0.95f, 1.45f);
-                    int r = Random.Range(0, 3);
-                    PullDir = r == 0 ? -1 : (r == 1 ? 1 : 0);
-                }
-                if (PullDir < 0) CounterSteering = Input.GetKey(KeyCode.D);
-                else if (PullDir > 0) CounterSteering = Input.GetKey(KeyCode.A);
-                else CounterSteering = Input.GetKey(KeyCode.S);
-            }
+                    TetherActive = true;
+                    State = Mode.Stagger;
+                    _stagger = Mathf.Max(_stagger, 0.45f);
 
-            if (TrapActive && (TetherActive || trapDist < 9.5f))
-            {
-                Vector3 targetPos = (LockedEnemy && LockedEnemy.alive && LockedEnemy.body) ? LockedEnemy.body.footPosition : Pos;
-                Vector3 toTrap = TrapPos - targetPos;
-                Vector3 flatTrap = new Vector3(toTrap.x, 0f, toTrap.z);
-                float td = flatTrap.magnitude;
+                    if (SvrUpgrades.Has(SvrUpgrades.AETHER_LEECH) && body.healthComponent)
+                        body.healthComponent.AddBarrier(body.maxBarrier * 0.045f * dt);
 
-                // Spiral vortex pull into the trap (boosted by Containment Strain stacks and WASD Counter-Steering)
-                float strainMult = 1f + StrainStacks * 0.06f;
-                float steerMult = CounterSteering ? 1.85f : 1f;
-                Vector3 pullDir = td > 0.05f ? flatTrap / td : Vector3.zero;
-                Vector3 swirl = new Vector3(-pullDir.z, 0f, pullDir.x);
-                float pullSpeed = ((TetherActive ? 13.5f : 5.5f) + CaptureProgress * 7f) * strainMult * (CounterSteering ? 1.35f : 1f);
+                    // Pull Demon directly toward the Surveyor's vacuum canister
+                    Vector3 pullDir = (body.corePosition - Pos);
+                    float pDist = pullDir.magnitude;
+                    if (pDist > 0.1f) pullDir.Normalize();
 
-                if (LockedEnemy && LockedEnemy.alive && LockedEnemy.body)
-                {
-                    if (LockedEnemy.body.characterMotor)
-                        LockedEnemy.body.characterMotor.rootMotion += (pullDir + swirl * 0.25f) * (pullSpeed * 0.8f * dt);
-                }
-                else
-                {
-                    Pos += (pullDir + swirl * (TetherActive ? 0.38f : 0.2f)) * pullSpeed * dt;
-                    Yaw += (TetherActive ? 540f : 220f) * dt;
-                    Pos.y = Mathf.MoveTowards(Pos.y, TrapPos.y + (1f - CaptureProgress) * 0.6f, 12f * dt);
+                    Vector3 swirl = new Vector3(-pullDir.z, 0f, pullDir.x);
+                    float pullSpeed = 14f + CaptureProgress * 8f;
+                    Pos += (pullDir + swirl * 0.22f) * (pullSpeed * dt);
+                    Yaw += 480f * dt;
+                    Pos.y = Mathf.MoveTowards(Pos.y, body.corePosition.y, 10f * dt);
                     _center = Pos + Vector3.up * Mathf.Lerp(1.4f, 0.35f, CaptureProgress);
                     Animate(dt);
-                }
 
-                float pullDur = Mathf.Max(0.8f, SvrPlugin.TrapPullSeconds.Value);
-                float rate = (TetherActive ? 1f : 0.35f) * (td < 4.5f ? 1.35f : 0.85f) * strainMult * steerMult / pullDur;
-                CaptureProgress = Mathf.Clamp01(CaptureProgress + rate * dt);
+                    float pullDur = 2.2f;
+                    CaptureProgress = Mathf.Clamp01(CaptureProgress + (dt / pullDur));
 
-                if (CaptureProgress >= 1f || (td < 1.35f && CaptureProgress > 0.65f))
-                {
-                    CaptureDemon(body, false);
+                    if (CaptureProgress >= 1f || pDist < 2.5f)
+                    {
+                        CaptureDemon(body, false);
+                    }
+                    return;
                 }
-                return;
             }
-            else if (TrapActive && CaptureProgress > 0f)
+
+            if (CaptureProgress > 0f)
             {
-                CaptureProgress = Mathf.Max(0f, CaptureProgress - dt * 0.25f);
+                CaptureProgress = Mathf.Max(0f, CaptureProgress - dt * 0.4f);
             }
 
             Vector3 to = pp - Pos;
@@ -2780,13 +2597,6 @@ namespace Surveyor
 
         public void LanceShot(Ray aim)
         {
-            RaycastHit hit;
-            float len = 150f;
-            if (Physics.Raycast(aim, out hit, 150f, LayerIndex.world.mask, QueryTriggerInteraction.Ignore)) len = hit.distance;
-            for (float d = 3f; d < len; d += 3.5f)
-                AddDot(aim.origin + aim.direction * d + Random.insideUnitSphere * 0.25f, new Color(1f, 0.9f, 0.2f, 1f), 3f, true);
-            if (len < 150f) for (int i = 0; i < 24; i++) AddDot(hit.point + Random.insideUnitSphere * 1.2f, new Color(1f, 0.5f, 0.1f, 1f), 3.5f, true);
-            _demon.LanceHit(aim);
         }
 
         public void Pulse(Vector3 at, float radius, CharacterBody owner)
@@ -3133,7 +2943,7 @@ namespace Surveyor
             if (!_techSpawned && Time.timeSinceLevelLoad > 2.5f) SpawnFieldTechCaches();
 
             // Tapping Q sequentially rolls through the 4 modes (Bio-Scan -> Salvage -> Topography -> Peripheral Flood) with a snappy audio cue
-            KeyCode next, peek, trapKey, repKey, minKey, cashKey;
+            KeyCode next, peek, repKey, minKey, cashKey;
             int n0 = OdNames.Length;
             if (TryKey(SvrPlugin.ScanNextKey.Value, out next) && Input.GetKeyDown(next))
             {
@@ -3179,21 +2989,6 @@ namespace Surveyor
                 else
                 {
                     Util.PlaySound("Play_UI_insufficient_funds", gameObject);
-                }
-            }
-            // Ghost-Trap [G]: throws out a Ghostbusters / Luigi's Mansion containment trap on the floor ahead (or triggers Active-Reload Compression Slam).
-            if (TryKey(SvrPlugin.TrapKey.Value, out trapKey) && Input.GetKeyDown(trapKey) && (Time.time >= _demon.TrapReadyAt || _demon.TrapActive))
-            {
-                _demon.DeployTrap(_body, _input);
-                if (_demon.TrapActive)
-                {
-                    _revealUntil = Mathf.Max(_revealUntil, Time.time + SvrPlugin.TrapDuration.Value);
-                    for (int i = 0; i < 120; i++)
-                    {
-                        float ang = (i / 120f) * 6.28318f;
-                        Vector3 rp = _demon.TrapPos + new Vector3(Mathf.Cos(ang) * 1.4f, 0.1f + Random.value * 0.4f, Mathf.Sin(ang) * 1.4f);
-                        AddDot(rp, (i & 1) == 0 ? new Color(1f, 0.88f, 0.12f, 1f) : new Color(0.2f, 1f, 0.55f, 1f), 1.8f, true);
-                    }
                 }
             }
             // Reverse-Flow Repulsor ("Blow" Function) [V]: blasts away swarms & reflects projectiles
@@ -3254,7 +3049,7 @@ namespace Surveyor
                 {
                     Vector3 d = Random.onUnitSphere;
                     d.y = Mathf.Abs(d.y);
-                    AddDot(_demon.TrapPos + d * Random.Range(0.2f, 4.5f), (i & 1) == 0 ? new Color(0.25f, 1f, 0.55f, 1f) : new Color(0.3f, 0.95f, 1f, 1f), 2.6f, true);
+                    AddDot(_body.corePosition + d * Random.Range(0.2f, 4.5f), (i & 1) == 0 ? new Color(0.25f, 1f, 0.55f, 1f) : new Color(0.3f, 0.95f, 1f, 1f), 2.6f, true);
                 }
             }
 
@@ -3269,32 +3064,6 @@ namespace Surveyor
                     float ang = Time.time * 12f + i * 0.45f;
                     Color mc = (i & 1) == 0 ? new Color(0.25f, 1f, 0.72f, 1f) : new Color(0.35f, 0.9f, 1f, 1f);
                     AddDot(mp + new Vector3(Mathf.Cos(ang) * r, h, Mathf.Sin(ang) * r), mc, 0.22f, true);
-                }
-            }
-
-            // Paint the active Ghost-Trap box & upward containment cone in the 3D point cloud
-            if (_demon.TrapActive && _peekK < 0.65f)
-            {
-                Vector3 tp = _demon.TrapPos;
-                // Hazard-striped Ghost-Trap casing + open angled doors on the floor
-                for (int i = 0; i < 6; i++)
-                {
-                    float bx = Random.Range(-0.55f, 0.55f);
-                    float bz = Random.Range(-0.35f, 0.35f);
-                    bool yellow = (((int)((bx + 1f) * 6f) + (int)((bz + 1f) * 6f)) & 1) == 0;
-                    AddDot(tp + new Vector3(bx, 0.12f, bz), yellow ? new Color(1f, 0.86f, 0.1f, 1f) : new Color(1f, 0.25f, 0.1f, 1f), 0.35f, true);
-                }
-                // Upward emerald/cyan Ghostbusters containment cone + spiraling Poltergust suction rings
-                for (int i = 0; i < 8; i++)
-                {
-                    float h = Random.Range(0.15f, 4.8f);
-                    float r = 0.25f + h * 0.38f;
-                    float ang = Time.time * 9f + h * 2.2f + i * 0.785f;
-                    Vector3 cp = tp + new Vector3(Mathf.Cos(ang) * r, h, Mathf.Sin(ang) * r);
-                    Color cc = _demon.TetherActive
-                        ? ((i & 1) == 0 ? new Color(0.2f, 1f, 0.45f, 1f) : new Color(1f, 0.45f, 0.12f, 1f))
-                        : new Color(0.25f, 1f, 0.78f, 0.9f);
-                    AddDot(cp, cc, 0.28f, true);
                 }
             }
 
@@ -4753,26 +4522,23 @@ namespace Surveyor
             if (dotAlpha <= 0.005f) return;
             Texture2D white = Texture2D.whiteTexture;
 
-            // Draw the Ghost-Trap HUD marker and Proton/Poltergust capture streams when capturing or trap active
-            if (_demon.TrapActive || _demon.TetherActive || _demon.CaptureProgress > 0.02f)
+            // Draw the vacuum capture HUD marker when capturing demon
+            if (_demon.TetherActive || _demon.CaptureProgress > 0.02f)
             {
-                Vector3 markerPos = _demon.TrapActive ? _demon.TrapPos + Vector3.up * 0.35f : _demon.TetherTargetPos + Vector3.up * 0.35f;
+                Vector3 markerPos = _demon.TetherTargetPos + Vector3.up * 0.35f;
                 Vector3 tsp = cam.WorldToScreenPoint(markerPos);
                 if (tsp.z > 0.35f)
                 {
                     float tx = tsp.x, ty = Screen.height - tsp.y;
                     float rad = 11f * scale;
-                    GUI.color = new Color(1f, 0.88f, 0.15f, 0.92f * dotAlpha);
+                    GUI.color = new Color(0.25f, 1f, 0.55f, 0.95f * dotAlpha);
                     DrawScreenLine(new Vector2(tx - rad, ty), new Vector2(tx, ty - rad), 2f * scale, white);
                     DrawScreenLine(new Vector2(tx, ty - rad), new Vector2(tx + rad, ty), 2f * scale, white);
                     DrawScreenLine(new Vector2(tx + rad, ty), new Vector2(tx, ty + rad), 2f * scale, white);
                     DrawScreenLine(new Vector2(tx, ty + rad), new Vector2(tx - rad, ty), 2f * scale, white);
                     if (_label != null)
                     {
-                        string tTxt = _demon.TetherActive || _demon.CaptureProgress > 0.02f
-                            ? "VACUUMING DEMON " + Mathf.RoundToInt(_demon.CaptureProgress * 100f) + "%"
-                            : "GHOST TRAP [OPEN]";
-                        GUI.color = _demon.TetherActive ? new Color(0.25f, 1f, 0.55f, 0.95f * dotAlpha) : new Color(1f, 0.9f, 0.2f, 0.9f * dotAlpha);
+                        string tTxt = "VACUUMING DEMON " + Mathf.RoundToInt(_demon.CaptureProgress * 100f) + "%";
                         GUI.Label(new Rect(tx + rad + 6f * scale, ty - 10f * scale, 220f * scale, 20f * scale), tTxt, _label);
                     }
                 }
@@ -4793,7 +4559,7 @@ namespace Surveyor
 
             bool hasLockedEnemy = _demon.LockedEnemy && _demon.LockedEnemy.alive && _demon.LockedEnemy.body;
             if (!_demon.Active && !hasLockedEnemy) return;
-            bool revealed = Time.time < _revealUntil || _demon.TrapActive || _demon.TetherActive || _demon.CaptureProgress > 0.02f;
+            bool revealed = Time.time < _revealUntil || _demon.TetherActive || _demon.CaptureProgress > 0.02f;
             bool blocked = !revealed && _demon.Active && Physics.Linecast(cam.transform.position, _demon.Center, LayerIndex.world.mask, QueryTriggerInteraction.Ignore);
             float vis = (blocked ? 0.18f : 0.95f) * dotAlpha;
             if (_demon.Active) _demon.FillWorld(_demonPoints, Time.time);
@@ -4804,7 +4570,7 @@ namespace Surveyor
             {
                 Vector3 muzzleWorld = _body.corePosition + cam.transform.right * 0.48f - cam.transform.up * 0.18f + cam.transform.forward * 0.55f;
                 Vector3 demonCenter = _demon.TetherTargetPos;
-                Vector3 trapWorld = _demon.TrapActive ? _demon.TrapPos + Vector3.up * 0.25f : muzzleWorld;
+                Vector3 trapWorld = muzzleWorld;
 
                 // 1) Ghostbusters Proton Stream: crackling orange/red core beam + spiraling electric blue helix from gun to Demon
                 Vector3 prevCore = Vector3.zero, prevHelix = Vector3.zero;
@@ -5007,7 +4773,7 @@ namespace Surveyor
             // Tactical LiDAR telemetry positioned cleanly at Center-Left (safely below RoR2 money & objectives, above health/chat)
             float sx = 20f * scale, sy = 240f * scale;
             float panelW = 460f * scale;
-            float panelH = (SvrUpgrades.UnlockedCount > 0 ? 116f : 96f) * scale;
+            float panelH = (SvrUpgrades.UnlockedCount > 0 ? 144f : 120f) * scale;
 
             // Semi-transparent tactical dark glass backdrop & sleek accented corner borders (100% readable over any stage)
             GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.72f);
@@ -5018,7 +4784,7 @@ namespace Surveyor
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy + panelH + 6f * scale, 24f * scale, 1.5f * scale), white);
 
             // Row 1: Senses status strip + Containment Cell Spirit Charge counter
-            float x = sx, y = sy;
+            float x = sx, y = sy + 4f * scale;
             DrawSense("SEE", SvrSenses.Sight, ref x, y, scale);
             DrawSense("HEAR", SvrSenses.Hearing, ref x, y, scale);
             DrawSense("TOUCH", SvrSenses.Touch, ref x, y, scale);
@@ -5030,27 +4796,25 @@ namespace Surveyor
                     : "CELL: " + _demon.StoredSpirits + "/" + _demon.MaxStoredSpirits + " [H/B]";
                 float cw = (cellTxt.Length * 7.5f + 12f) * scale;
                 GUI.color = new Color(0.02f, 0.06f, 0.08f, 0.75f);
-                GUI.DrawTexture(new Rect(x, y, cw, 20f * scale), white);
+                GUI.DrawTexture(new Rect(x, y, cw, 22f * scale), white);
                 GUI.color = new Color(0.28f, 1f, 0.85f, 0.96f);
-                GUI.DrawTexture(new Rect(x, y, 3f * scale, 20f * scale), white);
-                GUI.Label(new Rect(x + 5f * scale, y, cw, 20f * scale), cellTxt, _label);
+                GUI.DrawTexture(new Rect(x, y, 3f * scale, 22f * scale), white);
+                GUI.Label(new Rect(x + 5f * scale, y, cw, 22f * scale), cellTxt, _label);
             }
 
-            // Row 2: Scan mode readout
+            // Row 2: Scan mode readout (generous 10px vertical margin below senses)
             int mIdx = OdMode % OdNames.Length;
             float sinceSwitch = Time.time - _modeFlash;
             bool flash = sinceSwitch < 0.75f;
-            float my = sy + 24f * scale;
+            float my = sy + 34f * scale;
             Color accent = ModeAccent(mIdx);
             Color modeCol = flash ? new Color(1f, 1f, 1f, 1f) : (OverdriveOn ? new Color(1f, 0.62f, 0.2f, 0.95f) : accent);
             DrawModeIcon(new Vector2(sx + 8f * scale, my + 8f * scale), 7f * scale, mIdx, modeCol, scale, white);
             GUI.color = modeCol;
-            SkillLocator skl = _body.skillLocator;
-            bool hasOd = skl && skl.special && skl.special.skillDef && skl.special.skillDef.skillName == SvrPlugin.T + "OVERDRIVE";
-            GUI.Label(new Rect(sx + 22f * scale, my, panelW - 30f * scale, 18f * scale), "SCAN [Q]: " + OdNames[mIdx] + (hasOd ? "  [R] OVERDRIVE" : ""), _label);
+            GUI.Label(new Rect(sx + 22f * scale, my, panelW - 30f * scale, 18f * scale), "SCAN [Q]: " + OdNames[mIdx] + "   [R] OVERDRIVE", _label);
 
             // Row 3: Scan mode description + 4 pips (plenty of width, never squished)
-            float dy = my + 18f * scale;
+            float dy = my + 20f * scale;
             GUI.color = new Color(0.78f, 0.93f, 1f, 0.90f);
             GUI.Label(new Rect(sx + 22f * scale, dy, panelW - 30f * scale, 18f * scale), OdDescs[mIdx], _label);
             for (int i = 0; i < OdNames.Length; i++)
@@ -5061,7 +4825,7 @@ namespace Surveyor
             }
 
             // Row 4: Visor Peek & Vacuum controls
-            float py = dy + 26f * scale;
+            float py = dy + 28f * scale;
             float pr = _peekReady - Time.time;
             string peekTxt;
             Color peekCol;
@@ -5279,14 +5043,12 @@ namespace Surveyor
                     GUI.Label(new Rect(kx + 12f * scale, ky + 7f * scale, pw - 20f * scale, 22f * scale), _upgradeToast, _label);
                 }
 
-                // Ghostbusters / Luigi's Mansion Containment & Vacuuming HUD bar while Vacuuming Demon or Trap Active (clean lines, zero black box)
-                if (_demon.TrapActive || _demon.TetherActive || _demon.CaptureProgress > 0.01f)
+                // Heavy Vacuum Containment HUD bar while vacuuming Demon
+                if (_demon.TetherActive || _demon.CaptureProgress > 0.01f)
                 {
-                    float cw = 520f * scale, ch = 66f * scale;
+                    float cw = 520f * scale, ch = 56f * scale;
                     float cx = Screen.width * 0.5f - cw * 0.5f, cy = Screen.height * 0.22f;
-                    Color topBarCol = _demon.CounterSteering
-                        ? new Color(0.25f, 1f, 0.55f, 1f)
-                        : (_demon.TetherActive ? new Color(0.3f, 0.95f, 1f, 0.98f) : new Color(1f, 0.86f, 0.15f, 0.95f));
+                    Color topBarCol = _demon.TetherActive ? new Color(0.3f, 0.95f, 1f, 0.98f) : new Color(1f, 0.86f, 0.15f, 0.95f);
                     GUI.color = topBarCol;
                     GUI.DrawTexture(new Rect(cx, cy, cw, 2.5f * scale), white);
                     GUI.DrawTexture(new Rect(cx, cy + ch, cw, 1.5f * scale), white);
@@ -5294,39 +5056,17 @@ namespace Surveyor
                     string strainTxt = _demon.StrainStacks > 0 ? (" · STRAIN x" + _demon.StrainStacks) : "";
                     string hdr = _demon.TetherActive
                         ? "POLTERGUST VACUUM LOCKED (" + Mathf.RoundToInt(_demon.CaptureProgress * 100f) + "%)" + strainTxt
-                        : "HOLD [M2] TO VACUUM & REEL IN DEMON/GHOST!";
+                        : "HOLD [M2] TO VACUUM & REEL IN DEMON!";
                     GUI.Label(new Rect(cx + 12f * scale, cy + 4f * scale, cw - 24f * scale, 20f * scale), hdr, _label);
 
-                    if (_demon.TetherActive)
-                    {
-                        string steerPrompt = _demon.PullDir < 0
-                            ? "<<< TARGET PULLING LEFT — COUNTER-STEER [D]!"
-                            : (_demon.PullDir > 0
-                                ? "TARGET PULLING RIGHT — COUNTER-STEER [A]! >>>"
-                                : "^^^ TARGET SURGING BACK — PULL BACK [S]! ^^^");
-                        if (_demon.CounterSteering) steerPrompt = "WRESTLING BONUS 2.2x! REELING TARGET IN FAST!";
-                        GUI.color = _demon.CounterSteering ? new Color(0.25f, 1f, 0.55f, 1f) : new Color(1f, 0.78f, 0.25f, 0.95f);
-                        GUI.Label(new Rect(cx + 12f * scale, cy + 23f * scale, cw - 24f * scale, 20f * scale), steerPrompt, _label);
-                    }
-
                     float barW = cw - 24f * scale, barH = 12f * scale;
-                    float barX = cx + 12f * scale, barY = cy + 46f * scale;
+                    float barX = cx + 12f * scale, barY = cy + 32f * scale;
                     GUI.color = new Color(topBarCol.r, topBarCol.g, topBarCol.b, 0.45f);
                     GUI.DrawTexture(new Rect(barX, barY, barW, 1.5f * scale), white);
                     GUI.DrawTexture(new Rect(barX, barY + barH, barW, 1.5f * scale), white);
 
-                    // Gold Active-Reload Compression Slam Zone [64% .. 89%]
-                    GUI.color = new Color(1f, 0.86f, 0.18f, 0.45f);
-                    GUI.DrawTexture(new Rect(barX + barW * 0.64f, barY - 2f * scale, barW * 0.25f, barH + 4f * scale), white);
-
-                    GUI.color = _demon.CounterSteering ? new Color(0.25f, 1f, 0.55f, 0.98f) : (_demon.TetherActive ? new Color(0.3f, 0.92f, 1f, 0.95f) : new Color(1f, 0.45f, 0.12f, 0.85f));
+                    GUI.color = _demon.TetherActive ? new Color(0.3f, 0.92f, 1f, 0.95f) : new Color(1f, 0.45f, 0.12f, 0.85f);
                     GUI.DrawTexture(new Rect(barX, barY, barW * Mathf.Clamp01(_demon.CaptureProgress), barH), white);
-
-                    if (_demon.CaptureProgress >= 0.64f && _demon.CaptureProgress <= 0.89f)
-                    {
-                        GUI.color = new Color(1f, 0.95f, 0.35f, 1f);
-                        GUI.Label(new Rect(barX + barW * 0.62f, barY - 18f * scale, 180f * scale, 18f * scale), "[G] SLAM!", _label);
-                    }
                 }
                 else if (Time.time < _demon.LastRestoredUntil)
                 {
@@ -5471,13 +5211,34 @@ namespace Surveyor
 
         private void DrawSense(string name, bool lost, ref float x, float y, float scale)
         {
-            float w = (name.Length * 11f + 22f) * scale;
+            float chipW = 86f * scale;
+            float chipH = 22f * scale;
             Texture2D white = Texture2D.whiteTexture;
-            Color sc = lost ? new Color(1f, 0.3f, 0.25f, 0.95f) : new Color(0.6f, 1f, 0.4f, 0.95f);
-            GUI.color = sc;
-            GUI.DrawTexture(new Rect(x, y + 22f * scale, w, 1.5f * scale), white);
-            GUI.Label(new Rect(x + 6f * scale, y, w, 24f * scale), lost ? name + " X" : name, _label);
-            x += w + 6f * scale;
+
+            // Background capsule: dark glass when normal, subtle crimson glass when lost
+            GUI.color = lost ? new Color(0.35f, 0.05f, 0.05f, 0.85f) : new Color(0.02f, 0.06f, 0.09f, 0.85f);
+            GUI.DrawTexture(new Rect(x, y, chipW, chipH), white);
+
+            // Vector border outline
+            Color frameCol = lost ? new Color(1f, 0.28f, 0.25f, 0.95f) : new Color(0.25f, 0.95f, 0.6f, 0.85f);
+            GUI.color = frameCol;
+            GUI.DrawTexture(new Rect(x, y, chipW, 1.5f * scale), white);
+            GUI.DrawTexture(new Rect(x, y + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
+            GUI.DrawTexture(new Rect(x, y, 1.5f * scale, chipH), white);
+            GUI.DrawTexture(new Rect(x + chipW - 1.5f * scale, y, 1.5f * scale, chipH), white);
+
+            int prevSize = _label.fontSize;
+            TextAnchor prevAlign = _label.alignment;
+            _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(10.5f * scale));
+            _label.alignment = TextAnchor.MiddleCenter;
+
+            string txt = lost ? name + ": LOST" : name + ": OK";
+            GUI.color = lost ? Color.white : frameCol;
+            GUI.Label(new Rect(x, y, chipW, chipH), txt, _label);
+
+            _label.fontSize = prevSize;
+            _label.alignment = prevAlign;
+            x += chipW + 6f * scale;
         }
     }
 

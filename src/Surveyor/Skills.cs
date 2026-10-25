@@ -18,7 +18,7 @@ namespace Surveyor
         public const int CRYO_JACKET = 1;       // Minigun: Cryo-Quench Cooling Jacket (liquid-nitrogen feed, no overheat, frost slow on hit)
         public const int PLASMA_ACCEL = 2;      // Minigun: Overclocked Plasma-Accelerator (sustained fire arcs chain plasma lightning)
         public const int GYRO_HARNESS = 3;      // Minigun: Gyroscopic Shoulder Harness (no move slow while firing, 50% less recoil kick)
-        public const int SINGULARITY_CORE = 4;  // Super Vac: Singularity Trap Core (trap pulls in nearby enemies & flying pests)
+        public const int SINGULARITY_CORE = 4;  // Super Vac: Singularity Vortex (pulls in nearby enemies & flying pests into nozzle)
         public const int REPULSOR_BLOW = 5;     // Super Vac: Reverse-Flow Repulsor ("Blow" function [V] blasts swarms & reflects projectiles)
         public const int AETHER_LEECH = 6;      // Super Vac: Aether-Leech Field (siphons enemy shields/health into EVA suit barrier)
         public const int COMPRESSION_PRESS = 7; // Containment Cell: Spectral Compression Press (dual capacity, shield armor, active-reload bonus)
@@ -30,7 +30,7 @@ namespace Surveyor
             "CRYO-QUENCH COOLING JACKET",
             "OVERCLOCKED PLASMA-ACCELERATOR",
             "GYROSCOPIC SHOULDER HARNESS",
-            "SINGULARITY TRAP CORE",
+            "SINGULARITY VORTEX",
             "REVERSE-FLOW REPULSOR [V]",
             "AETHER-LEECH FIELD",
             "SPECTRAL COMPRESSION PRESS"
@@ -54,7 +54,7 @@ namespace Surveyor
             "Liquid-N2 cooling (eliminates overheat + chills enemies)",
             "Sustained spool arcs high-voltage plasma lightning",
             "Zero move penalty while firing & -50% recoil climb",
-            "Ghost-Trap pulls nearby enemies & flying pests inward",
+            "Vacuum pulls nearby enemies & flying pests into nozzle",
             "Press [V] to blast swarms back & vaporize projectiles",
             "Firing & tethering siphons energy into EVA suit barrier",
             "Holds 2 spirits, +25 armor, & Gold-Zone active reload"
@@ -523,32 +523,16 @@ namespace Surveyor
         public override void OnEnter()
         {
             base.OnEnter();
-            if (isAuthority && skillLocator)
+            if (isAuthority && skillLocator && skillLocator.primary != null && SvrPlugin.MinigunSkillDef != null)
             {
-                SkillDef cur = skillLocator.primary ? skillLocator.primary.skillDef : null;
-                bool isLance = cur != null && cur.skillNameToken != null && cur.skillNameToken.Contains("LANCE");
-                SkillDef nextDef = isLance ? SvrPlugin.MinigunSkillDef : SvrPlugin.LanceSkillDef;
-
-                if (skillLocator.primary != null && nextDef != null)
-                {
-                    skillLocator.primary.SetSkillOverride(gameObject, nextDef, GenericSkill.SkillOverridePriority.Upgrade);
-                }
-
-                Util.PlaySound(isLance ? "Play_commando_R" : "Play_UI_obj_casinoChest_open", gameObject);
-                string weaponName = isLance ? "ROTARY SURVEY MINIGUN" : "PIERCING RAIL LANCE";
-                string colorHex = isLance ? "#00E5FF" : "#FFA028";
-                try
-                {
-                    Chat.AddMessage("<color=" + colorHex + "><b>[WEAPON SWITCHED]</b> " + weaponName + "</color>");
-                }
-                catch { }
+                skillLocator.primary.SetSkillOverride(gameObject, SvrPlugin.MinigunSkillDef, GenericSkill.SkillOverridePriority.Upgrade);
             }
         }
 
         public override void FixedUpdate()
         {
             base.FixedUpdate();
-            if (fixedAge >= 0.15f && isAuthority) outer.SetNextStateToMain();
+            if (isAuthority) outer.SetNextStateToMain();
         }
 
         public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.PrioritySkill; }

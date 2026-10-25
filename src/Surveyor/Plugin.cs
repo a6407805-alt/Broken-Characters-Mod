@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.6.3";
+        public const string PluginVersion = "0.6.4";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -193,8 +193,8 @@ namespace Surveyor
             LanguageAPI.Add(T + "DESCRIPTION",
                 "The Surveyor is a blind, heavily armored engineer in a white, orange, and blue EVA rig. The world is black. She sees only what her LiDAR scanner paints.<color=#CCD3E0>\r\n\r\n" +
                 "< ! > Tap Q to cycle scan modes (Topography, Thermal, Salvage, Structural). Press F to Peek.\r\n\r\n" +
-                "< ! > Scan the map to uncover LiDAR-Exclusive Hidden Tech Caches (Depleted-Uranium Slugs, Cryo-Quench Jacket, Plasma-Accelerator, Singularity Core, Reverse-Flow Repulsor [V], Aether-Leech, Spectral Compression Press).\r\n\r\n" +
-                "< ! > Press G to deploy a Ghost-Trap, lock your Proton Tether (M1/M2) onto the Shimmer Demon or weakened Elites/Bosses, and counter-steer with WASD to slam them into the containment cube—restoring a lost sense!\r\n\r\n" +
+                "< ! > Scan the map to uncover LiDAR-Exclusive Hidden Tech Caches (Depleted-Uranium Slugs, Cryo-Quench Jacket, Plasma-Accelerator, Singularity Vortex, Reverse-Flow Repulsor [V], Aether-Leech, Spectral Compression Press).\r\n\r\n" +
+                "< ! > Use your Heavy Vacuum (M2) to reel in the Shimmer Demon and suck it into your containment canister—restoring a lost sense!\r\n\r\n" +
                 "< ! > Press H to redeploy a captured spirit as a 30s Spectral Hologram Guardian, or press B at the Teleporter to cash it in for Gold and Item Scrap!</color>");
             LanguageAPI.Add(T + "OUTRO", "..and so she left, still hearing the scanner ping.");
             LanguageAPI.Add(T + "FAIL", "..and so she vanished, and the dots went dark.");
@@ -202,24 +202,21 @@ namespace Surveyor
 
             LanguageAPI.Add(T + "PASSIVE_NAME", "LiDAR Vision");
             LanguageAPI.Add(T + "PASSIVE_DESC",
-                "The screen is dark. An always-on scanner paints the world as a <style=cIsUtility>decaying point cloud</style> (orange near, cyan mid, azure far). Bullets, the Lance and the Shockwave leave bright dots. " +
+                "The screen is dark. An always-on scanner paints the world as a <style=cIsUtility>decaying point cloud</style> (orange near, cyan mid, azure far). Bullets and the Shockwave leave bright dots. " +
                 "<style=cDeath>A Shimmer Demon stalks you</style> and only you can see it: close in, your suit's HUD and scanner start to fail, and if it touches you it steals a sense for the stage.");
             LanguageAPI.Add(T + "PRIMARY_NAME", "Rotary Survey Minigun");
             LanguageAPI.Add(T + "PRIMARY_DESC", "Hold to spool barrels and fire rapid rounds. <style=cIsUtility>Hold M1 and scroll mouse wheel to cycle Ammo Modes</style>: <style=cIsDamage>IRIDIUM AP</style> (+60% damage & armor shred), <style=cIsUtility>CRYO COLD</style> (80% frost slow & cools gun), <style=cIsDamage>INCENDIARY</style> (ignite DoT), or <style=cIsDamage>PLASMA SHOCK</style> (chain lightning arcs).");
             LanguageAPI.Add(T + "SECONDARY_NAME", "Industrial Poltergust Vacuum");
             LanguageAPI.Add(T + "SECONDARY_DESC", "Channel high-flow vortex suction. Continuously pulls in <style=cIsUtility>all dropped items, pickups & chests</style>, and latches onto weakened <style=cDeath>Shimmer Demons</style>. <style=cIsUtility>Hold M2 and scroll mouse wheel to cycle Vacuum Modes</style>: <style=cIsUtility>POLTERGUST</style> (suction), <style=cIsDamage>SINGULARITY</style> (clusters swarms), <style=cIsUtility>CRYO-EXHAUST</style> (frost cone & barrier leech), or <style=cIsDamage>REPULSOR</style> (blast wave & deflects projectiles).");
-            LanguageAPI.Add(T + "LANCE_NAME", "Surveyor Lance");
-            LanguageAPI.Add(T + "LANCE_DESC", "Charge for " + LanceCharge.Value.ToString("0.0#") + "s, then fire a <style=cIsDamage>piercing lance for " + (LanceDamage.Value * 100f).ToString("0") + "% damage</style> that knocks enemies back and paints a line of LiDAR. <style=cIsUtility>Staggers the Shimmer Demon for " +
-                LanceStagger.Value.ToString("0.#") + "s.</style> Recoil pushes you back unless you are anchored.");
             LanguageAPI.Add(T + "UTILITY_NAME", "Hydraulic Slide");
             LanguageAPI.Add(T + "UTILITY_DESC", "<style=cIsUtility>Slide forward.</style> Keep <style=cIsUtility>holding the button</style> and she plants an <style=cIsDamage>Anchor</style> for up to " + AnchorSeconds.Value.ToString("0") +
                 "s: rooted, <style=cIsUtility>spools 3x faster</style>, no move penalty, <style=cIsDamage>+" + (AnchorDamageBonus.Value * 100f).ToString("0") + "% minigun damage</style> and a steadier aim.");
-            LanguageAPI.Add(T + "SPECIAL_NAME", "Tactical Weapon Switch");
-            LanguageAPI.Add(T + "SPECIAL_DESC", "Instantly hot-swap your primary weapon between the rapid-fire <style=cIsDamage>Rotary Survey Minigun</style> and the heavy armor-piercing <style=cIsDamage>Piercing Rail Lance</style>.");
             LanguageAPI.Add(T + "PEEK_NAME", "Peek");
             LanguageAPI.Add(T + "PEEK_DESC", "Rip off the visor for <style=cIsUtility>" + PeekSeconds.Value.ToString("0.#") + "s</style>. The real world comes back and you see <style=cIsUtility>far beyond the scanner</style>, but it is <style=cDeath>blurry, blown out and jarring</style>, and the LiDAR fades. Replaces Hydraulic Slide.");
-            LanguageAPI.Add(T + "OVERDRIVE_NAME", "LiDAR Overdrive Pulse");
+            LanguageAPI.Add(T + "OVERDRIVE_NAME", "LiDAR Overdrive");
             LanguageAPI.Add(T + "OVERDRIVE_DESC", "Push the scanner past its limits. Unleash a massive 360° Overdrive Pulse wave that <style=cIsUtility>reveals the entire area</style> in high-density LiDAR for <style=cIsUtility>10.0s</style>, painting all stage geometry and detecting <style=cIsDamage>all monsters and hidden chests through walls</style>.");
+            LanguageAPI.Add(T + "SPECIAL_NAME", "LiDAR Overdrive");
+            LanguageAPI.Add(T + "SPECIAL_DESC", "Push the scanner past its limits. Unleash a massive 360° Overdrive Pulse wave that <style=cIsUtility>reveals the entire area</style> in high-density LiDAR for <style=cIsUtility>10.0s</style>.");
         }
 
         // ---------------------------------------------------------------- body
@@ -348,20 +345,18 @@ namespace Surveyor
             sl.passiveSkill.icon = SvrIcons.Get("passive", null);
 
             MinigunSkillDef = MakeSkill("PRIMARY", typeof(SvrMinigunState), "Weapon", 0f, false, true, InterruptPriority.Any, "primary", false);
-            LanceSkillDef = MakeSkill("LANCE", typeof(SvrLanceState), "Weapon", LanceCooldown.Value, true, true, InterruptPriority.Skill, "secondary", true);
             SkillDef secondary = MakeSkill("SECONDARY", typeof(SvrVacuumState), "Weapon", 0f, false, false, InterruptPriority.Skill, "secondary", false);
             secondary.cancelSprintingOnActivation = false;
             SkillDef utility = MakeSkill("UTILITY", typeof(SvrSlideState), "Body", SlideCooldown.Value, true, true, InterruptPriority.PrioritySkill, "utility", true);
             utility.cancelSprintingOnActivation = false;
             SkillDef peek = MakeSkill("PEEK", typeof(SvrPeekState), "Weapon", PeekCooldown.Value, true, true, InterruptPriority.Skill, "peek", false);
             peek.cancelSprintingOnActivation = false;
-            SkillDef switchWeapon = MakeSkill("SPECIAL", typeof(SvrSwitchWeaponState), "Weapon", 0.5f, true, true, InterruptPriority.Skill, "special", false);
             SkillDef overdrive = MakeSkill("OVERDRIVE", typeof(SvrOverdriveState), "Weapon", OverdriveCooldown.Value, true, true, InterruptPriority.Skill, "overdrive", false);
 
-            sl.primary = Slot("SurveyorPrimary", MinigunSkillDef, LanceSkillDef);
+            sl.primary = Slot("SurveyorPrimary", MinigunSkillDef);
             sl.secondary = Slot("SurveyorSecondary", secondary);
             sl.utility = Slot("SurveyorUtility", peek, utility);
-            sl.special = Slot("SurveyorSpecial", overdrive, switchWeapon);
+            sl.special = Slot("SurveyorSpecial", overdrive);
         }
 
         private static GenericSkill Slot(string family, params SkillDef[] defs)

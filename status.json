@@ -132,8 +132,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.6.3",
-      "note": "Active WIP (v0.6.3): Restored Surveyor 3D spacesuit visibility on the Character Select screen with baseRendererInfos registration on Layer 0; overhauled HUD & telemetry (relocated to Center-Left with wider dark glass backdrop, clear of money/objectives/chat) and elevated bottom-right ammo/vacuum selector hotbar comfortably above skills with no squished text."
+      "version": "0.6.4",
+      "note": "Active WIP (v0.6.4): Removed Tactical Weapon Switch and Surveyor Lance (Minigun is primary, Overdrive is special); completely removed Ghost-Traps (Shimmer Demon captured directly via Heavy Vacuum M2); fixed Senses (SEE/HEAR/TOUCH/BAL) telemetry with wide, padded chips and ample vertical margins; generated and deployed fresh, vibrant 128x128 icons for all abilities."
     }
   ]
 }
