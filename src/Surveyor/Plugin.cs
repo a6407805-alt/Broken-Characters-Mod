@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.5.9";
+        public const string PluginVersion = "0.6.0";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -360,7 +360,7 @@ namespace Surveyor
 
             sl.primary = Slot("SurveyorPrimary", MinigunSkillDef, LanceSkillDef);
             sl.secondary = Slot("SurveyorSecondary", secondary);
-            sl.utility = Slot("SurveyorUtility", utility, peek);
+            sl.utility = Slot("SurveyorUtility", peek, utility);
             sl.special = Slot("SurveyorSpecial", overdrive, switchWeapon);
         }
 

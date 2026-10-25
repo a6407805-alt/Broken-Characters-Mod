@@ -123,8 +123,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.5.9",
-      "note": "Active WIP (v0.5.9): Fixed Peek (F key) visor lift to cleanly reveal the full 3D real world without camera culling corruption or PostProcessLayer blackouts, and restored the Surveyor player suit in third person (self-illuminating 3D armor plates + real-time 60 FPS animated skeletal and suit mesh LiDAR point cloud dots matching vacuum and minigun actions)."
+      "version": "0.6.0",
+      "note": "Active WIP (v0.6.0): Fixed Peek (Visor Off) ability so pressing F or Shift reliably reveals the full 3D real world, set Peek as the default Utility skill on Shift with toggle support, eliminated all UI collisions and overlapping text (relocated telemetry between money and boss bar, compact 360px boss bar, docked ammo/vacuum chips neatly above skills with zero overlap), and restored 3D player suit and 60 FPS animated skeletal and suit mesh LiDAR point cloud dots."
     }
   ]
 }

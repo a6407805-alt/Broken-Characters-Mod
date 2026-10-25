@@ -4974,8 +4974,8 @@ namespace Surveyor
             int fs = Mathf.RoundToInt(15f * scale);
             _label.fontSize = Mathf.Max(10, fs);
 
-            // Tactical top-left LiDAR and suit telemetry (leaving the RoR2 chat at bottom-left completely clear!)
-            float sx = 28f * scale, sy = 28f * scale;
+            // Tactical top LiDAR and suit telemetry positioned between the RoR2 money HUD (left) and boss bar (center)
+            float sx = 135f * scale, sy = 14f * scale;
 
             // Row 1: Senses status strip + Containment Cell Spirit Charge counter
             float x = sx, y = sy;
@@ -4986,100 +4986,99 @@ namespace Surveyor
             if (_demon.StoredSpirits > 0 || _demon.MinionActive)
             {
                 string cellTxt = _demon.MinionActive
-                    ? "GUARDIAN ACTIVE (" + Mathf.CeilToInt(_demon.MinionUntil - Time.time) + "s)"
-                    : "CELL: " + _demon.StoredSpirits + "/" + _demon.MaxStoredSpirits + " [H] GUARDIAN · [B] CASH-IN";
-                float cw = (cellTxt.Length * 8.2f + 16f) * scale;
+                    ? "GUARDIAN (" + Mathf.CeilToInt(_demon.MinionUntil - Time.time) + "s)"
+                    : "CELL: " + _demon.StoredSpirits + "/" + _demon.MaxStoredSpirits + " [H/B]";
+                float cw = (cellTxt.Length * 7.5f + 12f) * scale;
                 GUI.color = new Color(0.02f, 0.06f, 0.08f, 0.75f);
-                GUI.DrawTexture(new Rect(x, y, cw, 22f * scale), white);
+                GUI.DrawTexture(new Rect(x, y, cw, 20f * scale), white);
                 GUI.color = new Color(0.28f, 1f, 0.85f, 0.96f);
-                GUI.DrawTexture(new Rect(x, y, 3f * scale, 22f * scale), white);
-                GUI.Label(new Rect(x + 7f * scale, y, cw, 22f * scale), cellTxt, _label);
+                GUI.DrawTexture(new Rect(x, y, 3f * scale, 20f * scale), white);
+                GUI.Label(new Rect(x + 5f * scale, y, cw, 20f * scale), cellTxt, _label);
             }
 
             // Row 2: Scan mode readout
             int mIdx = OdMode % OdNames.Length;
             float sinceSwitch = Time.time - _modeFlash;
             bool flash = sinceSwitch < 0.75f;
-            float my = sy + 28f * scale;
+            float my = sy + 24f * scale;
             Color accent = ModeAccent(mIdx);
             Color modeCol = flash ? new Color(1f, 1f, 1f, 1f) : (OverdriveOn ? new Color(1f, 0.62f, 0.2f, 0.95f) : accent);
-            DrawModeIcon(new Vector2(sx + 8f * scale, my + 10f * scale), 8f * scale, mIdx, modeCol, scale, white);
+            DrawModeIcon(new Vector2(sx + 8f * scale, my + 8f * scale), 7f * scale, mIdx, modeCol, scale, white);
             GUI.color = modeCol;
-            string keys = "[" + SvrPlugin.ScanNextKey.Value.ToUpperInvariant() + " = NEXT MODE]";
             SkillLocator skl = _body.skillLocator;
             bool hasOd = skl && skl.special && skl.special.skillDef && skl.special.skillDef.skillName == SvrPlugin.T + "OVERDRIVE";
-            GUI.Label(new Rect(sx + 24f * scale, my, 520f * scale, 20f * scale), "SCAN: " + OdNames[mIdx] + "  " + keys + (hasOd ? "   R = OVERDRIVE" : ""), _label);
+            GUI.Label(new Rect(sx + 20f * scale, my, 260f * scale, 18f * scale), "SCAN [Q]: " + OdNames[mIdx] + (hasOd ? "  [R] OVERDRIVE" : ""), _label);
 
-            // Row 3: Scan mode description + 4 pips
-            float dy = my + 19f * scale;
+            // Row 3: Scan mode description + 4 pips (clamped width to never collide with boss bar)
+            float dy = my + 18f * scale;
             GUI.color = new Color(0.78f, 0.93f, 1f, 0.85f);
-            GUI.Label(new Rect(sx + 24f * scale, dy, 520f * scale, 18f * scale), OdDescs[mIdx], _label);
+            GUI.Label(new Rect(sx + 20f * scale, dy, 260f * scale, 16f * scale), OdDescs[mIdx], _label);
             for (int i = 0; i < OdNames.Length; i++)
             {
                 Color pc = ModeAccent(i);
                 GUI.color = i == mIdx ? new Color(pc.r, pc.g, pc.b, 0.95f) : new Color(pc.r, pc.g, pc.b, 0.22f);
-                GUI.DrawTexture(new Rect(sx + i * 16f * scale, dy + 20f * scale, 12f * scale, 4f * scale), white);
+                GUI.DrawTexture(new Rect(sx + i * 14f * scale, dy + 18f * scale, 10f * scale, 3.5f * scale), white);
             }
 
             // Row 4: Visor Peek & Vacuum controls
-            float py = dy + 28f * scale;
+            float py = dy + 24f * scale;
             float pr = _peekReady - Time.time;
             string peekTxt;
             Color peekCol;
             if (Peeking)
             {
                 float rem = Mathf.Max(0f, _peekUntil - Time.time);
-                peekTxt = "VISOR UP [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "] " + rem.ToString("0.0") + "s [PRESS TO LOWER]";
+                peekTxt = "VISOR UP [F/SHIFT] " + rem.ToString("0.0") + "s";
                 peekCol = new Color(0.4f, 1f, 0.7f, 0.95f);
             }
             else if (pr > 0f)
             {
-                peekTxt = "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "] " + pr.ToString("0") + "s COOLDOWN";
+                peekTxt = "PEEK [F/SHIFT] " + pr.ToString("0") + "s COOLDOWN";
                 peekCol = new Color(0.7f, 0.75f, 0.8f, 0.75f);
             }
             else
             {
-                peekTxt = "PEEK [" + SvrPlugin.PeekKey.Value.ToUpperInvariant() + "] READY";
+                peekTxt = "PEEK [F/SHIFT] READY";
                 peekCol = new Color(0.9f, 0.96f, 1f, 0.95f);
             }
             GUI.color = peekCol;
-            GUI.Label(new Rect(sx, py, 260f * scale, 20f * scale), peekTxt, _label);
+            GUI.Label(new Rect(sx, py, 170f * scale, 18f * scale), peekTxt, _label);
 
             GUI.color = new Color(0.35f, 0.95f, 1f, 0.92f);
-            GUI.Label(new Rect(sx + 265f * scale, py, 450f * scale, 20f * scale), "VACUUM [M2] — SUCKS DEMON, ENEMIES, ITEMS & CHESTS", _label);
+            GUI.Label(new Rect(sx + 175f * scale, py, 110f * scale, 18f * scale), "VACUUM [M2]", _label);
 
             // Row 5: Installed tech badges
             if (SvrUpgrades.UnlockedCount > 0)
             {
-                float ux = sx, uy = py + 24f * scale;
+                float ux = sx, uy = py + 22f * scale;
                 for (int u = 0; u < SvrUpgrades.COUNT; u++)
                 {
                     if (!SvrUpgrades.Has(u)) continue;
                     string uName = SvrUpgrades.ShortNames[u];
-                    float uw = (uName.Length * 7.8f + 12f) * scale;
+                    float uw = (uName.Length * 7.5f + 10f) * scale;
                     Color uCol = u < 4 ? new Color(1f, 0.84f, 0.25f, 0.95f) : new Color(0.3f, 0.96f, 1f, 0.95f);
                     GUI.color = uCol;
-                    GUI.DrawTexture(new Rect(ux, uy, 2.5f * scale, 18f * scale), white);
-                    GUI.DrawTexture(new Rect(ux, uy + 17f * scale, uw, 1.5f * scale), white);
-                    GUI.Label(new Rect(ux + 5f * scale, uy - 2f * scale, uw, 20f * scale), uName, _label);
+                    GUI.DrawTexture(new Rect(ux, uy, 2.5f * scale, 16f * scale), white);
+                    GUI.DrawTexture(new Rect(ux, uy + 15f * scale, uw, 1.5f * scale), white);
+                    GUI.Label(new Rect(ux + 5f * scale, uy - 2f * scale, uw, 18f * scale), uName, _label);
                     ux += uw + 5f * scale;
                 }
             }
 
-            // Top-Center Shimmer Demon Boss & Containment Health Bar
+            // Top-Center Shimmer Demon Boss & Containment Health Bar (compact 360 width, no overlap)
             if (_demon.Active)
             {
-                float dw = 460f * scale, dh = 14f * scale;
-                float dx = Screen.width * 0.5f - dw * 0.5f, dby = Screen.height * 0.04f;
+                float dw = 360f * scale, dh = 12f * scale;
+                float dx = Screen.width * 0.5f - dw * 0.5f, dby = 14f * scale;
                 float hpPct = Mathf.Clamp01(_demon.CurrentHp / Mathf.Max(1f, _demon.MaxHp));
 
                 GUI.color = new Color(0.04f, 0.08f, 0.12f, 0.85f);
-                GUI.DrawTexture(new Rect(dx - 4f * scale, dby - 18f * scale, dw + 8f * scale, dh + 36f * scale), white);
+                GUI.DrawTexture(new Rect(dx - 4f * scale, dby - 16f * scale, dw + 8f * scale, dh + 34f * scale), white);
 
                 Color frameCol = _demon.Weakened ? new Color(0.25f, 1f, 0.7f, 0.98f) : new Color(1f, 0.32f, 0.35f, 0.98f);
                 GUI.color = frameCol;
-                GUI.DrawTexture(new Rect(dx, dby, dw, 2f * scale), white);
-                GUI.DrawTexture(new Rect(dx, dby + dh, dw, 2f * scale), white);
+                GUI.DrawTexture(new Rect(dx, dby, dw, 1.8f * scale), white);
+                GUI.DrawTexture(new Rect(dx, dby + dh, dw, 1.8f * scale), white);
 
                 Color fillCol = _demon.Weakened
                     ? Color.Lerp(new Color(0.2f, 1f, 0.6f, 0.95f), new Color(1f, 0.9f, 0.2f, 0.95f), Mathf.Sin(Time.time * 8f) * 0.5f + 0.5f)
@@ -5092,16 +5091,16 @@ namespace Surveyor
                 GUI.DrawTexture(new Rect(dx + dw * 0.35f, dby - 2f * scale, 2f * scale, dh + 4f * scale), white);
 
                 string dTitle = _demon.Weakened
-                    ? "★ SHIMMER DEMON WEAKENED! HOLD [M2] TO VACUUM & CAPTURE! ★"
-                    : "SHIMMER DEMON  ·  " + Mathf.CeilToInt(_demon.CurrentHp) + " / " + Mathf.CeilToInt(_demon.MaxHp) + " HP  (MINIGUN WEAKENS)";
+                    ? "★ WEAKENED! HOLD [M2] TO VACUUM & CAPTURE! ★"
+                    : "SHIMMER DEMON · " + Mathf.CeilToInt(_demon.CurrentHp) + " / " + Mathf.CeilToInt(_demon.MaxHp) + " HP";
                 GUI.color = frameCol;
-                GUI.Label(new Rect(dx, dby - 18f * scale, dw, 18f * scale), dTitle, _label);
+                GUI.Label(new Rect(dx, dby - 16f * scale, dw, 16f * scale), dTitle, _label);
 
                 string dSub = _demon.Weakened
-                    ? "CONTAINMENT SHIELD BROKEN — SUCK INTO CANISTER NOW!"
-                    : "DAMAGE BELOW 35% HP WITH ROTARY MINIGUN [M1] TO BREAK SHIELD";
+                    ? "SHIELD BROKEN — SUCK INTO CANISTER NOW!"
+                    : "DAMAGE BELOW 35% HP WITH MINIGUN [M1] TO BREAK SHIELD";
                 GUI.color = new Color(0.85f, 0.95f, 1f, 0.9f);
-                GUI.Label(new Rect(dx, dby + dh + 3f * scale, dw, 16f * scale), dSub, _label);
+                GUI.Label(new Rect(dx, dby + dh + 3f * scale, dw, 15f * scale), dSub, _label);
             }
 
             // LiDAR Rebooting Sequence Banner when closing visor
@@ -5314,86 +5313,81 @@ namespace Surveyor
                 GUI.Label(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f + 12f * scale, pw, 24f * scale), "VISOR OFF", _label);
             }
 
-            // Bottom-Right Hotbar: Modular Minigun Ammo Modes & Vacuum Upgrades
+            // Bottom-Right Hotbar: Modular Minigun Ammo Modes & Vacuum Upgrades (docked compactly above the skill bar)
             {
-                float panelW = 340f * scale;
-                float panelX = Screen.width - panelW - 24f * scale;
-                float panelY = Screen.height - 235f * scale;
+                float panelW = 320f * scale;
+                float panelX = Screen.width - panelW - 20f * scale;
+                float panelY = Screen.height - 165f * scale;
 
                 // 1) MINIGUN AMMO MODES (M1 + SCROLL WHEEL)
                 int mMode = MinigunMode % 4;
                 bool mFlash = (Time.time - _miniModeFlash) < 0.65f;
                 Color mActiveCol = MinigunModeColors[mMode];
 
-                GUI.color = new Color(0.85f, 0.92f, 1f, 0.92f);
-                GUI.Label(new Rect(panelX, panelY, panelW, 18f * scale), "PRIMARY [M1]: AMMO MODES  (SCROLL TO SWITCH)", _label);
-
                 float chipW = (panelW - 3f * 4f * scale) / 4f;
-                float chipH = 24f * scale;
-                float cy = panelY + 20f * scale;
+                float chipH = 18f * scale;
+
+                // Row 1: M1 Ammo Chips
                 for (int i = 0; i < 4; i++)
                 {
                     bool active = (i == mMode);
                     Color cCol = MinigunModeColors[i];
                     float cx = panelX + i * (chipW + 4f * scale);
 
-                    GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, mFlash ? 0.45f : 0.22f) : new Color(0.05f, 0.08f, 0.12f, 0.65f);
-                    GUI.DrawTexture(new Rect(cx, cy, chipW, chipH), white);
+                    GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, mFlash ? 0.5f : 0.28f) : new Color(0.04f, 0.06f, 0.08f, 0.7f);
+                    GUI.DrawTexture(new Rect(cx, panelY, chipW, chipH), white);
 
                     GUI.color = active ? (mFlash ? Color.white : cCol) : new Color(cCol.r, cCol.g, cCol.b, 0.35f);
-                    GUI.DrawTexture(new Rect(cx, cy, chipW, 1.8f * scale), white);
-                    GUI.DrawTexture(new Rect(cx, cy + chipH - 1.8f * scale, chipW, 1.8f * scale), white);
-                    GUI.DrawTexture(new Rect(cx, cy, 1.8f * scale, chipH), white);
-                    GUI.DrawTexture(new Rect(cx + chipW - 1.8f * scale, cy, 1.8f * scale, chipH), white);
+                    GUI.DrawTexture(new Rect(cx, panelY, chipW, 1.5f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, panelY + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, panelY, 1.5f * scale, chipH), white);
+                    GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, panelY, 1.5f * scale, chipH), white);
 
                     int prevSize = _label.fontSize;
-                    _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
+                    _label.fontSize = Mathf.Max(8, Mathf.RoundToInt(10f * scale));
                     _label.alignment = TextAnchor.MiddleCenter;
-                    GUI.color = active ? Color.white : new Color(0.7f, 0.75f, 0.8f, 0.75f);
-                    GUI.Label(new Rect(cx, cy, chipW, chipH), MinigunModeNames[i], _label);
+                    GUI.color = active ? Color.white : new Color(0.65f, 0.72f, 0.78f, 0.75f);
+                    GUI.Label(new Rect(cx, panelY, chipW, chipH), MinigunModeNames[i], _label);
                     _label.fontSize = prevSize;
                     _label.alignment = TextAnchor.MiddleLeft;
                 }
 
-                GUI.color = mActiveCol;
-                GUI.Label(new Rect(panelX, cy + chipH + 2f * scale, panelW, 16f * scale), "▶ " + MinigunModeDescs[mMode], _label);
-
-                // 2) POLTERGUST VACUUM MODES (M2 + SCROLL WHEEL)
-                float vy = cy + chipH + 22f * scale;
+                // Row 2: M2 Vacuum Chips
+                float vy = panelY + 22f * scale;
                 int vMode = VacuumMode % 4;
                 bool vFlash = (Time.time - _vacModeFlash) < 0.65f;
                 Color vActiveCol = VacuumModeColors[vMode];
 
-                GUI.color = new Color(0.85f, 0.92f, 1f, 0.92f);
-                GUI.Label(new Rect(panelX, vy, panelW, 18f * scale), "SECONDARY [M2]: VACUUM MODES  (HOLD M2 + SCROLL)", _label);
-
-                float vcy = vy + 20f * scale;
                 for (int i = 0; i < 4; i++)
                 {
                     bool active = (i == vMode);
                     Color cCol = VacuumModeColors[i];
                     float cx = panelX + i * (chipW + 4f * scale);
 
-                    GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, vFlash ? 0.45f : 0.22f) : new Color(0.05f, 0.08f, 0.12f, 0.65f);
-                    GUI.DrawTexture(new Rect(cx, vcy, chipW, chipH), white);
+                    GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, vFlash ? 0.5f : 0.28f) : new Color(0.04f, 0.06f, 0.08f, 0.7f);
+                    GUI.DrawTexture(new Rect(cx, vy, chipW, chipH), white);
 
                     GUI.color = active ? (vFlash ? Color.white : cCol) : new Color(cCol.r, cCol.g, cCol.b, 0.35f);
-                    GUI.DrawTexture(new Rect(cx, vcy, chipW, 1.8f * scale), white);
-                    GUI.DrawTexture(new Rect(cx, vcy + chipH - 1.8f * scale, chipW, 1.8f * scale), white);
-                    GUI.DrawTexture(new Rect(cx, vcy, 1.8f * scale, chipH), white);
-                    GUI.DrawTexture(new Rect(cx + chipW - 1.8f * scale, vcy, 1.8f * scale, chipH), white);
+                    GUI.DrawTexture(new Rect(cx, vy, chipW, 1.5f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, vy + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, vy, 1.5f * scale, chipH), white);
+                    GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, vy, 1.5f * scale, chipH), white);
 
                     int prevSize = _label.fontSize;
-                    _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
+                    _label.fontSize = Mathf.Max(8, Mathf.RoundToInt(10f * scale));
                     _label.alignment = TextAnchor.MiddleCenter;
-                    GUI.color = active ? Color.white : new Color(0.7f, 0.75f, 0.8f, 0.75f);
-                    GUI.Label(new Rect(cx, vcy, chipW, chipH), VacuumModeNames[i], _label);
+                    GUI.color = active ? Color.white : new Color(0.65f, 0.72f, 0.78f, 0.75f);
+                    GUI.Label(new Rect(cx, vy, chipW, chipH), VacuumModeNames[i], _label);
                     _label.fontSize = prevSize;
                     _label.alignment = TextAnchor.MiddleLeft;
                 }
 
+                // Row 3: Single sleek summary line right above the skills
+                float sy3 = vy + 22f * scale;
+                GUI.color = mActiveCol;
+                GUI.Label(new Rect(panelX, sy3, panelW * 0.5f, 15f * scale), "M1: " + MinigunModeNames[mMode], _label);
                 GUI.color = vActiveCol;
-                GUI.Label(new Rect(panelX, vcy + chipH + 2f * scale, panelW, 16f * scale), "▶ " + VacuumModeDescs[vMode], _label);
+                GUI.Label(new Rect(panelX + panelW * 0.5f, sy3, panelW * 0.5f, 15f * scale), "M2: " + VacuumModeNames[vMode], _label);
             }
 
             // Suit interference near the demon: subtle crimson/cyan vector glitch ticks on peripheral HUD (no solid/gray boxes).

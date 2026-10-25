@@ -550,20 +550,28 @@ namespace Surveyor
         public override void OnEnter()
         {
             base.OnEnter();
-            Util.PlaySound("Play_commando_R", gameObject);
-            float duration = 4.8f;
-            SvrRigPart.OpenVisor(gameObject, duration);      // the visor flips up on every client
-            if (isAuthority)
+            float duration = SvrPlugin.PeekSeconds != null ? SvrPlugin.PeekSeconds.Value : 5.0f;
+            if (duration < 1f) duration = 5.0f;
+            SvrLidar lidar = GetComponent<SvrLidar>();
+            if (lidar)
             {
-                SvrLidar lidar = GetComponent<SvrLidar>();
-                if (lidar) lidar.StartPeek(duration);
+                if (lidar.Peeking)
+                {
+                    lidar.EndPeek();
+                }
+                else
+                {
+                    lidar.StartPeek(duration);
+                    SvrRigPart.OpenVisor(gameObject, duration);
+                    Util.PlaySound("Play_commando_R", gameObject);
+                }
             }
         }
 
         public override void FixedUpdate()
         {
             base.FixedUpdate();
-            if (fixedAge >= 0.35f && isAuthority) outer.SetNextStateToMain();
+            if (fixedAge >= 0.25f && isAuthority) outer.SetNextStateToMain();
         }
 
         public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.Skill; }
