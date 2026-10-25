@@ -182,7 +182,8 @@ namespace Surveyor
 
         public static void Apply(Transform model)
         {
-            int layer = PlayerModelLayer;
+            bool isDisplay = model.root.name.Contains("Display") || (model.GetComponentInParent<CharacterBody>() == null);
+            int layer = isDisplay ? model.gameObject.layer : PlayerModelLayer;
             if (!model || !SvrPlugin.UseCustomModel.Value || !Load())
             {
                 if (model)
@@ -331,6 +332,40 @@ namespace Surveyor
 
             foreach (Renderer r in originals)       // hide Commando (item displays added later still show)
                 if (r) r.forceRenderingOff = true;
+
+            try
+            {
+                CharacterModel cm = model.GetComponent<CharacterModel>();
+                if (cm)
+                {
+                    var rList = new List<CharacterModel.RendererInfo>();
+                    HashSet<Renderer> origSet = new HashSet<Renderer>(originals);
+                    if (cm.baseRendererInfos != null)
+                    {
+                        for (int i = 0; i < cm.baseRendererInfos.Length; i++)
+                        {
+                            var ri = cm.baseRendererInfos[i];
+                            if (ri.renderer && !origSet.Contains(ri.renderer))
+                                rList.Add(ri);
+                        }
+                    }
+                    foreach (MeshRenderer mr in model.GetComponentsInChildren<MeshRenderer>(true))
+                    {
+                        if (mr && mr.name.StartsWith("SvrPart_"))
+                        {
+                            rList.Add(new CharacterModel.RendererInfo
+                            {
+                                renderer = mr,
+                                defaultMaterial = mr.sharedMaterial,
+                                defaultShadowCastingMode = ShadowCastingMode.On,
+                                ignoreOverlays = false
+                            });
+                        }
+                    }
+                    cm.baseRendererInfos = rList.ToArray();
+                }
+            }
+            catch { }
 
             if (!_loggedPlacement)
             {

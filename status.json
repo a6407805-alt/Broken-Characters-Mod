@@ -132,8 +132,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.6.2",
-      "note": "Active WIP (v0.6.2): Vacuum no longer drags solid chests/barrels into the player (they slide along the ground and park 3.5 m away), which was shoving the Surveyor around wildly. Fixed player model visibility during Peek ability (visor off) so 3D spacesuit is fully visible in both LiDAR and Peek modes; resolved player sliding by restoring baseAcceleration to 80f, adding mustKeyPress=true on utility to prevent slide autocast, decoupling Peek from Body state machine onto Weapon, and eliminating LateUpdate FieldAccessException."
+      "version": "0.6.3",
+      "note": "Active WIP (v0.6.3): Restored Surveyor 3D spacesuit visibility on the Character Select screen with baseRendererInfos registration on Layer 0; overhauled HUD & telemetry (relocated to Center-Left with wider dark glass backdrop, clear of money/objectives/chat) and elevated bottom-right ammo/vacuum selector hotbar comfortably above skills with no squished text."
     }
   ]
 }
