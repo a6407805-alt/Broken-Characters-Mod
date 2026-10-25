@@ -29,6 +29,7 @@ MATCH = {
     "REAPER": ["reaper"],
     "THE DUELIST": ["duelist"],
     "THE SURVEYOR": ["surveyor"],
+    "MOMMY MILKERS": ["mommymilkers", "mommy"],
 }
 
 MOD_FOLDER = {
@@ -47,6 +48,7 @@ MOD_FOLDER = {
     "REAPER": "Reaper",
     "THE DUELIST": "Duelist",
     "THE SURVEYOR": "Surveyor",
+    "MOMMY MILKERS": "MommyMilkers",
 }
 
 

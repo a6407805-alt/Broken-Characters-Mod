@@ -111,6 +111,22 @@
       "accent": "#E0B030",
       "status": "yellow",
       "image": "Assets/Roster/Duelist.png"
+    },
+    {
+      "name": "THE SURVEYOR",
+      "tagline": "Blind. Armored. Something follows.",
+      "added": "2026-10-24T10:06:00-04:00",
+      "accent": "#7AD33A",
+      "status": "active",
+      "image": "Assets/Roster/Surveyor.png"
+    },
+    {
+      "name": "MOMMY MILKERS",
+      "tagline": "Beach girl, milk stream, cruiser & cool car.",
+      "added": "2026-10-24T20:25:00-04:00",
+      "accent": "#F05A88",
+      "status": "green",
+      "image": "Assets/Roster/MommyMilkers.png"
     }
   ],
   "maps": [
