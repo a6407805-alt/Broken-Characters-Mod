@@ -463,8 +463,19 @@ namespace Surveyor
             }
             if (fixedAge >= _duration && isAuthority)
             {
-                if (inputBank && inputBank.skill3.down) outer.SetNextState(new SvrAnchorState());
-                else outer.SetNextStateToMain();
+                if (inputBank && inputBank.skill3.down)
+                {
+                    outer.SetNextState(new SvrAnchorState());
+                }
+                else
+                {
+                    if (characterMotor)
+                    {
+                        Vector3 v = characterMotor.velocity;
+                        characterMotor.velocity = new Vector3(_dir.x * moveSpeedStat, v.y, _dir.z * moveSpeedStat);
+                    }
+                    outer.SetNextStateToMain();
+                }
             }
         }
 

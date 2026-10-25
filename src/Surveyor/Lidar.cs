@@ -3817,16 +3817,16 @@ namespace Surveyor
                     for (int rIdx = 0; rIdx < rnds.Length; rIdx++)
                     {
                         Renderer r = rnds[rIdx];
-                        if (r && r.gameObject.layer != pLay && !r.forceRenderingOff)
+                        if (r && r.name.StartsWith("SvrPart_") && r.gameObject.layer != pLay)
                             r.gameObject.layer = pLay;
                     }
                 }
             }
 
-            if (!_suitLight)
+            if (!_suitLight && _body && _body.gameObject)
             {
                 GameObject lg = new GameObject("SvrSuitLight");
-                lg.transform.SetParent(_body.transform, false);
+                lg.transform.SetParent(_body.gameObject.transform, false);
                 lg.transform.localPosition = new Vector3(0f, 1.4f, 0.4f);
                 _suitLight = lg.AddComponent<Light>();
                 _suitLight.type = LightType.Point;
@@ -3902,6 +3902,10 @@ namespace Surveyor
             if (Peeking || _peekK > 0.02f)
             {
                 RestoreCamera();                          // keep the real world visible throughout the entire transition
+                if (cam && pLay >= 0)
+                {
+                    cam.cullingMask |= (1 << pLay);
+                }
                 ApplyPeekFx(cam, _peekK);
                 return;
             }
@@ -4119,7 +4123,9 @@ namespace Surveyor
             {
                 int uiLayer = LayerMask.NameToLayer("UI");
                 int allExceptUi = uiLayer >= 0 ? (~(1 << uiLayer)) : -1;
-                _dimCam.cullingMask = (_origMask != 0 && (_origMask & LayerIndex.world.mask) != 0) ? _origMask : allExceptUi;
+                int pLay = SvrModel.PlayerModelLayer;
+                int playerMask = pLay >= 0 ? (1 << pLay) : 0;
+                _dimCam.cullingMask = ((_origMask != 0 && (_origMask & LayerIndex.world.mask) != 0) ? _origMask : allExceptUi) | playerMask;
                 _dimCam.clearFlags = _origFlags != CameraClearFlags.SolidColor ? _origFlags : CameraClearFlags.Skybox;
                 _dimCam.backgroundColor = _origBg;
             }
@@ -4283,12 +4289,15 @@ namespace Surveyor
             {
                 try
                 {
+                    int playerLay = SvrModel.PlayerModelLayer;
+                    int playerMask = playerLay >= 0 ? (1 << playerLay) : 0;
+
                     if (Peeking || _peekK >= 0.02f)
                     {
-                        // Visor is lifted (Peek active): restore full 3D world rendering
+                        // Visor is lifted (Peek active): restore full 3D world rendering AND ensure player suit layer is visible
                         int uiLayer = LayerMask.NameToLayer("UI");
                         int allExceptUi = uiLayer >= 0 ? (~(1 << uiLayer)) : -1;
-                        c.cullingMask = (_origMask != 0 && (_origMask & LayerIndex.world.mask) != 0) ? _origMask : allExceptUi;
+                        c.cullingMask = ((_origMask != 0 && (_origMask & LayerIndex.world.mask) != 0) ? _origMask : allExceptUi) | playerMask;
                         c.clearFlags = (_origFlags != CameraClearFlags.SolidColor) ? _origFlags : CameraClearFlags.Skybox;
                         c.backgroundColor = _origBg;
                         if (_dimPpLayer) _dimPpLayer.enabled = true;
@@ -4302,8 +4311,7 @@ namespace Surveyor
                         int uiMask = uiLayer >= 0 ? (1 << uiLayer) : (1 << 5);
                         int uiObj = LayerMask.NameToLayer("UIObject");
                         if (uiObj >= 0) uiMask |= (1 << uiObj);
-                        int playerLay = SvrModel.PlayerModelLayer;
-                        if (playerLay >= 0) uiMask |= (1 << playerLay);
+                        if (playerLay >= 0) uiMask |= playerMask;
                         c.cullingMask = uiMask;
                         c.clearFlags = CameraClearFlags.SolidColor;
                         c.backgroundColor = Color.black;

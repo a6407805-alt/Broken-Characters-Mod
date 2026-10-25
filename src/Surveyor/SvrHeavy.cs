@@ -131,8 +131,8 @@ namespace Surveyor
             if (_spool && _spool.KickPulse > 0f) { _kick = Mathf.Min(1.2f, _kick + _spool.KickPulse); _spool.KickPulse = 0f; }
             _kick *= Mathf.Exp(-11f * dt);
 
-            // ---- turning is slower with all that weight, slowest when spooled
-            if (_dir) _dir.turnSpeed = Mathf.Lerp(430f, 230f, spool);
+            // ---- turning is responsive
+            if (_dir) _dir.turnSpeed = Mathf.Lerp(720f, 540f, spool);
 
             float roll = Mathf.Sin(_phase) * 3.2f * _moveK;
             float sink = 0.035f * _moveK * Mathf.Abs(Mathf.Cos(_phase)) + 0.012f * spool;

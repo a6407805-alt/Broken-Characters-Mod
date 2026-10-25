@@ -194,8 +194,6 @@ namespace Surveyor
             }
 
             Renderer[] originals = model.GetComponentsInChildren<Renderer>(true);
-            foreach (Transform t in model.GetComponentsInChildren<Transform>(true))
-                t.gameObject.layer = layer;
 
             Material baseMat = StandardMaterial(model);
             Material mat = MakeMaterial(baseMat);

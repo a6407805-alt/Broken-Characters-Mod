@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.6.0";
+        public const string PluginVersion = "0.6.1";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -248,9 +248,9 @@ namespace Surveyor
             body.baseDamage = 12f;
             body.levelDamage = 2.4f;
             body.baseArmor = 20f;
-            body.baseMoveSpeed = 6.8f;
-            body.baseAcceleration = 48f;           // heavy: slower to get going and to stop (Commando 80)
-            body.baseJumpPower = 13.5f;
+            body.baseMoveSpeed = 7f;
+            body.baseAcceleration = 80f;           // crisp, responsive movement (matching Commando 80)
+            body.baseJumpPower = 14f;
             Texture portrait = SvrIcons.Texture("portrait");
             if (portrait) body.portraitIcon = portrait;
 
@@ -351,12 +351,12 @@ namespace Surveyor
             LanceSkillDef = MakeSkill("LANCE", typeof(SvrLanceState), "Weapon", LanceCooldown.Value, true, true, InterruptPriority.Skill, "secondary", true);
             SkillDef secondary = MakeSkill("SECONDARY", typeof(SvrVacuumState), "Weapon", 0f, false, false, InterruptPriority.Skill, "secondary", false);
             secondary.cancelSprintingOnActivation = false;
-            SkillDef utility = MakeSkill("UTILITY", typeof(SvrSlideState), "Body", SlideCooldown.Value, true, false, InterruptPriority.PrioritySkill, "utility", true);
+            SkillDef utility = MakeSkill("UTILITY", typeof(SvrSlideState), "Body", SlideCooldown.Value, true, true, InterruptPriority.PrioritySkill, "utility", true);
             utility.cancelSprintingOnActivation = false;
-            SkillDef peek = MakeSkill("PEEK", typeof(SvrPeekState), "Body", PeekCooldown.Value, true, false, InterruptPriority.PrioritySkill, "peek", false);
+            SkillDef peek = MakeSkill("PEEK", typeof(SvrPeekState), "Weapon", PeekCooldown.Value, true, true, InterruptPriority.Skill, "peek", false);
             peek.cancelSprintingOnActivation = false;
-            SkillDef switchWeapon = MakeSkill("SPECIAL", typeof(SvrSwitchWeaponState), "Weapon", 0.5f, true, false, InterruptPriority.Skill, "special", false);
-            SkillDef overdrive = MakeSkill("OVERDRIVE", typeof(SvrOverdriveState), "Weapon", OverdriveCooldown.Value, true, false, InterruptPriority.Skill, "overdrive", false);
+            SkillDef switchWeapon = MakeSkill("SPECIAL", typeof(SvrSwitchWeaponState), "Weapon", 0.5f, true, true, InterruptPriority.Skill, "special", false);
+            SkillDef overdrive = MakeSkill("OVERDRIVE", typeof(SvrOverdriveState), "Weapon", OverdriveCooldown.Value, true, true, InterruptPriority.Skill, "overdrive", false);
 
             sl.primary = Slot("SurveyorPrimary", MinigunSkillDef, LanceSkillDef);
             sl.secondary = Slot("SurveyorSecondary", secondary);
