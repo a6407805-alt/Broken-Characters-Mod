@@ -123,8 +123,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.5.8",
-      "note": "Active WIP (v0.5.8): Differentiated scanner modes (Bio-Scan reveals monsters through walls, Salvage reveals chests/loot through walls, Topography maps terrain paths, Peripheral flood gives local footing), fixed audio SFX restore, 4 selectable Minigun ammo modes + 4 Vacuum modes switchable via mouse scroll wheel with dedicated bottom-right hotbar dock, ground item hover inspection tooltips with vertical beacon spires, and R ability overhauled to 360-degree LiDAR Overdrive Pulse."
+      "version": "0.5.9",
+      "note": "Active WIP (v0.5.9): Fixed Peek (F key) visor lift to cleanly reveal the full 3D real world without camera culling corruption or PostProcessLayer blackouts, and restored the Surveyor player suit in third person (self-illuminating 3D armor plates + real-time 60 FPS animated skeletal and suit mesh LiDAR point cloud dots matching vacuum and minigun actions)."
     }
   ]
 }

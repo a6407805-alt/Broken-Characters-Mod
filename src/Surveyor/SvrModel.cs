@@ -162,7 +162,8 @@ namespace Surveyor
             for (int i = 0; i < _palColor.Length; i++)
             {
                 _tex.SetPixel(i, 0, _palColor[i]);
-                _emTex.SetPixel(i, 0, _palEmit[i] > 0f ? _palColor[i] : Color.black);
+                Color emCol = _palEmit[i] > 0f ? _palColor[i] : (_palColor[i] * 0.48f);
+                _emTex.SetPixel(i, 0, emCol);
             }
             _tex.Apply(false, true);
             _emTex.Apply(false, true);
@@ -181,10 +182,21 @@ namespace Surveyor
 
         public static void Apply(Transform model)
         {
-            if (!model || !SvrPlugin.UseCustomModel.Value || !Load()) return;
+            int layer = PlayerModelLayer;
+            if (!model || !SvrPlugin.UseCustomModel.Value || !Load())
+            {
+                if (model)
+                {
+                    foreach (Transform t in model.GetComponentsInChildren<Transform>(true))
+                        t.gameObject.layer = layer;
+                }
+                return;
+            }
 
             Renderer[] originals = model.GetComponentsInChildren<Renderer>(true);
-            int layer = PlayerModelLayer;
+            foreach (Transform t in model.GetComponentsInChildren<Transform>(true))
+                t.gameObject.layer = layer;
+
             Material baseMat = StandardMaterial(model);
             Material mat = MakeMaterial(baseMat);
             if (!mat) { SvrPlugin.Log.LogWarning("Surveyor model: no Hopoo shader found, keeping the Commando model."); return; }

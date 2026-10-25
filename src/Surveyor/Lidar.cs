@@ -2556,13 +2556,16 @@ namespace Surveyor
             rig.ScannedUntil = Mathf.Max(rig.ScannedUntil, now + revealSeconds);
             rig.LastScanHit = now;
 
+            bool isSelf = (b == _body);
             bool isFriendly = b.teamComponent && _body && _body.teamComponent && b.teamComponent.teamIndex == _body.teamComponent.teamIndex;
             bool isBoss = b.isBoss || b.isChampion;
-            Color boneCol = isFriendly
-                ? new Color(0.28f, 1f, 0.88f, 1f)
-                : (isBoss ? new Color(1f, 0.42f, 0.1f, 1f) : new Color(1f, 0.18f, 0.14f, 1f));
-            Color edgeCol = Color.Lerp(boneCol, Color.white, 0.35f);
-            float life = 0.18f; // Short dot lifetime so moving dots tightly track walking/attacking animation without ghosting or T-pose
+            Color boneCol = isSelf
+                ? new Color(1f, 0.62f, 0.16f, 1f)
+                : (isFriendly
+                    ? new Color(0.28f, 1f, 0.88f, 1f)
+                    : (isBoss ? new Color(1f, 0.42f, 0.1f, 1f) : new Color(1f, 0.18f, 0.14f, 1f)));
+            Color edgeCol = Color.Lerp(boneCol, isSelf ? new Color(0.2f, 0.95f, 1f, 1f) : Color.white, 0.35f);
+            float life = 0.18f;
 
             // 1) Emit real-time animated points along active Transform bone links (legs, spine, arms, head)
             if (rig.Bones.Count > 0)
@@ -2631,6 +2634,30 @@ namespace Surveyor
                                 rig.BakedWorldVerts.Add(wp);
                                 if ((v / step) % 3 == 0) AddDot(wp, edgeCol, life, true);
                             }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // 4) For the local player, also sweep the rigid Surveyor suit parts (rotary minigun, vacuum, visor, backpack dome)
+            if (isSelf && rig.ModelRoot)
+            {
+                try
+                {
+                    MeshFilter[] mfs = rig.ModelRoot.GetComponentsInChildren<MeshFilter>(false);
+                    if (mfs != null && mfs.Length > 0)
+                    {
+                        int mBudget = Mathf.Min(14, mfs.Length);
+                        for (int i = 0; i < mBudget; i++)
+                        {
+                            MeshFilter mf = mfs[(i + _spin * 3) % mfs.Length];
+                            if (!mf || !mf.sharedMesh) continue;
+                            Vector3[] verts = mf.sharedMesh.vertices;
+                            if (verts == null || verts.Length == 0) continue;
+                            int vIdx = Random.Range(0, verts.Length);
+                            Vector3 wp = mf.transform.TransformPoint(verts[vIdx]);
+                            AddDot(wp, (i & 1) == 0 ? edgeCol : boneCol, life, true);
                         }
                     }
                 }
@@ -3044,6 +3071,12 @@ namespace Surveyor
             }
             catch { }
 
+            // Real-time animated LiDAR point-cloud sweep of the Surveyor's own body & suit in third person
+            if (_body && _body.healthComponent && _body.healthComponent.alive)
+            {
+                SweepBody(_body, 0.15f, 28);
+            }
+
             // Also wash any SvrLiDARScanTarget directly inside the forward scanner beam or close proximity
             for (int i = 0; i < _pois.Count; i++)
             {
@@ -3108,7 +3141,7 @@ namespace Surveyor
             }
 
             // Peek on its own key. Toggleable: pressing F lifts visor, pressing F again closes it.
-            // When open, screen slowly washes out to blinding pure white over ~4.5s, then snaps shut with a cooldown.
+            // Visor flips up, real world comes into crisp view, and when closed, smooth 2.4s LiDAR reboot sequence starts.
             if (TryKey(SvrPlugin.PeekKey.Value, out peek) && Input.GetKeyDown(peek))
             {
                 if (Peeking)
@@ -3117,15 +3150,9 @@ namespace Surveyor
                 }
                 else if (Time.time >= _peekReady)
                 {
-                    EntityStateMachine esm = EntityStateMachine.FindByCustomName(gameObject, "Body");
-                    if (esm)
-                    {
-                        esm.SetInterruptState(new SvrPeekState(), InterruptPriority.Skill);
-                    }
-                    else
-                    {
-                        StartPeek(4.8f);
-                    }
+                    StartPeek(5.0f);
+                    SvrRigPart.OpenVisor(gameObject, 5.0f);
+                    Util.PlaySound("Play_commando_R", gameObject);
                 }
                 else
                 {
@@ -3780,6 +3807,22 @@ namespace Surveyor
             if (!Alive) { RestoreCamera(); DropPeekFx(); _peekK = 0f; return; }
 
             int pLay = SvrModel.PlayerModelLayer;
+            if (_body)
+            {
+                ModelLocator ml = _body.modelLocator;
+                Transform mt = ml ? ml.modelTransform : null;
+                if (mt)
+                {
+                    Renderer[] rnds = mt.GetComponentsInChildren<Renderer>(false);
+                    for (int rIdx = 0; rIdx < rnds.Length; rIdx++)
+                    {
+                        Renderer r = rnds[rIdx];
+                        if (r && r.gameObject.layer != pLay && !r.forceRenderingOff)
+                            r.gameObject.layer = pLay;
+                    }
+                }
+            }
+
             if (!_suitLight)
             {
                 GameObject lg = new GameObject("SvrSuitLight");
@@ -3787,10 +3830,10 @@ namespace Surveyor
                 lg.transform.localPosition = new Vector3(0f, 1.4f, 0.4f);
                 _suitLight = lg.AddComponent<Light>();
                 _suitLight.type = LightType.Point;
-                _suitLight.range = 9f;
-                _suitLight.intensity = 2.5f;
+                _suitLight.range = 14f;
+                _suitLight.intensity = 3.8f;
                 _suitLight.color = new Color(0.92f, 0.97f, 1f);
-                _suitLight.cullingMask = (1 << pLay);
+                _suitLight.cullingMask = (1 << pLay) | (1 << 0) | (1 << 5) | (1 << 12);
             }
 
             float now = Time.time;
@@ -4072,11 +4115,12 @@ namespace Surveyor
 
         private void RestoreDim()
         {
-            if (_dimmed && _dimCam)
+            if (_dimCam)
             {
-                int playerLay = SvrModel.PlayerModelLayer;
-                _dimCam.cullingMask = _origMask | (1 << playerLay);
-                _dimCam.clearFlags = _origFlags;
+                int uiLayer = LayerMask.NameToLayer("UI");
+                int allExceptUi = uiLayer >= 0 ? (~(1 << uiLayer)) : -1;
+                _dimCam.cullingMask = (_origMask != 0 && (_origMask & LayerIndex.world.mask) != 0) ? _origMask : allExceptUi;
+                _dimCam.clearFlags = _origFlags != CameraClearFlags.SolidColor ? _origFlags : CameraClearFlags.Skybox;
                 _dimCam.backgroundColor = _origBg;
             }
             if (_dimPpLayer)
@@ -4156,7 +4200,6 @@ namespace Surveyor
                 {
                     Type lt = _ppLayer.GetType();
                     const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-                    lt.GetField("finalBlitToCameraTarget", flags)?.SetValue(_ppLayer, w <= 0.01f ? _origFinalBlit : false);
                     lt.GetField("globalVolumesDirty", flags)?.SetValue(_ppLayer, true);
                     lt.GetField("volumeSettingsChanged", flags)?.SetValue(_ppLayer, true);
                     lt.GetField("m_SettingsUpdateNeeded", flags)?.SetValue(_ppLayer, true);
@@ -4232,22 +4275,41 @@ namespace Surveyor
         // Enforce dark world culling, black background, and zero fog right as the camera renders
         private void PreCull(Camera c)
         {
-            if (_local && SvrPlugin.DarkWorld.Value && !Peeking && _peekK < 0.02f)
+            if (!_local || !Alive) return;
+            Camera cam = Cam();
+            if (!cam || c != cam) return; // CRITICAL: NEVER touch uiCam or skyboxCam!
+
+            if (SvrPlugin.DarkWorld.Value)
             {
                 try
                 {
-                    ApplyFogOverrides(c);
-                    int uiLayer = LayerMask.NameToLayer("UI");
-                    int uiMask = uiLayer >= 0 ? (1 << uiLayer) : (1 << 5);
-                    int uiObj = LayerMask.NameToLayer("UIObject");
-                    if (uiObj >= 0) uiMask |= (1 << uiObj);
-                    int playerLay = SvrModel.PlayerModelLayer;
-                    if (playerLay >= 0) uiMask |= (1 << playerLay);
-                    c.cullingMask = uiMask;
-                    c.clearFlags = CameraClearFlags.SolidColor;
-                    c.backgroundColor = Color.black;
-                    if (_dimPpLayer) _dimPpLayer.enabled = false;
-                    if (_dimSkyboxCam) _dimSkyboxCam.enabled = false;
+                    if (Peeking || _peekK >= 0.02f)
+                    {
+                        // Visor is lifted (Peek active): restore full 3D world rendering
+                        int uiLayer = LayerMask.NameToLayer("UI");
+                        int allExceptUi = uiLayer >= 0 ? (~(1 << uiLayer)) : -1;
+                        c.cullingMask = (_origMask != 0 && (_origMask & LayerIndex.world.mask) != 0) ? _origMask : allExceptUi;
+                        c.clearFlags = (_origFlags != CameraClearFlags.SolidColor) ? _origFlags : CameraClearFlags.Skybox;
+                        c.backgroundColor = _origBg;
+                        if (_dimPpLayer) _dimPpLayer.enabled = true;
+                        if (_dimSkyboxCam) _dimSkyboxCam.enabled = true;
+                    }
+                    else
+                    {
+                        // Visor is down (LiDAR mode): cull world, show self-illuminated player model & UI against pitch black
+                        ApplyFogOverrides(c);
+                        int uiLayer = LayerMask.NameToLayer("UI");
+                        int uiMask = uiLayer >= 0 ? (1 << uiLayer) : (1 << 5);
+                        int uiObj = LayerMask.NameToLayer("UIObject");
+                        if (uiObj >= 0) uiMask |= (1 << uiObj);
+                        int playerLay = SvrModel.PlayerModelLayer;
+                        if (playerLay >= 0) uiMask |= (1 << playerLay);
+                        c.cullingMask = uiMask;
+                        c.clearFlags = CameraClearFlags.SolidColor;
+                        c.backgroundColor = Color.black;
+                        if (_dimPpLayer) _dimPpLayer.enabled = false;
+                        if (_dimSkyboxCam) _dimSkyboxCam.enabled = false;
+                    }
                 }
                 catch { }
             }
