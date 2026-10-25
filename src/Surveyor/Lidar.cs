@@ -57,6 +57,16 @@ namespace Surveyor
             return pick;
         }
 
+        /// <summary>Restores all stolen senses when the Shimmer Demon Boss is defeated.</summary>
+        public static string RestoreAll()
+        {
+            bool any = Hearing || Sight || Touch || Balance;
+            Hearing = false; Sight = false; Touch = false; Balance = false;
+            if (any) Version++;
+            SvrAudio.ResetVolume();
+            return any ? "ALL SENSES RESTORED" : null;
+        }
+
         public static void ResetStage()
         {
             bool any = Hearing || Sight || Touch || Balance;
@@ -122,7 +132,34 @@ namespace Surveyor
         }
     }
 
-    // ================================================================ the Shimmer Demon (a client-side stalker: no body, no health, only she sees it)
+    // ================================================================ the Shimmer Demon Boss
+    // A terrifying spectral boss monster that stalks from stealth, invulnerable until sucked up in the Heavy Poltergust Vacuum.
+    // Spawns once per round with a high health pool, hunting all players on the team.
+
+    public class SvrDemonHurtReceiver : MonoBehaviour, IOnIncomingDamageServerReceiver, IOnTakeDamageServerReceiver
+    {
+        public SvrDemon Demon;
+
+        public void OnIncomingDamageServer(DamageInfo damageInfo)
+        {
+            if (Demon == null || !Demon.Active) return;
+            if (Demon.Invulnerable)
+            {
+                damageInfo.rejected = true;
+                damageInfo.damage = 0f;
+                Demon.OnShieldDeflect();
+            }
+        }
+
+        public void OnTakeDamageServer(DamageReport damageReport)
+        {
+            if (Demon == null || !Demon.Active) return;
+            if (!Demon.Invulnerable && damageReport != null && damageReport.damageInfo != null)
+            {
+                Demon.TakeDamage(damageReport.damageInfo.damage, damageReport.damageInfo.position);
+            }
+        }
+    }
 
     public class SvrDemon
     {
@@ -132,7 +169,7 @@ namespace Surveyor
         public Vector3 Pos;
         public float Yaw;
 
-        private float _stageTime, _modeTimer, _flank, _stagger, _chain, _chainT, _goneTimer;
+        private float _stageTime, _modeTimer, _flank, _stagger, _chain, _chainT;
         private float _phase;
         private Vector3 _center;
 
@@ -160,23 +197,100 @@ namespace Surveyor
         public string LastRestoredSense;
         public float LastRestoredUntil;
 
-        public float MaxHp = 1000f;
-        public float CurrentHp = 1000f;
-        public bool Weakened { get { return CurrentHp <= MaxHp * 0.35f || CurrentHp <= 0f; } }
+        // Boss encounter attributes
+        public float MaxHp = 6000f;
+        public float CurrentHp = 6000f;
+        public float VulnerableTimer = 0f;
+        public bool Invulnerable { get { return VulnerableTimer <= 0f; } }
+        public bool Weakened { get { return !Invulnerable; } }
+        public bool IsInvisible = true;
+        public GameObject PhysicalGo;
+        public bool SpawnedThisRound = false;
+        private CharacterBody _currentVictim;
+        private float _retargetTimer = 0f;
+        private float _shieldDeflectToastUntil = -10f;
 
         public void TakeDamage(float dmg, Vector3 from)
         {
             if (!Active) return;
-            bool wasWeak = Weakened;
-            CurrentHp = Mathf.Max(0f, CurrentHp - dmg);
-            _stagger = Mathf.Max(_stagger, 0.35f);
-            State = Mode.Stagger;
-            if (!wasWeak && Weakened)
+            if (Invulnerable)
             {
-                _stagger = 2.0f;
-                LastRestoredSense = "DEMON WEAKENED — VACUUM NOW [M2]!";
-                LastRestoredUntil = Time.time + 3.5f;
+                OnShieldDeflect();
+                return;
             }
+
+            CurrentHp = Mathf.Max(0f, CurrentHp - dmg);
+            _stagger = Mathf.Max(_stagger, 0.25f);
+            State = Mode.Stagger;
+
+            if (CurrentHp <= 0f)
+            {
+                DefeatDemon();
+            }
+        }
+
+        public void OnShieldDeflect()
+        {
+            if (Time.time < _shieldDeflectToastUntil) return;
+            _shieldDeflectToastUntil = Time.time + 1.8f;
+            Util.PlaySound("Play_captain_drone_zap", PhysicalGo);
+            LastRestoredSense = "PHASE SHIELD ACTIVE — VACUUM [M2] TO EXPOSE!";
+            LastRestoredUntil = Time.time + 2.5f;
+        }
+
+        public void VacuumBreakShield(float dt, CharacterBody body)
+        {
+            if (!Active) return;
+            bool wasInvuln = Invulnerable;
+            VulnerableTimer = 4.2f;
+
+            if (wasInvuln)
+            {
+                Util.PlaySound("Play_item_proc_shieldBreak", PhysicalGo ? PhysicalGo : (body ? body.gameObject : null));
+                LastRestoredSense = "SHIELD BROKEN — ALL PLAYERS ATTACK NOW!";
+                LastRestoredUntil = Time.time + 3.8f;
+                try
+                {
+                    Chat.AddMessage("<color=#ffdd33>[BOSS EXPOSED]</color> <color=#ff3b30>Shimmer Demon Phase Shield shattered by Poltergust Vacuum!</color> <color=#90e0ef>All players attack now!</color>");
+                }
+                catch { }
+            }
+
+            float vacDps = (body ? body.damage * 4.5f : 60f) * dt;
+            TakeDamage(vacDps, body ? body.corePosition : Pos);
+        }
+
+        public void DefeatDemon()
+        {
+            if (!Active) return;
+            State = Mode.Gone;
+            TetherActive = false;
+            CaptureProgress = 1f;
+
+            if (PhysicalGo) UnityEngine.Object.Destroy(PhysicalGo);
+
+            StoredSpirits = Mathf.Min(MaxStoredSpirits, StoredSpirits + 1);
+            Util.PlaySound("Play_UI_shrineSuccess", null);
+            Util.PlaySound("Play_UI_obj_casinoChest_open", null);
+
+            try
+            {
+                if (UnityEngine.Networking.NetworkServer.active)
+                {
+                    PickupIndex drop = PickupCatalog.FindPickupIndex(ItemTier.Tier2);
+                    PickupDropletController.CreatePickupDroplet(drop, Pos + Vector3.up * 1.5f, Vector3.up * 8f);
+                }
+            }
+            catch { }
+
+            string restored = SvrSenses.RestoreAll();
+            LastRestoredSense = "DEMON EXORCISED — ALL SENSES RESTORED!";
+            LastRestoredUntil = Time.time + 5.0f;
+            try
+            {
+                Chat.AddMessage("<color=#00ffd8>[BOSS DEFEATED]</color> <color=#ffea33>The Shimmer Demon has been exorcised! All lost senses restored. Press [H] for Guardian or [B] at Teleporter to cash in!</color>");
+            }
+            catch { }
         }
 
         public int MaxStoredSpirits { get { return SvrUpgrades.Has(SvrUpgrades.COMPRESSION_PRESS) ? 2 : 1; } }
@@ -391,11 +505,18 @@ namespace Surveyor
             float need = anchored ? Mathf.Min(0.6f, SvrPlugin.MinigunPushSpool.Value) : SvrPlugin.MinigunPushSpool.Value;
             if (spool < need || !Near(aim, 60f)) return;
 
+            if (Invulnerable)
+            {
+                OnShieldDeflect();
+                Knock(aim.origin, 0.25f, 0f);
+                return;
+            }
+
             float diff = Run.instance ? Mathf.Max(1f, Run.instance.difficultyCoefficient) : 1f;
-            float dmg = (anchored ? 38f : 24f) * diff;
+            float dmg = (anchored ? 85f : 55f) * diff;
             TakeDamage(dmg, aim.origin);
 
-            Knock(aim.origin, 0.9f, 0f);
+            Knock(aim.origin, 0.7f, 0.1f);
             _chain += 1f;
             _chainT = 0.8f;
             if (_chain >= 4f) { _chain = 0f; Knock(aim.origin, 0f, SvrPlugin.MinigunStagger.Value); }
@@ -404,6 +525,7 @@ namespace Surveyor
         public void LanceHit(Ray aim)
         {
             if (!Active) return;
+            if (Invulnerable) { OnShieldDeflect(); return; }
             float diff = Run.instance ? Mathf.Max(1f, Run.instance.difficultyCoefficient) : 1f;
             TakeDamage(320f * diff, aim.origin);
             if (Near(aim, 150f)) Knock(aim.origin, 10f, SvrPlugin.MinigunStagger.Value);
@@ -455,56 +577,39 @@ namespace Surveyor
             return true;
         }
 
-        // Industrial Poltergust Vacuum Cleaner [M2]: continuously pulls in dropped items, staggers/pulls enemies, and locks onto the Shimmer Demon
+        // Industrial Poltergust Vacuum Cleaner [M2]: continuously pulls in dropped items, staggers/pulls enemies, and breaks the Shimmer Demon's phase shield
         public void VacuumHold(CharacterBody body, Ray aim, float dt)
         {
             if (!body) return;
             Vector3 origin = aim.origin;
             Vector3 fwd = aim.direction;
 
-            // 1) Sucks in the Shimmer Demon and builds capture progress
-            if (!Active)
-            {
-                if (_stageTime > 12f || SvrSenses.Lost > 0)
-                {
-                    Spawn(body.footPosition);
-                }
-            }
-
             if (Active)
             {
                 Vector3 toDemon = _center - origin;
                 float dDemon = toDemon.magnitude;
                 float angDemon = dDemon > 0.1f ? Vector3.Angle(fwd, toDemon) : 0f;
-                if (dDemon < 48f && (angDemon < 52f || dDemon < 12f))
+                if (dDemon < 52f && (angDemon < 52f || dDemon < 14f))
                 {
-                    if (Weakened)
+                    VacuumBreakShield(dt, body);
+                    TetherActive = true;
+                    State = Mode.Stagger;
+                    _stagger = Mathf.Max(_stagger, 0.45f);
+
+                    // Pull Demon smoothly toward the Surveyor's vacuum nozzle
+                    Vector3 toPlayer = origin - Pos;
+                    toPlayer.y = 0f;
+                    if (toPlayer.sqrMagnitude > 0.5f)
                     {
-                        TetherActive = true;
-                        State = Mode.Stagger;
-                        _stagger = Mathf.Max(_stagger, 0.45f);
-
-                        // Pull Demon smoothly toward the Surveyor's vacuum nozzle
-                        Vector3 toPlayer = origin - Pos;
-                        toPlayer.y = 0f;
-                        if (toPlayer.sqrMagnitude > 0.5f)
-                        {
-                            Pos += toPlayer.normalized * (18f * dt);
-                            _center = Pos + Vector3.up * 1.4f;
-                        }
-
-                        CaptureProgress = Mathf.Clamp01(CaptureProgress + dt * 0.48f);
-
-                        if (CaptureProgress >= 0.99f || dDemon < 3.2f)
-                        {
-                            CaptureDemon(body, false);
-                        }
+                        Pos += toPlayer.normalized * (16f * dt);
+                        _center = Pos + Vector3.up * 1.4f;
                     }
-                    else
+
+                    CaptureProgress = Mathf.Clamp01(CaptureProgress + dt * 0.32f);
+
+                    if (CaptureProgress >= 0.99f || CurrentHp <= 0f)
                     {
-                        // Demon resists vacuum pull until weakened by minigun!
-                        TetherActive = false;
-                        CaptureProgress = Mathf.Max(0f, CaptureProgress - dt * 0.25f);
+                        DefeatDemon();
                     }
                 }
                 else
@@ -591,6 +696,9 @@ namespace Surveyor
 
         private void Spawn(Vector3 player)
         {
+            if (SpawnedThisRound) return;
+            SpawnedThisRound = true;
+
             float a = Random.value * 6.28f;
             Vector3 p = player + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * Random.Range(45f, 60f);
             p.y = GroundY(p, player.y);
@@ -600,9 +708,94 @@ namespace Surveyor
             _modeTimer = Random.Range(18f, 30f);
             _chain = 0f;
             _center = Pos + Vector3.up * 1.4f;
+
             float diff = Run.instance ? Mathf.Max(1f, Run.instance.difficultyCoefficient) : 1f;
-            MaxHp = 1000f * diff;
+            int pCount = Run.instance ? Mathf.Max(1, Run.instance.participatingPlayerCount) : 1;
+            MaxHp = 6000f * diff * Mathf.Sqrt(pCount);
             CurrentHp = MaxHp;
+            VulnerableTimer = 0f; // Phase shield starts active!
+            IsInvisible = true;
+
+            SpawnPhysicalEntity();
+
+            try
+            {
+                Chat.AddMessage("<color=#ff2a2a>[BOSS SPAWNED]</color> <color=#ff6b6b>The Spectral Shimmer Demon stalks the stage!</color> <color=#ffdd33>Phase shield invulnerable — find with LiDAR and vacuum [M2] to break shield!</color>");
+            }
+            catch { }
+        }
+
+        private void SpawnPhysicalEntity()
+        {
+            try
+            {
+                if (PhysicalGo) UnityEngine.Object.Destroy(PhysicalGo);
+                PhysicalGo = new GameObject("ShimmerDemonBoss");
+                PhysicalGo.transform.position = Pos + Vector3.up * 1.0f;
+
+                CapsuleCollider col = PhysicalGo.AddComponent<CapsuleCollider>();
+                col.center = Vector3.zero;
+                col.radius = 1.6f;
+                col.height = 3.4f;
+                col.direction = 1;
+
+                PhysicalGo.layer = LayerIndex.entityPrecise.intVal;
+
+                TeamComponent tc = PhysicalGo.AddComponent<TeamComponent>();
+                tc.teamIndex = TeamIndex.Monster;
+
+                HealthComponent hc = PhysicalGo.AddComponent<HealthComponent>();
+                hc.dontShowHealthbar = true;
+
+                HurtBoxGroup hbg = PhysicalGo.AddComponent<HurtBoxGroup>();
+                HurtBox hb = PhysicalGo.AddComponent<HurtBox>();
+                hb.collider = col;
+                hb.healthComponent = hc;
+                hb.isBullseye = true;
+                hb.damageModifier = HurtBox.DamageModifier.Normal;
+                hb.hurtBoxGroup = hbg;
+                hbg.hurtBoxes = new HurtBox[] { hb };
+                hbg.mainHurtBox = hb;
+
+                SvrDemonHurtReceiver recv = PhysicalGo.AddComponent<SvrDemonHurtReceiver>();
+                recv.Demon = this;
+            }
+            catch (System.Exception ex)
+            {
+                SvrPlugin.Log.LogError("Failed to spawn Demon physical entity: " + ex);
+            }
+        }
+
+        private CharacterBody FindBestPlayerTarget(Vector3 fromPos)
+        {
+            CharacterBody best = null;
+            float bestDistSq = float.MaxValue;
+            try
+            {
+                int count = CharacterBody.readOnlyInstancesList.Count;
+                for (int i = 0; i < count; i++)
+                {
+                    CharacterBody b = CharacterBody.readOnlyInstancesList[i];
+                    if (!b || !b.healthComponent || !b.healthComponent.alive) continue;
+                    if (b.teamComponent && b.teamComponent.teamIndex != TeamIndex.Player) continue;
+
+                    float dSq = (b.corePosition - fromPos).sqrMagnitude;
+                    if (dSq < bestDistSq)
+                    {
+                        bestDistSq = dSq;
+                        best = b;
+                    }
+                }
+            }
+            catch { }
+            return best;
+        }
+
+        public void OnShieldRecharge()
+        {
+            Util.PlaySound("Play_captain_drone_zap", PhysicalGo);
+            LastRestoredSense = "PHASE SHIELD RECHARGED — VACUUM TO BREAK!";
+            LastRestoredUntil = Time.time + 2.5f;
         }
 
         public void Tick(float dt, CharacterBody body, InputBankTest input)
@@ -641,23 +834,39 @@ namespace Surveyor
             if (!SvrPlugin.DemonEnabled.Value) { State = Mode.Dormant; TetherActive = false; return; }
             _stageTime += dt;
             if (_chainT > 0f) { _chainT -= dt; if (_chainT <= 0f) _chain = 0f; }
+
+            // Phase shield vulnerability countdown
+            if (VulnerableTimer > 0f)
+            {
+                VulnerableTimer -= dt;
+                if (VulnerableTimer <= 0f)
+                {
+                    VulnerableTimer = 0f;
+                    OnShieldRecharge();
+                }
+            }
+
+            // Sync physical hurtbox entity to current demon position
+            if (PhysicalGo)
+            {
+                PhysicalGo.transform.position = Pos + Vector3.up * 1.0f;
+            }
+
             Vector3 pp = body.footPosition;
 
             if (State == Mode.Dormant)
             {
                 TetherActive = false;
-                if (_stageTime >= SvrPlugin.DemonFirstSpawn.Value) Spawn(pp);
+                if (!SpawnedThisRound && _stageTime >= SvrPlugin.DemonFirstSpawn.Value) Spawn(pp);
                 return;
             }
             if (State == Mode.Gone)
             {
                 TetherActive = false;
-                _goneTimer -= dt;
-                if (_goneTimer <= 0f && SvrSenses.Lost < SvrPlugin.MaxSensesLost.Value) Spawn(pp);
-                return;
+                return; // Spawns once per round/stage
             }
 
-            // Direct Heavy Vacuum (M2) capture of the Shimmer Demon (no floor traps):
+            // Direct Heavy Vacuum (M2) capture of the Shimmer Demon:
             TetherActive = false;
             CounterSteering = false;
             if (input != null)
@@ -670,6 +879,7 @@ namespace Surveyor
 
                 if (vacuuming && dDemon < 55f && angle < 32f)
                 {
+                    VacuumBreakShield(dt, body);
                     TetherActive = true;
                     State = Mode.Stagger;
                     _stagger = Mathf.Max(_stagger, 0.45f);
@@ -690,12 +900,12 @@ namespace Surveyor
                     _center = Pos + Vector3.up * Mathf.Lerp(1.4f, 0.35f, CaptureProgress);
                     Animate(dt);
 
-                    float pullDur = 2.2f;
+                    float pullDur = 2.4f;
                     CaptureProgress = Mathf.Clamp01(CaptureProgress + (dt / pullDur));
 
-                    if (CaptureProgress >= 1f || pDist < 2.5f)
+                    if (CaptureProgress >= 0.99f || CurrentHp <= 0f)
                     {
-                        CaptureDemon(body, false);
+                        DefeatDemon();
                     }
                     return;
                 }
@@ -703,10 +913,19 @@ namespace Surveyor
 
             if (CaptureProgress > 0f)
             {
-                CaptureProgress = Mathf.Max(0f, CaptureProgress - dt * 0.4f);
+                CaptureProgress = Mathf.Max(0f, CaptureProgress - dt * 0.35f);
             }
 
-            Vector3 to = pp - Pos;
+            // Periodic retargeting to stalk/hunt all players on the team
+            _retargetTimer -= dt;
+            if (_currentVictim == null || !_currentVictim.healthComponent || !_currentVictim.healthComponent.alive || _retargetTimer <= 0f)
+            {
+                _currentVictim = FindBestPlayerTarget(Pos) ?? body;
+                _retargetTimer = Random.Range(10f, 18f);
+            }
+            Vector3 targetPos = _currentVictim ? _currentVictim.footPosition : pp;
+
+            Vector3 to = targetPos - Pos;
             Vector3 flat = new Vector3(to.x, 0f, to.z);
             float fd = flat.magnitude;
             Vector3 dir = fd > 0.01f ? flat / fd : Vector3.forward;
@@ -728,7 +947,7 @@ namespace Surveyor
                     speed = SvrPlugin.DemonProwlSpeed.Value * 1.5f;
                     wish = dir + side * Mathf.Sin(_flank * 1.3f) * 0.7f;
                     _modeTimer -= dt;
-                    if ((fd < 24f && Random.value < dt * 0.35f) || _modeTimer <= 0f) { State = Mode.Hunt; _modeTimer = 3f; }
+                    if ((fd < 24f && Random.value < dt * 0.35f) || _modeTimer <= 0f) { State = Mode.Hunt; _modeTimer = 4f; }
                     break;
                 case Mode.Hunt:
                     speed = SvrPlugin.DemonHuntSpeed.Value;
@@ -745,76 +964,67 @@ namespace Surveyor
             float strainSlow = Mathf.Lerp(1f, 0.45f, StrainStacks / 10f);
             if (speed > 0f && wish.sqrMagnitude > 0.0001f) Pos += wish.normalized * (speed * strainSlow * dt);
 
-            // It phases through walls and climbs: follows the ground, and rises to her level when it is close.
+            // It phases through walls and climbs: follows the ground, and rises to victim level when it is close.
             float gy = GroundY(Pos, Pos.y);
             float targetY = gy;
-            if (fd < 12f) targetY = Mathf.Max(gy, Mathf.Min(pp.y, gy + 30f));
+            if (fd < 12f) targetY = Mathf.Max(gy, Mathf.Min(targetPos.y, gy + 30f));
             Pos.y = Mathf.MoveTowards(Pos.y, targetY, 10f * dt);
             _center = Pos + Vector3.up * 1.4f;
             if (State == Mode.Hunt && fd < 7f) _lungeT = 0.4f;
             Animate(dt);
             if (fd > 0.1f && State != Mode.Stagger) Yaw = Mathf.LerpAngle(Yaw, Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg, 6f * dt);
 
-            if (State != Mode.Stagger && Vector3.Distance(body.corePosition, _center) < SvrPlugin.DemonContactRange.Value + 0.6f) Feed();
+            if (State != Mode.Stagger)
+            {
+                CharacterBody closeVictim = _currentVictim ?? body;
+                if (closeVictim && Vector3.Distance(closeVictim.corePosition, _center) < SvrPlugin.DemonContactRange.Value + 0.9f)
+                {
+                    BossStrike(closeVictim);
+                }
+            }
         }
 
         public void CaptureDemon(CharacterBody body, bool compressionBonus)
         {
-            TrapActive = false;
-            TetherActive = false;
-            CaptureProgress = 0f;
-            StrainStacks = 0;
-            CurrentHp = MaxHp;
-
-            if (LockedEnemy && LockedEnemy.alive)
-            {
-                try
-                {
-                    if (UnityEngine.Networking.NetworkServer.active)
-                        LockedEnemy.Suicide(body.gameObject, body.gameObject, DamageType.VoidDeath);
-                }
-                catch { }
-                LockedEnemy = null;
-            }
-            else
-            {
-                State = Mode.Gone;
-                _goneTimer = SvrPlugin.DemonRespawn.Value * 1.25f;
-            }
-
-            StoredSpirits = Mathf.Min(MaxStoredSpirits, StoredSpirits + 1);
-            Util.PlaySound("Play_UI_obj_casinoChest_open", body.gameObject);
-            try
-            {
-                GameObject fx = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/OmniEffect/OmniExplosionVFX");
-                if (fx) EffectManager.SpawnEffect(fx, new EffectData { origin = TrapPos + Vector3.up * 0.5f, scale = 5f }, false);
-            }
-            catch { }
-
-            string restored = SvrSenses.RestoreOne();
-            string slamTag = compressionBonus ? " [PERFECT COMPRESSION SLAM!]" : "";
-            LastRestoredSense = (restored ?? "SPIRIT") + slamTag + " · [H] GUARDIAN / [B] CASH-IN";
-            LastRestoredUntil = Time.time + 4.2f;
-            if (restored != null)
-            {
-                try { Chat.AddMessage("<color=#58ff8a>ENTITY CONTAINED!" + slamTag + " Restored lost sense: " + restored + ". Press [H] to deploy Guardian or [B] at Teleporter to cash in!</color>"); } catch { }
-            }
-            else
-            {
-                try { Chat.AddMessage("<color=#58ff8a>ENTITY CONTAINED!" + slamTag + " Stored in Containment Cell (" + StoredSpirits + "/" + MaxStoredSpirits + "). Press [H] for Guardian or [B] at Teleporter!</color>"); } catch { }
-            }
+            DefeatDemon();
         }
 
-        private void Feed()
+        private void BossStrike(CharacterBody victim)
         {
+            if (!victim || !victim.healthComponent || !victim.healthComponent.alive) return;
+
+            float diff = Run.instance ? Mathf.Max(1f, Run.instance.difficultyCoefficient) : 1f;
+            float bossDmg = 45f * diff;
+            DamageInfo di = new DamageInfo
+            {
+                attacker = PhysicalGo ? PhysicalGo : victim.gameObject,
+                inflictor = PhysicalGo ? PhysicalGo : victim.gameObject,
+                damage = bossDmg,
+                damageType = DamageType.Stun1s,
+                position = victim.corePosition,
+                force = (victim.corePosition - Pos).normalized * 2500f,
+                procCoefficient = 0.5f
+            };
+            victim.healthComponent.TakeDamage(di);
+
             string sense = SvrSenses.TakeRandom();
             if (sense != null)
             {
-                try { Chat.AddMessage("<color=#ff4a4a>It touched you. Your suit loses " + sense + ".</color>"); } catch { }
+                try { Chat.AddMessage("<color=#ff4a4a>[DEMON STRIKE] The Shimmer Demon ambushed " + victim.GetUserName() + "! Lost sense: " + sense + ".</color>"); } catch { }
             }
-            State = Mode.Gone;
-            _goneTimer = SvrPlugin.DemonRespawn.Value;
-            if (SvrSenses.Lost >= SvrPlugin.MaxSensesLost.Value) _goneTimer = 99999f;
+            else
+            {
+                try { Chat.AddMessage("<color=#ff4a4a>[DEMON STRIKE] The Shimmer Demon savaged " + victim.GetUserName() + " for " + Mathf.RoundToInt(bossDmg) + " damage!</color>"); } catch { }
+            }
+
+            Util.PlaySound("Play_huntress_m2_throw_short", victim.gameObject);
+
+            State = Mode.Prowl;
+            _modeTimer = Random.Range(16f, 24f);
+            _retargetTimer = 0f;
+            Pos += (Pos - victim.corePosition).normalized * 20f;
+            Pos.y = GroundY(Pos, Pos.y);
+            _center = Pos + Vector3.up * 1.4f;
         }
     }
 
@@ -2827,7 +3037,7 @@ namespace Surveyor
         private void FireRepulsorBlow()
         {
             _repulsorReadyAt = Time.time + (SvrUpgrades.Has(SvrUpgrades.REPULSOR_BLOW) ? 4.5f : 7.5f);
-            Util.PlaySound("Play_commando_R", gameObject);
+            Util.PlaySound("Play_MULT_m2_aim", gameObject);
             Vector3 o = _input ? _input.aimOrigin : _body.corePosition;
             Vector3 aim = _input ? _input.aimDirection : transform.forward;
 
@@ -3025,7 +3235,7 @@ namespace Surveyor
                 else
                 {
                     StartPeek();
-                    Util.PlaySound("Play_commando_R", gameObject);
+                    Util.PlaySound("Play_huntress_m2_throw_short", gameObject);
                 }
             }
             // Reverse-Flow Repulsor ("Blow" Function) [V]: blasts away swarms & reflects projectiles
@@ -5075,43 +5285,92 @@ namespace Surveyor
                     GUI.Label(new Rect(kx + 12f * scale, ky + 7f * scale, pw - 20f * scale, 22f * scale), _upgradeToast, _label);
                 }
 
-                // Heavy Vacuum Containment HUD bar while vacuuming Demon
-                if (_demon.TetherActive || _demon.CaptureProgress > 0.01f)
+                // Epic Top-Center Shimmer Demon Boss Health Bar & Phase Shield Status
+                if (_demon.Active)
                 {
-                    float cw = 520f * scale, ch = 56f * scale;
-                    float cx = Screen.width * 0.5f - cw * 0.5f, cy = Screen.height * 0.22f;
-                    Color topBarCol = _demon.TetherActive ? new Color(0.3f, 0.95f, 1f, 0.98f) : new Color(1f, 0.86f, 0.15f, 0.95f);
-                    GUI.color = topBarCol;
-                    GUI.DrawTexture(new Rect(cx, cy, cw, 2.5f * scale), white);
-                    GUI.DrawTexture(new Rect(cx, cy + ch, cw, 1.5f * scale), white);
+                    float bw = 560f * scale, bh = 54f * scale;
+                    float bx = Screen.width * 0.5f - bw * 0.5f, by = 24f * scale;
 
-                    string strainTxt = _demon.StrainStacks > 0 ? (" · STRAIN x" + _demon.StrainStacks) : "";
-                    string hdr = _demon.TetherActive
-                        ? "POLTERGUST VACUUM LOCKED (" + Mathf.RoundToInt(_demon.CaptureProgress * 100f) + "%)" + strainTxt
-                        : "HOLD [M2] TO VACUUM & REEL IN DEMON!";
-                    GUI.Label(new Rect(cx + 12f * scale, cy + 4f * scale, cw - 24f * scale, 20f * scale), hdr, _label);
+                    // Backdrop
+                    GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.88f);
+                    GUI.DrawTexture(new Rect(bx - 4f * scale, by - 2f * scale, bw + 8f * scale, bh + 4f * scale), white);
 
-                    float barW = cw - 24f * scale, barH = 12f * scale;
-                    float barX = cx + 12f * scale, barY = cy + 32f * scale;
-                    GUI.color = new Color(topBarCol.r, topBarCol.g, topBarCol.b, 0.45f);
-                    GUI.DrawTexture(new Rect(barX, barY, barW, 1.5f * scale), white);
-                    GUI.DrawTexture(new Rect(barX, barY + barH, barW, 1.5f * scale), white);
+                    // Border color: Shielded (Crimson/Amber) vs Vulnerable (Bright Cyan/Green)
+                    bool invuln = _demon.Invulnerable;
+                    Color frameCol = invuln ? new Color(1f, 0.30f, 0.22f, 0.98f) : new Color(0.25f, 1f, 0.65f, 0.98f);
+                    GUI.color = frameCol;
+                    GUI.DrawTexture(new Rect(bx, by, bw, 2f * scale), white);
+                    GUI.DrawTexture(new Rect(bx, by + bh - 2f * scale, bw, 2f * scale), white);
+                    GUI.DrawTexture(new Rect(bx, by, 2f * scale, bh), white);
+                    GUI.DrawTexture(new Rect(bx + bw - 2f * scale, by, 2f * scale, bh), white);
 
-                    GUI.color = _demon.TetherActive ? new Color(0.3f, 0.92f, 1f, 0.95f) : new Color(1f, 0.45f, 0.12f, 0.85f);
-                    GUI.DrawTexture(new Rect(barX, barY, barW * Mathf.Clamp01(_demon.CaptureProgress), barH), white);
+                    int prevFs = _label.fontSize;
+                    TextAnchor prevAl = _label.alignment;
+
+                    // Boss Title
+                    _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(12f * scale));
+                    _label.alignment = TextAnchor.UpperLeft;
+                    GUI.color = Color.white;
+                    GUI.Label(new Rect(bx + 12f * scale, by + 4f * scale, bw * 0.55f, 20f * scale), "SHIMMER DEMON — SPECTRAL BOSS", _label);
+
+                    // Boss Phase Shield Status Badge
+                    _label.alignment = TextAnchor.UpperRight;
+                    string statusTag = invuln ? "[PHASE SHIELD · VACUUM TO BREAK]" : ("[EXPOSED! ATTACK (" + _demon.VulnerableTimer.ToString("0.0") + "s)]");
+                    GUI.color = invuln ? (Mathf.Sin(Time.time * 8f) > 0f ? new Color(1f, 0.35f, 0.25f, 0.98f) : new Color(1f, 0.75f, 0.2f, 0.98f)) : new Color(0.3f, 1f, 0.65f, 0.98f);
+                    GUI.Label(new Rect(bx + bw * 0.45f - 12f * scale, by + 4f * scale, bw * 0.55f, 20f * scale), statusTag, _label);
+
+                    // Health Bar
+                    float barW = bw - 24f * scale, barH = 12f * scale;
+                    float barX = bx + 12f * scale, barY = by + 26f * scale;
+                    float hpPct = Mathf.Clamp01(_demon.CurrentHp / Mathf.Max(1f, _demon.MaxHp));
+
+                    // Health bar track
+                    GUI.color = new Color(0.12f, 0.16f, 0.20f, 0.85f);
+                    GUI.DrawTexture(new Rect(barX, barY, barW, barH), white);
+
+                    // Health bar fill
+                    GUI.color = invuln ? new Color(0.85f, 0.22f, 0.88f, 0.95f) : new Color(0.2f, 1f, 0.55f, 0.95f);
+                    GUI.DrawTexture(new Rect(barX, barY, barW * hpPct, barH), white);
+
+                    // Vacuum suction progress overlay inside the health bar if vacuuming
+                    if (_demon.CaptureProgress > 0.01f)
+                    {
+                        GUI.color = new Color(0.3f, 0.95f, 1f, 0.75f);
+                        GUI.DrawTexture(new Rect(barX, barY + barH - 3f * scale, barW * Mathf.Clamp01(_demon.CaptureProgress), 3f * scale), white);
+                    }
+
+                    // Health numbers
+                    _label.fontSize = Mathf.Max(8, Mathf.RoundToInt(9.5f * scale));
+                    _label.alignment = TextAnchor.MiddleCenter;
+                    GUI.color = Color.white;
+                    string hpTxt = Mathf.RoundToInt(_demon.CurrentHp) + " / " + Mathf.RoundToInt(_demon.MaxHp) + "  (" + Mathf.RoundToInt(hpPct * 100f) + "%)";
+                    GUI.Label(new Rect(barX, barY - 1f * scale, barW, barH), hpTxt, _label);
+
+                    _label.fontSize = prevFs;
+                    _label.alignment = prevAl;
                 }
                 else if (Time.time < _demon.LastRestoredUntil)
                 {
                     float rAlpha = Mathf.Clamp01(_demon.LastRestoredUntil - Time.time);
-                    float cw = 520f * scale, ch = 44f * scale;
-                    float cx = Screen.width * 0.5f - cw * 0.5f, cy = Screen.height * 0.22f;
+                    float cw = 540f * scale, ch = 38f * scale;
+                    float cx = Screen.width * 0.5f - cw * 0.5f, cy = 24f * scale;
+                    GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.85f * rAlpha);
+                    GUI.DrawTexture(new Rect(cx - 4f * scale, cy - 2f * scale, cw + 8f * scale, ch + 4f * scale), white);
                     GUI.color = new Color(0.25f, 1f, 0.55f, 0.98f * rAlpha);
-                    GUI.DrawTexture(new Rect(cx, cy, cw, 2.5f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, cy, cw, 2f * scale), white);
                     GUI.DrawTexture(new Rect(cx, cy + ch, cw, 1.5f * scale), white);
+                    GUI.DrawTexture(new Rect(cx, cy, 1.5f * scale, ch), white);
+                    GUI.DrawTexture(new Rect(cx + cw, cy, 1.5f * scale, ch), white);
                     string msg = !string.IsNullOrEmpty(_demon.LastRestoredSense)
-                        ? ("GHOST CONTAINED — " + _demon.LastRestoredSense)
+                        ? _demon.LastRestoredSense
                         : "GHOST CONTAINED — ALL SENSES INTACT!";
-                    GUI.Label(new Rect(cx + 14f * scale, cy + 10f * scale, cw - 24f * scale, 24f * scale), msg, _label);
+                    int prevFs = _label.fontSize;
+                    TextAnchor prevAl = _label.alignment;
+                    _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
+                    _label.alignment = TextAnchor.MiddleCenter;
+                    GUI.Label(new Rect(cx + 10f * scale, cy + 8f * scale, cw - 20f * scale, 22f * scale), msg, _label);
+                    _label.fontSize = prevFs;
+                    _label.alignment = prevAl;
                 }
             }
             if (Peeking)

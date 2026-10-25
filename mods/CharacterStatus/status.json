@@ -132,8 +132,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.6.6",
-      "note": "Active WIP (v0.6.6): Minigun (Cryo, Incendiary, Plasma) and Vacuum (Vortex, Cryo, Repulsor) module abilities start greyed-out and locked, discoverable exclusively across stages via LiDAR wireframe scanning of hidden field tech caches."
+      "version": "0.6.7",
+      "note": "Active WIP (v0.6.7): Shimmer Demon Spectral Boss encounter (spawns once/stage, 6000 HP, invulnerable phase shield broken by Poltergust Vacuum, hunts all players, vulnerable to all players, top-center boss HUD) + Complete audio overhaul eliminating all loud ear-piercing sound loops."
     }
   ]
 }

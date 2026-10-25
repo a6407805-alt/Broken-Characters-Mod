@@ -229,8 +229,12 @@ namespace Surveyor
             float dmg = damageStat * SvrPlugin.BulletDamage.Value * dmgMult;
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
 
-            string shootSound = isCryo ? "Play_MULT_m1_smg_shoot" : (isIridium ? "Play_commando_M2" : (isIncendiary ? "Play_bandit2_m1_shoot" : "Play_commando_M1"));
-            Util.PlaySound(shootSound, gameObject);
+            // Comfortable, crisp audio throttled so rapid 20 rounds/sec firing never clips or deafens the team
+            if (_shotCounter % 2 == 0)
+            {
+                string shootSound = isIridium ? (_shotCounter % 4 == 0 ? "Play_commando_M1" : null) : "Play_MULT_m1_smg_shoot";
+                if (!string.IsNullOrEmpty(shootSound)) Util.PlaySound(shootSound, gameObject);
+            }
             characterBody.AddSpreadBloom(hasGyro ? 0.05f : 0.09f);
             float rk = (anchored ? 0.45f : 1f) * (hasGyro ? 0.5f : 1f);     // heavy gun: the camera kicks with every round
             AddRecoil(-0.35f * rk, -0.75f * rk, -0.25f * rk, 0.25f * rk);
@@ -344,8 +348,8 @@ namespace Surveyor
             base.OnEnter();
             _lidar = GetComponent<SvrLidar>();
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
-            Util.PlaySound("Play_engi_M2_throw", gameObject);
-            _soundTimer = 0.22f;
+            Util.PlaySound("Play_drone_repair", gameObject);
+            _soundTimer = 1.4f;
         }
 
         public override void FixedUpdate()
@@ -363,8 +367,8 @@ namespace Surveyor
             _soundTimer -= Time.fixedDeltaTime;
             if (_soundTimer <= 0f)
             {
-                _soundTimer = 0.32f;
-                Util.PlaySound("Play_commando_R", gameObject);
+                _soundTimer = 1.6f;
+                Util.PlaySound("Play_MULT_m2_aim", gameObject);
             }
 
             if (isAuthority)
@@ -583,7 +587,7 @@ namespace Surveyor
                 else
                 {
                     lidar.StartPeek();
-                    Util.PlaySound("Play_commando_R", gameObject);
+                    Util.PlaySound("Play_huntress_m2_throw_short", gameObject);
                 }
             }
         }
