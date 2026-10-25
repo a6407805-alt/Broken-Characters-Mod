@@ -2764,7 +2764,7 @@ namespace Surveyor
             TeleporterInteraction tp = FindObjectOfType<TeleporterInteraction>();
             Vector3 tpPos = tp ? tp.transform.position : origin + Vector3.forward * 55f;
 
-            int count = Mathf.Min(3, pool.Count);
+            int count = Mathf.Min(4, pool.Count);
             for (int i = 0; i < count; i++)
             {
                 int pickIdx = Random.Range(0, pool.Count);
@@ -2772,11 +2772,11 @@ namespace Surveyor
                 pool.RemoveAt(pickIdx);
 
                 float ang = (i / (float)count) * 6.28318f + Random.Range(-0.45f, 0.45f);
-                float dist = Random.Range(24f, 62f);
-                Vector3 anchor = (i == 0) ? Vector3.Lerp(origin, tpPos, 0.45f) : origin;
+                float dist = Random.Range(26f, 75f);
+                Vector3 anchor = (i == 0) ? Vector3.Lerp(origin, tpPos, 0.45f) : (i == 1 ? Vector3.Lerp(origin, tpPos, 0.85f) : origin);
                 Vector3 candidate = anchor + new Vector3(Mathf.Cos(ang) * dist, 0f, Mathf.Sin(ang) * dist);
                 RaycastHit hit;
-                if (Physics.Raycast(candidate + Vector3.up * 45f, Vector3.down, out hit, 140f, LayerIndex.world.mask, QueryTriggerInteraction.Ignore))
+                if (Physics.Raycast(candidate + Vector3.up * 55f, Vector3.down, out hit, 150f, LayerIndex.world.mask, QueryTriggerInteraction.Ignore))
                     candidate = hit.point;
                 else
                     candidate.y = origin.y;
@@ -2785,11 +2785,23 @@ namespace Surveyor
                 GameObject cacheGo = new GameObject("SvrHiddenTechCache_" + i);
                 cacheGo.transform.position = candidate;
                 SphereCollider sc = cacheGo.AddComponent<SphereCollider>();
-                sc.radius = 1.15f;
+                sc.radius = 1.25f;
                 sc.isTrigger = true;
 
                 Vector3 ext = shapeKind == 0 ? new Vector3(0.95f, 1.35f, 0.95f) : (shapeKind == 1 ? new Vector3(0.95f, 0.85f, 0.95f) : new Vector3(0.85f, 1.25f, 0.55f));
-                Color hCol = upgId < 4 ? new Color(1f, 0.86f, 0.22f, 1f) : new Color(0.28f, 1f, 0.92f, 1f);
+                Color hCol;
+                switch (upgId)
+                {
+                    case SvrUpgrades.MINI_CRYO: hCol = new Color(0.2f, 0.92f, 1f, 1f); break;       // Cryo Cold Cyan
+                    case SvrUpgrades.MINI_INCENDIARY: hCol = new Color(1f, 0.32f, 0.18f, 1f); break; // Incendiary Fire Orange
+                    case SvrUpgrades.MINI_PLASMA: hCol = new Color(0.85f, 0.35f, 1f, 1f); break;    // Plasma Violet Shock
+                    case SvrUpgrades.VAC_VORTEX: hCol = new Color(0.68f, 0.32f, 1f, 1f); break;     // Singularity Vortex Purple
+                    case SvrUpgrades.VAC_CRYO: hCol = new Color(0.4f, 0.88f, 1f, 1f); break;        // Pale Frost Azure
+                    case SvrUpgrades.VAC_REPULSE: hCol = new Color(1f, 0.60f, 0.12f, 1f); break;    // Repulsor Hazard Amber
+                    case SvrUpgrades.GYRO_HARNESS: hCol = new Color(0.25f, 1f, 0.55f, 1f); break;   // Gyro Harness Emerald
+                    case SvrUpgrades.AETHER_LEECH: hCol = new Color(0.3f, 0.95f, 0.85f, 1f); break; // Aether Leech Teal
+                    default: hCol = new Color(1f, 0.86f, 0.22f, 1f); break;
+                }
                 SvrLiDARScanTarget target = EnsureScanTarget(
                     cacheGo,
                     5,
@@ -2952,7 +2964,11 @@ namespace Surveyor
                 TriggerModeBurst();
             }
 
-            // Mouse Scroll Wheel or Middle Click: switch Minigun Ammo modes (M1) or Vacuum modes (M2)
+            // Ensure selected modes are valid unlocked modes
+            if (!SvrUpgrades.IsMinigunUnlocked(MinigunMode)) MinigunMode = 0;
+            if (!SvrUpgrades.IsVacuumUnlocked(VacuumMode)) VacuumMode = 0;
+
+            // Mouse Scroll Wheel or Middle Click: switch Minigun Ammo modes (M1) or Vacuum modes (M2) (only cycle unlocked options)
             float scroll = Input.GetAxis("Mouse ScrollWheel");
             bool midClick = Input.GetMouseButtonDown(2);
             if (Mathf.Abs(scroll) > 0.02f || midClick)
@@ -2961,15 +2977,41 @@ namespace Surveyor
                 bool holdingM2 = Input.GetMouseButton(1) || (_input && _input.skill2.down);
                 if (holdingM2)
                 {
-                    VacuumMode = (VacuumMode + dir + 4) % 4;
-                    _vacModeFlash = Time.time;
-                    Util.PlaySound("Play_UI_menuClick", gameObject);
+                    int cur = VacuumMode;
+                    int candMode = cur;
+                    for (int step = 0; step < 4; step++)
+                    {
+                        candMode = (candMode + dir + 4) % 4;
+                        if (SvrUpgrades.IsVacuumUnlocked(candMode))
+                        {
+                            if (candMode != cur)
+                            {
+                                VacuumMode = candMode;
+                                _vacModeFlash = Time.time;
+                                Util.PlaySound("Play_UI_menuClick", gameObject);
+                            }
+                            break;
+                        }
+                    }
                 }
                 else
                 {
-                    MinigunMode = (MinigunMode + dir + 4) % 4;
-                    _miniModeFlash = Time.time;
-                    Util.PlaySound("Play_UI_menuClick", gameObject);
+                    int cur = MinigunMode;
+                    int candMode = cur;
+                    for (int step = 0; step < 4; step++)
+                    {
+                        candMode = (candMode + dir + 4) % 4;
+                        if (SvrUpgrades.IsMinigunUnlocked(candMode))
+                        {
+                            if (candMode != cur)
+                            {
+                                MinigunMode = candMode;
+                                _miniModeFlash = Time.time;
+                                Util.PlaySound("Play_UI_menuClick", gameObject);
+                            }
+                            break;
+                        }
+                    }
                 }
             }
 
@@ -3027,11 +3069,27 @@ namespace Surveyor
                 _techCaches[_nearCacheIdx] = fc;
                 SvrUpgrades.Unlock(fc.UpgradeId);
                 Util.PlaySound("Play_UI_shrineSuccess", gameObject);
-                _upgradeToast = "INSTALLED: " + SvrUpgrades.Names[fc.UpgradeId] + " — " + SvrUpgrades.Descs[fc.UpgradeId];
-                _upgradeToastUntil = Time.time + 4.8f;
-                for (int i = 0; i < 180; i++)
+
+                // Auto-equip unlocked weapon/vacuum mode so the player can immediately try it out!
+                if (fc.UpgradeId == SvrUpgrades.MINI_CRYO) { MinigunMode = 1; _miniModeFlash = Time.time; }
+                else if (fc.UpgradeId == SvrUpgrades.MINI_INCENDIARY) { MinigunMode = 2; _miniModeFlash = Time.time; }
+                else if (fc.UpgradeId == SvrUpgrades.MINI_PLASMA) { MinigunMode = 3; _miniModeFlash = Time.time; }
+                else if (fc.UpgradeId == SvrUpgrades.VAC_VORTEX) { VacuumMode = 1; _vacModeFlash = Time.time; }
+                else if (fc.UpgradeId == SvrUpgrades.VAC_CRYO) { VacuumMode = 2; _vacModeFlash = Time.time; }
+                else if (fc.UpgradeId == SvrUpgrades.VAC_REPULSE) { VacuumMode = 3; _vacModeFlash = Time.time; }
+
+                _upgradeToast = "MODULE RETRIEVED: " + SvrUpgrades.Names[fc.UpgradeId] + " — " + SvrUpgrades.Descs[fc.UpgradeId];
+                _upgradeToastUntil = Time.time + 5.2f;
+
+                try
                 {
-                    AddDot(fc.Pos + Random.onUnitSphere * Random.Range(0.3f, 3.5f), (i & 1) == 0 ? new Color(1f, 0.86f, 0.2f, 1f) : new Color(0.25f, 1f, 0.9f, 1f), 2.2f, true);
+                    Chat.AddMessage("<color=#00ffd8>[SURVEYOR FIELD-TECH]</color> Activated <color=#ffea33>" + SvrUpgrades.Names[fc.UpgradeId] + "</color>! <color=#90c0df>" + SvrUpgrades.Descs[fc.UpgradeId] + "</color>");
+                }
+                catch { }
+
+                for (int i = 0; i < 220; i++)
+                {
+                    AddDot(fc.Pos + Random.onUnitSphere * Random.Range(0.3f, 3.8f), (i & 1) == 0 ? new Color(1f, 0.86f, 0.2f, 1f) : new Color(0.25f, 1f, 0.9f, 1f), 2.5f, true);
                 }
             }
 
@@ -4997,12 +5055,12 @@ namespace Surveyor
                 if (_nearCacheIdx >= 0 && _nearCacheIdx < _techCaches.Count && !_techCaches[_nearCacheIdx].Collected)
                 {
                     int upgId = _techCaches[_nearCacheIdx].UpgradeId;
-                    float pw = 540f * scale, ph = 46f * scale;
+                    float pw = 560f * scale, ph = 46f * scale;
                     float kx = Screen.width * 0.5f - pw * 0.5f, ky = Screen.height * 0.56f;
                     GUI.color = new Color(1f, 0.86f, 0.2f, 0.98f);
                     GUI.DrawTexture(new Rect(kx, ky, pw, 2.5f * scale), white);
                     GUI.DrawTexture(new Rect(kx, ky + ph, pw, 1.5f * scale), white);
-                    GUI.Label(new Rect(kx + 14f * scale, ky + 4f * scale, pw - 24f * scale, 22f * scale), "PRESS [E] TO INSTALL HIDDEN LIDAR TECH: " + SvrUpgrades.Names[upgId], _label);
+                    GUI.Label(new Rect(kx + 14f * scale, ky + 4f * scale, pw - 24f * scale, 22f * scale), "PRESS [E] TO RETRIEVE MODULE: " + SvrUpgrades.Names[upgId], _label);
                     GUI.color = new Color(0.35f, 0.98f, 1f, 0.92f);
                     GUI.Label(new Rect(kx + 14f * scale, ky + 23f * scale, pw - 24f * scale, 20f * scale), SvrUpgrades.Descs[upgId], _label);
                 }
@@ -5096,33 +5154,57 @@ namespace Surveyor
                 float chipW = (hotbarW - 3f * 6f * scale) / 4f;
                 float chipH = 20f * scale;
 
-                // Row 1: M1 Ammo Chips
+                // Row 1: M1 Ammo Chips (Locked options start greyed-out until retrieved via LiDAR caches)
                 string[] mShortNames = { "IRIDIUM", "CRYO", "INCENDIARY", "PLASMA" };
                 for (int i = 0; i < 4; i++)
                 {
-                    bool active = (i == mMode);
+                    bool unlocked = SvrUpgrades.IsMinigunUnlocked(i);
+                    bool active = (i == mMode && unlocked);
                     Color cCol = MinigunModeColors[i];
                     float cx = hotbarX + i * (chipW + 6f * scale);
 
-                    GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, mFlash ? 0.6f : 0.32f) : new Color(0.04f, 0.06f, 0.08f, 0.7f);
-                    GUI.DrawTexture(new Rect(cx, hotbarY, chipW, chipH), white);
+                    if (unlocked)
+                    {
+                        GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, mFlash ? 0.6f : 0.32f) : new Color(0.04f, 0.06f, 0.08f, 0.7f);
+                        GUI.DrawTexture(new Rect(cx, hotbarY, chipW, chipH), white);
 
-                    GUI.color = active ? (mFlash ? Color.white : cCol) : new Color(cCol.r, cCol.g, cCol.b, 0.35f);
-                    GUI.DrawTexture(new Rect(cx, hotbarY, chipW, 1.5f * scale), white);
-                    GUI.DrawTexture(new Rect(cx, hotbarY + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
-                    GUI.DrawTexture(new Rect(cx, hotbarY, 1.5f * scale, chipH), white);
-                    GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, hotbarY, 1.5f * scale, chipH), white);
+                        GUI.color = active ? (mFlash ? Color.white : cCol) : new Color(cCol.r, cCol.g, cCol.b, 0.38f);
+                        GUI.DrawTexture(new Rect(cx, hotbarY, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, hotbarY + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, hotbarY, 1.5f * scale, chipH), white);
+                        GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, hotbarY, 1.5f * scale, chipH), white);
 
-                    int prevSize = _label.fontSize;
-                    _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(10.5f * scale));
-                    _label.alignment = TextAnchor.MiddleCenter;
-                    GUI.color = active ? Color.white : new Color(0.68f, 0.75f, 0.82f, 0.75f);
-                    GUI.Label(new Rect(cx, hotbarY, chipW, chipH), mShortNames[i], _label);
-                    _label.fontSize = prevSize;
-                    _label.alignment = TextAnchor.MiddleLeft;
+                        int prevSize = _label.fontSize;
+                        _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(10.5f * scale));
+                        _label.alignment = TextAnchor.MiddleCenter;
+                        GUI.color = active ? Color.white : new Color(0.75f, 0.85f, 0.92f, 0.85f);
+                        GUI.Label(new Rect(cx, hotbarY, chipW, chipH), mShortNames[i], _label);
+                        _label.fontSize = prevSize;
+                        _label.alignment = TextAnchor.MiddleLeft;
+                    }
+                    else
+                    {
+                        // LOCKED / GREYED OUT: Dark desaturated slate backdrop, faint charcoal border, dimmed grey text
+                        GUI.color = new Color(0.015f, 0.02f, 0.025f, 0.65f);
+                        GUI.DrawTexture(new Rect(cx, hotbarY, chipW, chipH), white);
+
+                        GUI.color = new Color(0.24f, 0.27f, 0.30f, 0.30f);
+                        GUI.DrawTexture(new Rect(cx, hotbarY, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, hotbarY + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, hotbarY, 1.5f * scale, chipH), white);
+                        GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, hotbarY, 1.5f * scale, chipH), white);
+
+                        int prevSize = _label.fontSize;
+                        _label.fontSize = Mathf.Max(8, Mathf.RoundToInt(9.5f * scale));
+                        _label.alignment = TextAnchor.MiddleCenter;
+                        GUI.color = new Color(0.38f, 0.42f, 0.46f, 0.48f);
+                        GUI.Label(new Rect(cx, hotbarY, chipW, chipH), mShortNames[i], _label);
+                        _label.fontSize = prevSize;
+                        _label.alignment = TextAnchor.MiddleLeft;
+                    }
                 }
 
-                // Row 2: M2 Vacuum Chips
+                // Row 2: M2 Vacuum Chips (Locked options start greyed-out until retrieved via LiDAR caches)
                 float vy = hotbarY + 26f * scale;
                 int vMode = VacuumMode % 4;
                 bool vFlash = (Time.time - _vacModeFlash) < 0.65f;
@@ -5131,26 +5213,50 @@ namespace Surveyor
 
                 for (int i = 0; i < 4; i++)
                 {
-                    bool active = (i == vMode);
+                    bool unlocked = SvrUpgrades.IsVacuumUnlocked(i);
+                    bool active = (i == vMode && unlocked);
                     Color cCol = VacuumModeColors[i];
                     float cx = hotbarX + i * (chipW + 6f * scale);
 
-                    GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, vFlash ? 0.6f : 0.32f) : new Color(0.04f, 0.06f, 0.08f, 0.7f);
-                    GUI.DrawTexture(new Rect(cx, vy, chipW, chipH), white);
+                    if (unlocked)
+                    {
+                        GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, vFlash ? 0.6f : 0.32f) : new Color(0.04f, 0.06f, 0.08f, 0.7f);
+                        GUI.DrawTexture(new Rect(cx, vy, chipW, chipH), white);
 
-                    GUI.color = active ? (vFlash ? Color.white : cCol) : new Color(cCol.r, cCol.g, cCol.b, 0.35f);
-                    GUI.DrawTexture(new Rect(cx, vy, chipW, 1.5f * scale), white);
-                    GUI.DrawTexture(new Rect(cx, vy + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
-                    GUI.DrawTexture(new Rect(cx, vy, 1.5f * scale, chipH), white);
-                    GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, vy, 1.5f * scale, chipH), white);
+                        GUI.color = active ? (vFlash ? Color.white : cCol) : new Color(cCol.r, cCol.g, cCol.b, 0.38f);
+                        GUI.DrawTexture(new Rect(cx, vy, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, vy + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, vy, 1.5f * scale, chipH), white);
+                        GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, vy, 1.5f * scale, chipH), white);
 
-                    int prevSize = _label.fontSize;
-                    _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(10.5f * scale));
-                    _label.alignment = TextAnchor.MiddleCenter;
-                    GUI.color = active ? Color.white : new Color(0.68f, 0.75f, 0.82f, 0.75f);
-                    GUI.Label(new Rect(cx, vy, chipW, chipH), vShortNames[i], _label);
-                    _label.fontSize = prevSize;
-                    _label.alignment = TextAnchor.MiddleLeft;
+                        int prevSize = _label.fontSize;
+                        _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(10.5f * scale));
+                        _label.alignment = TextAnchor.MiddleCenter;
+                        GUI.color = active ? Color.white : new Color(0.75f, 0.85f, 0.92f, 0.85f);
+                        GUI.Label(new Rect(cx, vy, chipW, chipH), vShortNames[i], _label);
+                        _label.fontSize = prevSize;
+                        _label.alignment = TextAnchor.MiddleLeft;
+                    }
+                    else
+                    {
+                        // LOCKED / GREYED OUT: Dark desaturated slate backdrop, faint charcoal border, dimmed grey text
+                        GUI.color = new Color(0.015f, 0.02f, 0.025f, 0.65f);
+                        GUI.DrawTexture(new Rect(cx, vy, chipW, chipH), white);
+
+                        GUI.color = new Color(0.24f, 0.27f, 0.30f, 0.30f);
+                        GUI.DrawTexture(new Rect(cx, vy, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, vy + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, vy, 1.5f * scale, chipH), white);
+                        GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, vy, 1.5f * scale, chipH), white);
+
+                        int prevSize = _label.fontSize;
+                        _label.fontSize = Mathf.Max(8, Mathf.RoundToInt(9.5f * scale));
+                        _label.alignment = TextAnchor.MiddleCenter;
+                        GUI.color = new Color(0.38f, 0.42f, 0.46f, 0.48f);
+                        GUI.Label(new Rect(cx, vy, chipW, chipH), vShortNames[i], _label);
+                        _label.fontSize = prevSize;
+                        _label.alignment = TextAnchor.MiddleLeft;
+                    }
                 }
 
                 // Row 3: Active Mode Detail Readout (Full name & effect)

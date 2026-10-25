@@ -132,8 +132,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.6.5",
-      "note": "Active WIP (v0.6.5): Made Peek (Visor Off) ability fully toggleable via Shift or F key with no automatic timeout or cooldown lockout (press to open visor and see the real world, press again to close and reboot LiDAR scanner)."
+      "version": "0.6.6",
+      "note": "Active WIP (v0.6.6): Minigun (Cryo, Incendiary, Plasma) and Vacuum (Vortex, Cryo, Repulsor) module abilities start greyed-out and locked, discoverable exclusively across stages via LiDAR wireframe scanning of hidden field tech caches."
     }
   ]
 }

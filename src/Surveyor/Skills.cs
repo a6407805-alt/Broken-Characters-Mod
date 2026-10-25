@@ -14,56 +14,85 @@ namespace Surveyor
 
     public static class SvrUpgrades
     {
-        public const int DU_SLUG = 0;           // Minigun: Depleted-Uranium Slug Fed (slower fire, heavy AP slugs that shred armor/barriers)
-        public const int CRYO_JACKET = 1;       // Minigun: Cryo-Quench Cooling Jacket (liquid-nitrogen feed, no overheat, frost slow on hit)
-        public const int PLASMA_ACCEL = 2;      // Minigun: Overclocked Plasma-Accelerator (sustained fire arcs chain plasma lightning)
-        public const int GYRO_HARNESS = 3;      // Minigun: Gyroscopic Shoulder Harness (no move slow while firing, 50% less recoil kick)
-        public const int SINGULARITY_CORE = 4;  // Super Vac: Singularity Vortex (pulls in nearby enemies & flying pests into nozzle)
-        public const int REPULSOR_BLOW = 5;     // Super Vac: Reverse-Flow Repulsor ("Blow" function [V] blasts swarms & reflects projectiles)
-        public const int AETHER_LEECH = 6;      // Super Vac: Aether-Leech Field (siphons enemy shields/health into EVA suit barrier)
-        public const int COMPRESSION_PRESS = 7; // Containment Cell: Spectral Compression Press (dual capacity, shield armor, active-reload bonus)
+        // 6 Lockable Field Modules (scattered across maps in hidden LiDAR caches) + 2 Rig Enhancements
+        public const int MINI_CRYO = 0;        // Minigun Mode 1: Cryo-Quench Ammo (chills targets & cools barrel heat)
+        public const int MINI_INCENDIARY = 1;  // Minigun Mode 2: Incendiary Thermite Ammo (ignites with burning DoT)
+        public const int MINI_PLASMA = 2;      // Minigun Mode 3: Overclocked Plasma-Arc (chain lightning shocks)
+        public const int VAC_VORTEX = 3;       // Vacuum Mode 1: Singularity Vortex (pulls swarms & pests to nozzle)
+        public const int VAC_CRYO = 4;         // Vacuum Mode 2: Cryo-Exhaust Mist (freezes cone & leeches barrier)
+        public const int VAC_REPULSE = 5;      // Vacuum Mode 3: Reverse Repulsor (deflects projs & blasts foes back)
+        public const int GYRO_HARNESS = 6;     // Exo-Rig: Gyroscopic Shoulder Harness (no move slow while firing)
+        public const int AETHER_LEECH = 7;     // Field Rig: Aether-Leech Field (siphons energy into EVA suit barrier)
         public const int COUNT = 8;
+
+        // Backward compatibility aliases
+        public const int CRYO_JACKET = MINI_CRYO;
+        public const int DU_SLUG = MINI_INCENDIARY;
+        public const int PLASMA_ACCEL = MINI_PLASMA;
+        public const int SINGULARITY_CORE = VAC_VORTEX;
+        public const int REPULSOR_BLOW = VAC_REPULSE;
+        public const int COMPRESSION_PRESS = AETHER_LEECH;
 
         public static readonly string[] Names =
         {
-            "DEPLETED-URANIUM SLUG FED",
-            "CRYO-QUENCH COOLING JACKET",
-            "OVERCLOCKED PLASMA-ACCELERATOR",
-            "GYROSCOPIC SHOULDER HARNESS",
-            "SINGULARITY VORTEX",
-            "REVERSE-FLOW REPULSOR [V]",
-            "AETHER-LEECH FIELD",
-            "SPECTRAL COMPRESSION PRESS"
+            "CRYO-QUENCH COOLING MODULE",
+            "INCENDIARY THERMITE MODULE",
+            "OVERCLOCKED PLASMA MODULE",
+            "SINGULARITY VORTEX MODULE",
+            "CRYO-EXHAUST FREEZE MODULE",
+            "REVERSE REPULSOR MODULE",
+            "GYROSCOPIC SHOULDER RIG",
+            "AETHER-LEECH ENERGY SIPHON"
         };
 
         public static readonly string[] ShortNames =
         {
-            "DU-SLUG",
-            "CRYO-JACKET",
+            "CRYO AMMO",
+            "INCENDIARY",
             "PLASMA-ARC",
-            "GYRO-RIG",
-            "SINGULARITY",
-            "REPULSOR [V]",
-            "AETHER-LEECH",
-            "COMPRESSOR"
+            "VORTEX VAC",
+            "CRYO EXHAUST",
+            "REPULSOR",
+            "GYRO RIG",
+            "AETHER SIPHON"
         };
 
         public static readonly string[] Descs =
         {
-            "Heavy AP slugs (+75% dmg, shreds boss armor & barriers)",
-            "Liquid-N2 cooling (eliminates overheat + chills enemies)",
-            "Sustained spool arcs high-voltage plasma lightning",
-            "Zero move penalty while firing & -50% recoil climb",
-            "Vacuum pulls nearby enemies & flying pests into nozzle",
-            "Press [V] to blast swarms back & vaporize projectiles",
-            "Firing & tethering siphons energy into EVA suit barrier",
-            "Holds 2 spirits, +25 armor, & Gold-Zone active reload"
+            "Unlocks Minigun Mode [CRYO] · Chills targets & cools barrel heat",
+            "Unlocks Minigun Mode [INCENDIARY] · High-temp ignite & burning damage",
+            "Unlocks Minigun Mode [PLASMA] · High-voltage chain lightning arcs",
+            "Unlocks Vacuum Mode [VORTEX] · Singularity vortex reels swarms into nozzle",
+            "Unlocks Vacuum Mode [CRYO] · Sub-zero exhaust flash-freezes enemies & feeds barrier",
+            "Unlocks Vacuum Mode [REPULSOR] · Reverse blast wave deflects projectiles & knocks back swarms",
+            "Zero movement slow penalty while firing & -50% recoil climb",
+            "Firing & vacuuming siphons barrier directly into EVA suit"
         };
 
         private static readonly bool[] _unlocked = new bool[COUNT];
         public static int UnlockedCount { get; private set; }
 
         public static bool Has(int id) => id >= 0 && id < COUNT && _unlocked[id];
+
+        public static bool IsMinigunUnlocked(int mode)
+        {
+            mode = (mode % 4 + 4) % 4;
+            if (mode == 0) return true; // IRIDIUM AP is default starting weapon mode
+            if (mode == 1) return Has(MINI_CRYO);
+            if (mode == 2) return Has(MINI_INCENDIARY);
+            if (mode == 3) return Has(MINI_PLASMA);
+            return false;
+        }
+
+        public static bool IsVacuumUnlocked(int mode)
+        {
+            mode = (mode % 4 + 4) % 4;
+            if (mode == 0) return true; // POLTERGUST / SUCTION is default starting vacuum mode
+            if (mode == 1) return Has(VAC_VORTEX);
+            if (mode == 2) return Has(VAC_CRYO);
+            if (mode == 3) return Has(VAC_REPULSE);
+            return false;
+        }
 
         public static void Unlock(int id)
         {
@@ -103,10 +132,11 @@ namespace Surveyor
         public void Held()
         {
             _idle = 0f;
-            float heatRate = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) ? 0.035f : 0.11f;
+            bool cryoCool = (SvrLidar.MinigunMode == 1) || SvrUpgrades.Has(SvrUpgrades.MINI_CRYO);
+            float heatRate = cryoCool ? 0.035f : 0.11f;
             if (AnchorLeft > 0f) heatRate *= 0.65f;
             Heat = Mathf.Clamp01(Heat + Time.fixedDeltaTime * heatRate);
-            if (Heat >= 0.99f && !SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET))
+            if (Heat >= 0.99f && !cryoCool)
                 Overheated = true;
         }
 
@@ -118,10 +148,11 @@ namespace Surveyor
             if (AnchorLeft > 0f) AnchorLeft = Mathf.Max(0f, AnchorLeft - dt);
             if (_idle > 0.15f)
             {
-                float windDown = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) ? 2.4f : 1.4f;
+                bool cryoCool = (SvrLidar.MinigunMode == 1) || SvrUpgrades.Has(SvrUpgrades.MINI_CRYO);
+                float windDown = cryoCool ? 2.4f : 1.4f;
                 if (Spool > 0f)
                     Spool = Mathf.MoveTowards(Spool, 0f, dt / (SvrPlugin.SpoolSeconds.Value * windDown));
-                float coolRate = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) ? 0.55f : 0.28f;
+                float coolRate = cryoCool ? 0.55f : 0.28f;
                 Heat = Mathf.MoveTowards(Heat, 0f, dt * coolRate);
                 if (Overheated && Heat < 0.35f) Overheated = false;
             }
@@ -174,7 +205,7 @@ namespace Surveyor
             _timer -= Time.fixedDeltaTime;
             if (_timer > 0f) return;
             float rate = Mathf.Lerp(SvrPlugin.MinRate.Value, SvrPlugin.MaxRate.Value, Mathf.InverseLerp(0.2f, 1f, _spool.Spool)) * Mathf.Clamp(attackSpeedStat, 1f, 2f);
-            if (SvrUpgrades.Has(SvrUpgrades.DU_SLUG)) rate *= 0.78f;
+            if (SvrLidar.MinigunMode == 0) rate *= 0.88f; // Iridium AP heavy fire rate
             if (_spool.Overheated) rate *= 0.55f;
             _timer += 1f / Mathf.Max(0.5f, rate);
             if (_timer < 0f) _timer = 0f;
@@ -190,9 +221,6 @@ namespace Surveyor
             bool isIncendiary = (mMode == 2);
             bool isPlasma = (mMode == 3);
 
-            bool hasDu = SvrUpgrades.Has(SvrUpgrades.DU_SLUG) || isIridium;
-            bool hasCryo = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) || isCryo;
-            bool hasPlasma = SvrUpgrades.Has(SvrUpgrades.PLASMA_ACCEL) || isPlasma;
             bool hasGyro = SvrUpgrades.Has(SvrUpgrades.GYRO_HARNESS);
             bool hasLeech = SvrUpgrades.Has(SvrUpgrades.AETHER_LEECH);
 
@@ -201,7 +229,7 @@ namespace Surveyor
             float dmg = damageStat * SvrPlugin.BulletDamage.Value * dmgMult;
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
 
-            string shootSound = isCryo ? "Play_MULT_m1_smg_shoot" : (isIridium ? "Play_commando_M2" : "Play_commando_M1");
+            string shootSound = isCryo ? "Play_MULT_m1_smg_shoot" : (isIridium ? "Play_commando_M2" : (isIncendiary ? "Play_bandit2_m1_shoot" : "Play_commando_M1"));
             Util.PlaySound(shootSound, gameObject);
             characterBody.AddSpreadBloom(hasGyro ? 0.05f : 0.09f);
             float rk = (anchored ? 0.45f : 1f) * (hasGyro ? 0.5f : 1f);     // heavy gun: the camera kicks with every round
@@ -216,9 +244,9 @@ namespace Surveyor
             }
 
             DamageTypeCombo dtCombo = DamageType.Generic;
-            if (hasCryo) dtCombo = DamageType.SlowOnHit;
+            if (isCryo) dtCombo = DamageType.SlowOnHit;
             if (isIncendiary) dtCombo = DamageType.IgniteOnHit;
-            if (hasPlasma && (_shotCounter % 3 == 0)) dtCombo = DamageType.Shock5s;
+            if (isPlasma && (_shotCounter % 3 == 0)) dtCombo = DamageType.Shock5s;
 
             new BulletAttack
             {
@@ -256,8 +284,8 @@ namespace Surveyor
 
                         if (NetworkServer.active)
                         {
-                            if (hasDu) hc.body.AddTimedBuff(RoR2Content.Buffs.Pulverized, 4f);
-                            if (hasCryo) hc.body.AddTimedBuff(RoR2Content.Buffs.Slow80, 3.5f);
+                            if (isIridium) hc.body.AddTimedBuff(RoR2Content.Buffs.Pulverized, 4f);
+                            if (isCryo) hc.body.AddTimedBuff(RoR2Content.Buffs.Slow80, 3.5f);
                             if (isIncendiary)
                             {
                                 InflictDotInfo info = new InflictDotInfo
@@ -270,7 +298,7 @@ namespace Surveyor
                                 };
                                 DotController.InflictDot(ref info);
                             }
-                            if (hasPlasma && _spool.Spool > 0.5f && (_shotCounter % 2 == 0))
+                            if (isPlasma && _spool.Spool > 0.5f && (_shotCounter % 2 == 0))
                             {
                                 LightningOrb orb = new LightningOrb
                                 {
