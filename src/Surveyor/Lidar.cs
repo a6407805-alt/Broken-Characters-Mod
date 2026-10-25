@@ -1850,13 +1850,35 @@ namespace Surveyor
                 float dObj = toObj.magnitude;
                 if (dObj < 45f && (Vector3.Angle(aim.direction, toObj) < 60f || dObj < 9f))
                 {
-                    float speed = isItem ? 36f : 18f;
-                    Vector3 targetPos = isItem ? foot : (foot + aim.direction * 1.8f);
                     Transform moveTr = (p.Tr.parent && p.Tr.parent.GetComponent<PurchaseInteraction>()) ? p.Tr.parent : p.Tr;
-                    moveTr.position = Vector3.MoveTowards(moveTr.position, targetPos, speed * dt);
+                    // never drag anything that belongs to the player
+                    if (body && moveTr.IsChildOf(body.gameObject.transform)) continue;
+
+                    if (isItem)
+                    {
+                        // pickups don't collide with the player: pull them straight to the feet
+                        moveTr.position = Vector3.MoveTowards(moveTr.position, foot, 36f * dt);
+                        Rigidbody rb = moveTr.GetComponent<Rigidbody>();
+                        if (rb) rb.velocity = (foot - moveTr.position).normalized * 36f;
+                    }
+                    else
+                    {
+                        // chests/barrels are SOLID: dragging them into the player's capsule makes the character
+                        // controller shove the player around wildly. Slide them along the ground only and park
+                        // them at a safe distance in front of the player.
+                        Vector3 me = body ? body.footPosition : aim.origin;
+                        Vector3 flat = moveTr.position - me; flat.y = 0f;
+                        const float park = 3.5f;
+                        if (flat.magnitude > park + 0.1f)
+                        {
+                            Vector3 goal = me + flat.normalized * park;
+                            goal.y = moveTr.position.y;
+                            moveTr.position = Vector3.MoveTowards(moveTr.position, goal, 14f * dt);
+                        }
+                        Rigidbody rb = moveTr.GetComponent<Rigidbody>();
+                        if (rb && !rb.isKinematic) rb.velocity = Vector3.zero;
+                    }
                     p.Pos = moveTr.position + Vector3.up * 0.4f;
-                    Rigidbody rb = moveTr.GetComponent<Rigidbody>();
-                    if (rb) rb.velocity = (targetPos - moveTr.position).normalized * speed;
                 }
             }
 
