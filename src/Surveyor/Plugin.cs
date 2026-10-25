@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.6.4";
+        public const string PluginVersion = "0.6.5";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -212,7 +212,7 @@ namespace Surveyor
             LanguageAPI.Add(T + "UTILITY_DESC", "<style=cIsUtility>Slide forward.</style> Keep <style=cIsUtility>holding the button</style> and she plants an <style=cIsDamage>Anchor</style> for up to " + AnchorSeconds.Value.ToString("0") +
                 "s: rooted, <style=cIsUtility>spools 3x faster</style>, no move penalty, <style=cIsDamage>+" + (AnchorDamageBonus.Value * 100f).ToString("0") + "% minigun damage</style> and a steadier aim.");
             LanguageAPI.Add(T + "PEEK_NAME", "Peek");
-            LanguageAPI.Add(T + "PEEK_DESC", "Rip off the visor for <style=cIsUtility>" + PeekSeconds.Value.ToString("0.#") + "s</style>. The real world comes back and you see <style=cIsUtility>far beyond the scanner</style>, but it is <style=cDeath>blurry, blown out and jarring</style>, and the LiDAR fades. Replaces Hydraulic Slide.");
+            LanguageAPI.Add(T + "PEEK_DESC", "<style=cIsUtility>Toggle the visor open or closed</style> with <style=cIsUtility>Shift or F</style>. With the visor open, the real world comes back and you see <style=cIsUtility>far beyond the scanner</style>, but it is <style=cDeath>blurry, blown out and jarring</style>, and the LiDAR fades. Press again to close the visor and reboot the scanner. Replaces Hydraulic Slide.");
             LanguageAPI.Add(T + "OVERDRIVE_NAME", "LiDAR Overdrive");
             LanguageAPI.Add(T + "OVERDRIVE_DESC", "Push the scanner past its limits. Unleash a massive 360° Overdrive Pulse wave that <style=cIsUtility>reveals the entire area</style> in high-density LiDAR for <style=cIsUtility>10.0s</style>, painting all stage geometry and detecting <style=cIsDamage>all monsters and hidden chests through walls</style>.");
             LanguageAPI.Add(T + "SPECIAL_NAME", "LiDAR Overdrive");
@@ -349,7 +349,7 @@ namespace Surveyor
             secondary.cancelSprintingOnActivation = false;
             SkillDef utility = MakeSkill("UTILITY", typeof(SvrSlideState), "Body", SlideCooldown.Value, true, true, InterruptPriority.PrioritySkill, "utility", true);
             utility.cancelSprintingOnActivation = false;
-            SkillDef peek = MakeSkill("PEEK", typeof(SvrPeekState), "Weapon", PeekCooldown.Value, true, true, InterruptPriority.Skill, "peek", false);
+            SkillDef peek = MakeSkill("PEEK", typeof(SvrPeekState), "Weapon", 0.5f, true, true, InterruptPriority.Skill, "peek", false);
             peek.cancelSprintingOnActivation = false;
             SkillDef overdrive = MakeSkill("OVERDRIVE", typeof(SvrOverdriveState), "Weapon", OverdriveCooldown.Value, true, true, InterruptPriority.Skill, "overdrive", false);
 

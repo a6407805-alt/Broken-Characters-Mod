@@ -545,8 +545,6 @@ namespace Surveyor
         public override void OnEnter()
         {
             base.OnEnter();
-            float duration = SvrPlugin.PeekSeconds != null ? SvrPlugin.PeekSeconds.Value : 5.0f;
-            if (duration < 1f) duration = 5.0f;
             SvrLidar lidar = GetComponent<SvrLidar>();
             if (lidar)
             {
@@ -556,8 +554,7 @@ namespace Surveyor
                 }
                 else
                 {
-                    lidar.StartPeek(duration);
-                    SvrRigPart.OpenVisor(gameObject, duration);
+                    lidar.StartPeek();
                     Util.PlaySound("Play_commando_R", gameObject);
                 }
             }
@@ -566,7 +563,7 @@ namespace Surveyor
         public override void FixedUpdate()
         {
             base.FixedUpdate();
-            if (fixedAge >= 0.25f && isAuthority) outer.SetNextStateToMain();
+            if (fixedAge >= 0.15f && isAuthority) outer.SetNextStateToMain();
         }
 
         public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.Skill; }

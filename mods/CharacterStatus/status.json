@@ -132,8 +132,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.6.4",
-      "note": "Active WIP (v0.6.4): Removed Tactical Weapon Switch and Surveyor Lance (Minigun is primary, Overdrive is special); completely removed Ghost-Traps (Shimmer Demon captured directly via Heavy Vacuum M2); fixed Senses (SEE/HEAR/TOUCH/BAL) telemetry with wide, padded chips and ample vertical margins; generated and deployed fresh, vibrant 128x128 icons for all abilities."
+      "version": "0.6.5",
+      "note": "Active WIP (v0.6.5): Made Peek (Visor Off) ability fully toggleable via Shift or F key with no automatic timeout or cooldown lockout (press to open visor and see the real world, press again to close and reboot LiDAR scanner)."
     }
   ]
 }

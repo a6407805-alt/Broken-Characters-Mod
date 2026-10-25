@@ -2695,22 +2695,23 @@ namespace Surveyor
             }
         }
 
-        public void StartPeek(float seconds = 5.5f)
+        public void StartPeek(float seconds = -1f)
         {
             _peeking = true;
             _peekStart = Time.time;
-            _peekUntil = Time.time + seconds;
+            _peekUntil = seconds > 0f ? (Time.time + seconds) : float.MaxValue;
             _peekNeedBurst = true;
             _rebootStart = 0f;
+            SvrRigPart.OpenVisor(gameObject, float.MaxValue);
         }
 
         public void EndPeek()
         {
-            if (!_peeking && Time.time >= _peekUntil) return;
+            if (!_peeking) return;
             _peeking = false;
             _peekUntil = Time.time;
             _rebootStart = Time.time;
-            _peekReady = Time.time + SvrPlugin.PeekCooldown.Value;
+            _peekReady = Time.time + 0.35f;
             Util.PlaySound("Play_huntress_m2_throw_short", gameObject);
             SvrRigPart.CloseVisor(gameObject);
         }
@@ -2972,23 +2973,17 @@ namespace Surveyor
                 }
             }
 
-            // Peek on its own key. Toggleable: pressing F lifts visor, pressing F again closes it.
-            // Visor flips up, real world comes into crisp view, and when closed, smooth 2.4s LiDAR reboot sequence starts.
+            // Peek on its own key. Fully toggleable: pressing F lifts visor, pressing F again closes it.
             if (TryKey(SvrPlugin.PeekKey.Value, out peek) && Input.GetKeyDown(peek))
             {
                 if (Peeking)
                 {
                     EndPeek();
                 }
-                else if (Time.time >= _peekReady)
-                {
-                    StartPeek(5.0f);
-                    SvrRigPart.OpenVisor(gameObject, 5.0f);
-                    Util.PlaySound("Play_commando_R", gameObject);
-                }
                 else
                 {
-                    Util.PlaySound("Play_UI_insufficient_funds", gameObject);
+                    StartPeek();
+                    Util.PlaySound("Play_commando_R", gameObject);
                 }
             }
             // Reverse-Flow Repulsor ("Blow" Function) [V]: blasts away swarms & reflects projectiles
@@ -3628,19 +3623,14 @@ namespace Surveyor
             }
 
             float now = Time.time;
-            if (_peeking && now >= _peekUntil)
+            if (_peeking && _peekUntil < float.MaxValue && now >= _peekUntil)
             {
                 EndPeek();
             }
 
             // Peek intensity (_peekK): smoothly ramps 0 -> 1 over ~0.35s as the visor lifts, holds at 1 while peeking,
             // and smoothly ramps 1 -> 0 over ~0.4s as the visor comes back down.
-            float target = 0f;
-            if (Peeking)
-            {
-                float rem = _peekUntil - now;
-                target = rem > 0.35f ? 1f : Mathf.Clamp01(rem / 0.35f);
-            }
+            float target = Peeking ? 1f : 0f;
             float speed = Peeking ? 2.85f : 2.5f;
             _peekK = Mathf.MoveTowards(_peekK, target, Time.deltaTime * speed);
 
@@ -4827,26 +4817,10 @@ namespace Surveyor
             // Row 4: Visor Peek & Vacuum controls
             float py = dy + 28f * scale;
             float pr = _peekReady - Time.time;
-            string peekTxt;
-            Color peekCol;
-            if (Peeking)
-            {
-                float rem = Mathf.Max(0f, _peekUntil - Time.time);
-                peekTxt = "VISOR UP [F/SHIFT] " + rem.ToString("0.0") + "s";
-                peekCol = new Color(0.4f, 1f, 0.7f, 0.95f);
-            }
-            else if (pr > 0f)
-            {
-                peekTxt = "PEEK [F/SHIFT] " + pr.ToString("0") + "s COOLDOWN";
-                peekCol = new Color(0.7f, 0.75f, 0.8f, 0.75f);
-            }
-            else
-            {
-                peekTxt = "PEEK [F/SHIFT] READY";
-                peekCol = new Color(0.9f, 0.96f, 1f, 0.95f);
-            }
+            string peekTxt = Peeking ? "VISOR: OPEN [F/SHIFT TO CLOSE]" : "VISOR: CLOSED [F/SHIFT TO OPEN]";
+            Color peekCol = Peeking ? new Color(0.4f, 1f, 0.7f, 0.95f) : new Color(0.9f, 0.96f, 1f, 0.95f);
             GUI.color = peekCol;
-            GUI.Label(new Rect(sx, py, 210f * scale, 18f * scale), peekTxt, _label);
+            GUI.Label(new Rect(sx, py, 230f * scale, 18f * scale), peekTxt, _label);
 
             GUI.color = new Color(0.35f, 0.95f, 1f, 0.92f);
             GUI.Label(new Rect(sx + 215f * scale, py, 180f * scale, 18f * scale), "VACUUM [M2]", _label);
@@ -5084,13 +5058,21 @@ namespace Surveyor
             }
             if (Peeking)
             {
-                float left = Mathf.Clamp01((_peekUntil - Time.time) / Mathf.Max(0.1f, _peekUntil - _peekStart));
-                float pw = 220f * scale;
-                GUI.color = new Color(1f, 0.95f, 0.8f, 0.95f);
-                GUI.DrawTexture(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f, pw * left, 8f * scale), white);
-                GUI.DrawTexture(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f, pw, 1.5f * scale), white);
-                GUI.DrawTexture(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f + 8f * scale, pw, 1.5f * scale), white);
-                GUI.Label(new Rect(Screen.width * 0.5f - pw * 0.5f, Screen.height * 0.12f + 12f * scale, pw, 24f * scale), "VISOR OFF", _label);
+                float pw = 240f * scale, ph = 24f * scale;
+                float px = Screen.width * 0.5f - pw * 0.5f, pTopY = Screen.height * 0.12f;
+                GUI.color = new Color(0.04f, 0.08f, 0.12f, 0.75f);
+                GUI.DrawTexture(new Rect(px - 4f * scale, pTopY - 2f * scale, pw + 8f * scale, ph + 4f * scale), white);
+                GUI.color = new Color(0.35f, 1f, 0.7f, 0.95f);
+                GUI.DrawTexture(new Rect(px, pTopY, pw, 1.5f * scale), white);
+                GUI.DrawTexture(new Rect(px, pTopY + ph, pw, 1.5f * scale), white);
+                int prevSize = _label.fontSize;
+                TextAnchor prevAlign = _label.alignment;
+                _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
+                _label.alignment = TextAnchor.MiddleCenter;
+                GUI.color = new Color(0.4f, 1f, 0.75f, 0.95f);
+                GUI.Label(new Rect(px, pTopY, pw, ph), "VISOR OPEN [F / SHIFT TO TOGGLE]", _label);
+                _label.fontSize = prevSize;
+                _label.alignment = prevAlign;
             }
 
             // Bottom-Right Hotbar: Modular Minigun Ammo Modes & Vacuum Upgrades (docked comfortably above the skill bar)
