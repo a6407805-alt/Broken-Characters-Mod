@@ -19,7 +19,8 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 
 - Silent staging (`StagingSync.cs`, `MainWindow.Staging.cs`): a creator's launcher (key saved, not the owner) copies
   EVERY file in plugins\ (pack mods + new mod folders, not libraries) that differs from main to `staging/<login>` as
-  "main + changes" with `[skip ci]`; never main. Owner sees a bell (badge = count) next to the title; it opens ReviewWindow for staging/* ahead of main:
+  "main + changes". OWNER'S RULE (Oct 27): creator-key launchers now AUTO-PUBLISH straight to main (no approval;
+  stale guard: if their pack is older than the release, only files edited after their install count). Shared-key friends still stage. Owner sees a bell (badge = count) next to the title; it opens ReviewWindow for staging/* ahead of main:
   Approve applies the changed files on top of the NEWEST main (builds + publishes), Revert resets the branch to main.
   No creator key? Friends with the extras use the shared upload key (`launcher/keys/staging.json`, a fine-grained PAT
   locked with the extras key itself; the owner saves it in the review window) and stage as `staging/<windows user>`.

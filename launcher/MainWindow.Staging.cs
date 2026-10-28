@@ -28,14 +28,17 @@ namespace BrokenCharactersLauncher
             _stagingKey = key;
             try
             {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+                // Big mod files can take a few minutes to upload; 45 s used to cut the upload off silently.
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
                 (string login, bool owner) = await StagingSync.WhoAmIAsync(key, cts.Token);
                 if (login.Length == 0) return;
                 if (owner) { _ = ShowOwnerReviewAsync(); return; }
 
                 DateTime installed = File.Exists(VersionFile) ? File.GetLastWriteTimeUtc(VersionFile) : DateTime.MinValue;
-                int staged = await StagingSync.SilentStageLocalModAsync(key, login, ReadLocalVersion(), installed, null, cts.Token);
-                if (staged > 0) SetStatus("Sent " + staged + " changed file(s) to the pack owner for review.");
+                SetStatus("Checking your mods against the pack...");
+                // Owner's rule: creators' changes go straight to everyone, no approval.
+                int staged = await StagingSync.SilentStageLocalModAsync(key, login, ReadLocalVersion(), installed, null, cts.Token, autoPublish: true);
+                if (staged > 0) SetStatus("Published " + staged + " changed file(s) to everyone. The new pack is ready in about 5 to 8 minutes.");
             }
             catch (Exception ex) { StagingSync.Log("Skipped: " + ex.Message); } // never bother anyone with this
         }
