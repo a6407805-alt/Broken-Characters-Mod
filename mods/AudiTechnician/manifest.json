@@ -1,6 +1,6 @@
 {
   "name": "AudiTechnician",
-  "version_number": "1.0.1",
+  "version_number": "1.0.2",
   "website_url": "",
   "description": "The Certified Audi Technician: a random-chance survivor. Flat Rate hours decide random buffs or debuffs every 7 abilities. LOF, Replace Wiper Blades, AWD Fluid Change, 40k or Bust. Personal use.",
   "dependencies": [

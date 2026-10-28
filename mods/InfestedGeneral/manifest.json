@@ -1,6 +1,6 @@
 {
   "name": "InfestedGeneral",
-  "version_number": "1.1.12",
+  "version_number": "1.1.13",
   "website_url": "",
   "description": "Play as an infested StarCraft marine general: gauss rifle, baneling toss, permanent auto-turrets and an Infested Command Center that flies in.",
   "dependencies": [
