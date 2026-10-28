@@ -39,7 +39,7 @@ namespace Surveyor
             return pick;
         }
 
-        /// <summary>Restores one stolen sense (when the Shimmer Demon is vacuum-captured in the Ghost-Trap). Returns its name, or null if none were lost.</summary>
+        /// <summary>Restores one stolen sense (when the Shimmer Demon is vacuum-captured into her canister). Returns its name, or null if none were lost.</summary>
         public static string RestoreOne()
         {
             List<string> stolen = new List<string>();
@@ -161,7 +161,7 @@ namespace Surveyor
         }
     }
 
-    public class SvrDemon
+    public partial class SvrDemon
     {
         public enum Mode { Dormant, Prowl, Stalk, Hunt, Stagger, Gone }
 
@@ -178,10 +178,7 @@ namespace Surveyor
         private Vector3 _lastPos;
         private static readonly Vector3[] Sph = BuildSphere();
 
-        // Ghostbusters / Luigi's Mansion containment trap + proton tether + wrestling + payoff state
-        public bool TrapActive;
-        public Vector3 TrapPos;
-        public float TrapUntil, TrapReadyAt;
+        // Vacuum capture: proton tether + wrestling + payoff state (captured straight into her canister, no floor trap)
         public float CaptureProgress; // 0 .. 1
         public bool TetherActive;
         public int StrainStacks;      // 0 .. 10 stacking "Containment Strain" debuff
@@ -234,27 +231,15 @@ namespace Surveyor
             if (Time.time < _shieldDeflectToastUntil) return;
             _shieldDeflectToastUntil = Time.time + 1.8f;
             Util.PlaySound("Play_captain_drone_zap", PhysicalGo);
-            LastRestoredSense = "PHASE SHIELD ACTIVE — VACUUM [M2] TO EXPOSE!";
+            LastRestoredSense = "PHASE SHIELD — " + ElementName(RequiredElement) + " ROUNDS NEEDED (HOLD M1 + SCROLL)";
             LastRestoredUntil = Time.time + 2.5f;
         }
 
         public void VacuumBreakShield(float dt, CharacterBody body)
         {
             if (!Active) return;
-            bool wasInvuln = Invulnerable;
-            VulnerableTimer = 4.2f;
-
-            if (wasInvuln)
-            {
-                Util.PlaySound("Play_item_proc_shieldBreak", PhysicalGo ? PhysicalGo : (body ? body.gameObject : null));
-                LastRestoredSense = "SHIELD BROKEN — ALL PLAYERS ATTACK NOW!";
-                LastRestoredUntil = Time.time + 3.8f;
-                try
-                {
-                    Chat.AddMessage("<color=#ffdd33>[BOSS EXPOSED]</color> <color=#ff3b30>Shimmer Demon Phase Shield shattered by Poltergust Vacuum!</color> <color=#90e0ef>All players attack now!</color>");
-                }
-                catch { }
-            }
+            // The vacuum no longer breaks the shield (the right minigun element does). It only hurts an exposed Demon.
+            if (Invulnerable) { OnShieldDeflect(); return; }
 
             float vacDps = (body ? body.damage * 4.5f : 60f) * dt;
             TakeDamage(vacDps, body ? body.corePosition : Pos);
@@ -273,15 +258,7 @@ namespace Surveyor
             Util.PlaySound("Play_UI_shrineSuccess", null);
             Util.PlaySound("Play_UI_obj_casinoChest_open", null);
 
-            try
-            {
-                if (UnityEngine.Networking.NetworkServer.active)
-                {
-                    PickupIndex drop = PickupCatalog.FindPickupIndex(ItemTier.Tier2);
-                    PickupDropletController.CreatePickupDroplet(drop, Pos + Vector3.up * 1.5f, Vector3.up * 8f);
-                }
-            }
-            catch { }
+            DropLoot();
 
             string restored = SvrSenses.RestoreAll();
             LastRestoredSense = "DEMON EXORCISED — ALL SENSES RESTORED!";
@@ -445,7 +422,7 @@ namespace Surveyor
             BuildPose(t);
             Quaternion q = Quaternion.Euler(0f, Yaw, 0f);
             float shake = (State == Mode.Stagger || TetherActive) ? 0.08f : 0.012f;
-            float shrink = TrapActive && CaptureProgress > 0.15f ? Mathf.Lerp(1.15f, 0.28f, Mathf.SmoothStep(0f, 1f, CaptureProgress)) : 1.15f;
+            float shrink = CaptureProgress > 0.15f ? Mathf.Lerp(1.15f, 0.28f, Mathf.SmoothStep(0f, 1f, CaptureProgress)) : 1.15f;
             for (int i = 0; i < _local.Count; i++)
             {
                 Vector3 w = _local[i] * shrink;
@@ -507,7 +484,10 @@ namespace Surveyor
 
             if (Invulnerable)
             {
-                OnShieldDeflect();
+                // Elemental phase shield: only the matching minigun rounds crack it (shown by the boss bar colour)
+                NoteHeavyFire();
+                if (SvrLidar.MinigunMode % 4 == RequiredElement) ElementHit(anchored);
+                else OnShieldDeflect();
                 Knock(aim.origin, 0.25f, 0f);
                 return;
             }
@@ -529,10 +509,6 @@ namespace Surveyor
             float diff = Run.instance ? Mathf.Max(1f, Run.instance.difficultyCoefficient) : 1f;
             TakeDamage(320f * diff, aim.origin);
             if (Near(aim, 150f)) Knock(aim.origin, 10f, SvrPlugin.MinigunStagger.Value);
-        }
-
-        public void DeployTrap(CharacterBody body, InputBankTest input)
-        {
         }
 
         public bool RedeployMinion(CharacterBody body)
@@ -592,6 +568,9 @@ namespace Surveyor
                 if (dDemon < 52f && (angDemon < 52f || dDemon < 14f))
                 {
                     VacuumBreakShield(dt, body);
+                    bool capturable = !Invulnerable && CurrentHp <= MaxHp * 0.35f;
+                    if (capturable)
+                    {
                     TetherActive = true;
                     State = Mode.Stagger;
                     _stagger = Mathf.Max(_stagger, 0.45f);
@@ -610,6 +589,7 @@ namespace Surveyor
                     if (CaptureProgress >= 0.99f || CurrentHp <= 0f)
                     {
                         DefeatDemon();
+                    }
                     }
                 }
                 else
@@ -713,6 +693,7 @@ namespace Surveyor
             int pCount = Run.instance ? Mathf.Max(1, Run.instance.participatingPlayerCount) : 1;
             MaxHp = 6000f * diff * Mathf.Sqrt(pCount);
             CurrentHp = MaxHp;
+            BeginFight();
             VulnerableTimer = 0f; // Phase shield starts active!
             IsInvisible = true;
 
@@ -720,7 +701,7 @@ namespace Surveyor
 
             try
             {
-                Chat.AddMessage("<color=#ff2a2a>[BOSS SPAWNED]</color> <color=#ff6b6b>The Spectral Shimmer Demon stalks the stage!</color> <color=#ffdd33>Phase shield invulnerable — find with LiDAR and vacuum [M2] to break shield!</color>");
+                Chat.AddMessage("<color=#ff2a2a>[BOSS SPAWNED]</color> <color=#ff6b6b>The Spectral Shimmer Demon stalks the stage!</color> <color=#ffdd33>Elemental phase shield: the boss bar colour shows which minigun rounds crack it (hold M1 + scroll).</color>");
             }
             catch { }
         }
@@ -793,8 +774,9 @@ namespace Surveyor
 
         public void OnShieldRecharge()
         {
+            RotateElement();
             Util.PlaySound("Play_captain_drone_zap", PhysicalGo);
-            LastRestoredSense = "PHASE SHIELD RECHARGED — VACUUM TO BREAK!";
+            LastRestoredSense = "PHASE SHIELD RE-ATTUNED — " + ElementName(RequiredElement) + " ROUNDS NEEDED!";
             LastRestoredUntil = Time.time + 2.5f;
         }
 
@@ -880,6 +862,9 @@ namespace Surveyor
                 if (vacuuming && dDemon < 55f && angle < 32f)
                 {
                     VacuumBreakShield(dt, body);
+                    bool capturable = !Invulnerable && CurrentHp <= MaxHp * 0.35f;
+                    if (capturable)
+                    {
                     TetherActive = true;
                     State = Mode.Stagger;
                     _stagger = Mathf.Max(_stagger, 0.45f);
@@ -908,6 +893,7 @@ namespace Surveyor
                         DefeatDemon();
                     }
                     return;
+                    }
                 }
             }
 
@@ -924,6 +910,7 @@ namespace Surveyor
                 _retargetTimer = Random.Range(10f, 18f);
             }
             Vector3 targetPos = _currentVictim ? _currentVictim.footPosition : pp;
+            BlinkTick(dt, targetPos);
 
             Vector3 to = targetPos - Pos;
             Vector3 flat = new Vector3(to.x, 0f, to.z);
@@ -1058,11 +1045,6 @@ namespace Surveyor
         public float NextBuildAttempt;
         public readonly List<WirePart> Parts = new List<WirePart>(6);
 
-        private Renderer[] _renderers;
-        private Material[] _origMats;
-        private Material _holoMat;
-        private bool _matsSwapped;
-        private static Shader _hgShader;
 
         public bool IsRevealed => Time.time < RevealUntil;
 
@@ -1083,67 +1065,6 @@ namespace Surveyor
             RevealUntil = Mathf.Max(RevealUntil, now + duration);
             PeakIntensity = Mathf.Max(PeakIntensity, Mathf.Clamp01(intensity));
             if (!Built && now >= NextBuildAttempt) BuildWireframe();
-            ApplyHologramMaterial(true);
-        }
-
-        public void ApplyHologramMaterial(bool active)
-        {
-            try
-            {
-                if (_renderers == null)
-                {
-                    _renderers = GetComponentsInChildren<Renderer>(false);
-                    if (_renderers != null && _renderers.Length > 0)
-                    {
-                        _origMats = new Material[_renderers.Length];
-                        for (int i = 0; i < _renderers.Length; i++)
-                            if (_renderers[i]) _origMats[i] = _renderers[i].sharedMaterial;
-                    }
-                }
-                if (_renderers == null || _renderers.Length == 0) return;
-
-                if (active && !_matsSwapped)
-                {
-                    if (!_holoMat)
-                    {
-                        if (!_hgShader) _hgShader = Shader.Find("Hopoo Games/Deferred/Standard");
-                        if (_hgShader)
-                        {
-                            _holoMat = new Material(_hgShader) { name = "SvrHoloTargetMat" };
-                            if (_holoMat.HasProperty("_Color")) _holoMat.SetColor("_Color", HoloColor * 0.35f);
-                            if (_holoMat.HasProperty("_EmColor")) _holoMat.SetColor("_EmColor", HoloColor);
-                            if (_holoMat.HasProperty("_EmPower")) _holoMat.SetFloat("_EmPower", 3.2f);
-                            if (_holoMat.HasProperty("_FresnelBoost")) _holoMat.SetFloat("_FresnelBoost", 4.5f);
-                        }
-                    }
-                    if (_holoMat)
-                    {
-                        if (_holoMat.HasProperty("_EmColor")) _holoMat.SetColor("_EmColor", HoloColor);
-                        for (int i = 0; i < _renderers.Length; i++)
-                        {
-                            Renderer r = _renderers[i];
-                            if (!r || (r is ParticleSystemRenderer)) continue;
-                            r.sharedMaterial = _holoMat;
-                        }
-                        _matsSwapped = true;
-                    }
-                }
-                else if (!active && _matsSwapped)
-                {
-                    for (int i = 0; i < _renderers.Length; i++)
-                    {
-                        if (_renderers[i] && _origMats != null && i < _origMats.Length && _origMats[i])
-                            _renderers[i].sharedMaterial = _origMats[i];
-                    }
-                    _matsSwapped = false;
-                }
-            }
-            catch { }
-        }
-
-        private void OnDisable()
-        {
-            if (_matsSwapped) ApplyHologramMaterial(false);
         }
 
         public void BuildWireframe()
@@ -1631,7 +1552,7 @@ namespace Surveyor
 
     // ================================================================ the LiDAR: a decaying point cloud drawn over a black world
 
-    public class SvrLidar : MonoBehaviour
+    public partial class SvrLidar : MonoBehaviour
     {
         private struct Dot
         {
@@ -1681,11 +1602,11 @@ namespace Surveyor
             new Color(0.85f, 0.35f, 1f, 0.95f)    // Violet Plasma / Shock
         };
 
-        public static readonly string[] VacuumModeNames = { "POLTERGUST", "SINGULARITY", "CRYO-EXHAUST", "REPULSOR" };
+        public static readonly string[] VacuumModeNames = { "POLTERGUST", "BLACK HOLE", "CRYO-EXHAUST", "REPULSOR" };
         public static readonly string[] VacuumModeDescs =
         {
-            "HIGH-FLOW SUCTION · REELS ITEMS, CHESTS & DEMON",
-            "GRAVITATIONAL VORTEX · CLUSTERS ENEMY SWARMS",
+            "HIGH-FLOW SUCTION · REELS ITEMS & THE DEMON",
+            "FIRES A SINGULARITY · PULLS FOES & SHOTS · IMPLODES",
             "SUB-ZERO CONE · FREEZES FOES & LEECHES BARRIER",
             "REVERSE BLAST WAVE · DEFLECTS PROJS & BLOWS FOES"
         };
@@ -1863,15 +1784,14 @@ namespace Surveyor
                 _demon.VacuumHold(body, aim, dt);
             }
 
-            // 1) Sucks dropped items and pulls chests/lockboxes/barrels directly toward the player
+            // 1) Sucks dropped item pickups to her feet. World interactables (chests, barrels, shrines) never move.
             Vector3 foot = body ? (body.footPosition + Vector3.up * 0.5f) : (aim.origin - Vector3.up * 0.5f);
             for (int i = 0; i < _pois.Count; i++)
             {
                 Poi p = _pois[i];
                 if (!p.Tr || !p.Tr.gameObject.activeInHierarchy) continue;
                 bool isItem = (p.Kind == 3);
-                bool isChest = (p.Kind == 0 || p.Kind == 2);
-                if (!isItem && !isChest) continue;
+                if (!isItem) continue;
 
                 Vector3 toObj = p.Tr.position - aim.origin;
                 float dObj = toObj.magnitude;
@@ -1881,30 +1801,10 @@ namespace Surveyor
                     // never drag anything that belongs to the player
                     if (body && moveTr.IsChildOf(body.gameObject.transform)) continue;
 
-                    if (isItem)
-                    {
-                        // pickups don't collide with the player: pull them straight to the feet
-                        moveTr.position = Vector3.MoveTowards(moveTr.position, foot, 36f * dt);
-                        Rigidbody rb = moveTr.GetComponent<Rigidbody>();
-                        if (rb) rb.velocity = (foot - moveTr.position).normalized * 36f;
-                    }
-                    else
-                    {
-                        // chests/barrels are SOLID: dragging them into the player's capsule makes the character
-                        // controller shove the player around wildly. Slide them along the ground only and park
-                        // them at a safe distance in front of the player.
-                        Vector3 me = body ? body.footPosition : aim.origin;
-                        Vector3 flat = moveTr.position - me; flat.y = 0f;
-                        const float park = 3.5f;
-                        if (flat.magnitude > park + 0.1f)
-                        {
-                            Vector3 goal = me + flat.normalized * park;
-                            goal.y = moveTr.position.y;
-                            moveTr.position = Vector3.MoveTowards(moveTr.position, goal, 14f * dt);
-                        }
-                        Rigidbody rb = moveTr.GetComponent<Rigidbody>();
-                        if (rb && !rb.isKinematic) rb.velocity = Vector3.zero;
-                    }
+                    // pickups don't collide with the player: pull them straight to the feet
+                    moveTr.position = Vector3.MoveTowards(moveTr.position, foot, 36f * dt);
+                    Rigidbody rb = moveTr.GetComponent<Rigidbody>();
+                    if (rb) rb.velocity = (foot - moveTr.position).normalized * 36f;
                     p.Pos = moveTr.position + Vector3.up * 0.4f;
                 }
             }
@@ -1936,7 +1836,10 @@ namespace Surveyor
             catch { }
 
             // Mode-specific vacuum mechanics
-            if (vMode == 1) // SINGULARITY: gravitational pull on enemy swarms
+            if (vMode == 1) // BLACK HOLE: the orb itself is fired on press (SvrVacuumState); holding M2 only reels in items
+            {
+            }
+            else if (vMode == -1)
             {
                 Vector3 vortexPt = aim.origin + aim.direction * 14f;
                 var bodies = CharacterBody.readOnlyInstancesList;
@@ -3185,6 +3088,7 @@ namespace Surveyor
             {
                 int dir = (scroll > 0.02f || midClick) ? 1 : -1;
                 bool holdingM2 = Input.GetMouseButton(1) || (_input && _input.skill2.down);
+                bool holdingM1 = Input.GetMouseButton(0) || (_input && _input.skill1.down);
                 if (holdingM2)
                 {
                     int cur = VacuumMode;
@@ -3204,7 +3108,7 @@ namespace Surveyor
                         }
                     }
                 }
-                else
+                else if (holdingM1)
                 {
                     int cur = MinigunMode;
                     int candMode = cur;
@@ -3305,6 +3209,8 @@ namespace Surveyor
 
             float prevRestored = _demon.LastRestoredUntil;
             _demon.Tick(dt, _body, _input);
+            BlackHoleTick(dt);
+            DemonBlinkFx();
             if (_demon.LastRestoredUntil > prevRestored)
             {
                 // Celebratory containment burst when the Demon is captured and a lost sense is restored!
@@ -3478,8 +3384,6 @@ namespace Surveyor
                     PurchaseInteraction pi = pis[i];
                     if (!IsPurchaseOpen(pi))
                     {
-                        SvrLiDARScanTarget oldSt = pi ? pi.GetComponent<SvrLiDARScanTarget>() : null;
-                        if (oldSt) oldSt.ApplyHologramMaterial(false);
                         continue;
                     }
                     if (pi.GetComponentInParent<TeleporterInteraction>()) continue;
@@ -3524,8 +3428,6 @@ namespace Surveyor
                     BarrelInteraction bi = bis[i];
                     if (!IsBarrelOpen(bi))
                     {
-                        SvrLiDARScanTarget oldSt = bi ? bi.GetComponent<SvrLiDARScanTarget>() : null;
-                        if (oldSt) oldSt.ApplyHologramMaterial(false);
                         continue;
                     }
                     Transform tr = bi.gameObject.transform;
@@ -3861,18 +3763,23 @@ namespace Surveyor
             if (!Alive) { RestoreCamera(); DropPeekFx(); _peekK = 0f; return; }
 
             int pLay = SvrModel.PlayerModelLayer;
+            int darkLay = SvrModel.DarkSuitLayer;
+            // The suit lives on the normal character layer. Only while the world is blacked out (visor down) does it move
+            // to the dark-suit layer, the one layer the dimmed camera still draws. Any other moment it goes straight back.
+            bool darkNow = SvrPlugin.DarkWorld.Value && !Peeking && _peekK < 0.02f;
+            int suitLay = darkNow ? darkLay : pLay;
             if (_body)
             {
                 ModelLocator ml = _body.modelLocator;
                 Transform mt = ml ? ml.modelTransform : null;
                 if (mt)
                 {
-                    Renderer[] rnds = mt.GetComponentsInChildren<Renderer>(false);
+                    Renderer[] rnds = mt.GetComponentsInChildren<Renderer>(true);
                     for (int rIdx = 0; rIdx < rnds.Length; rIdx++)
                     {
                         Renderer r = rnds[rIdx];
-                        if (r && r.name.StartsWith("SvrPart_") && r.gameObject.layer != pLay)
-                            r.gameObject.layer = pLay;
+                        if (r && r.name.StartsWith("SvrPart_") && r.gameObject.layer != suitLay)
+                            r.gameObject.layer = suitLay;
                     }
                 }
             }
@@ -3887,7 +3794,7 @@ namespace Surveyor
                 _suitLight.range = 14f;
                 _suitLight.intensity = 3.8f;
                 _suitLight.color = new Color(0.92f, 0.97f, 1f);
-                _suitLight.cullingMask = (1 << pLay) | (1 << 0) | (1 << 5) | (1 << 12);
+                _suitLight.cullingMask = (1 << pLay) | (1 << darkLay) | (1 << 0) | (1 << 5) | (1 << 12);
             }
 
             float now = Time.time;
@@ -3951,10 +3858,6 @@ namespace Surveyor
             if (Peeking || _peekK > 0.02f)
             {
                 RestoreCamera();                          // keep the real world visible throughout the entire transition
-                if (cam && pLay >= 0)
-                {
-                    cam.cullingMask |= (1 << pLay);
-                }
                 ApplyPeekFx(cam, _peekK);
                 return;
             }
@@ -4012,8 +3915,7 @@ namespace Surveyor
             int uiMask = uiLayer >= 0 ? (1 << uiLayer) : (1 << 5);
             int uiObj = LayerMask.NameToLayer("UIObject");
             if (uiObj >= 0) uiMask |= (1 << uiObj);
-            int playerLay = SvrModel.PlayerModelLayer;
-            if (playerLay >= 0) uiMask |= (1 << playerLay);
+            uiMask |= (1 << SvrModel.DarkSuitLayer);
             cam.cullingMask = uiMask;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = Color.black;
@@ -4360,7 +4262,7 @@ namespace Surveyor
                         int uiMask = uiLayer >= 0 ? (1 << uiLayer) : (1 << 5);
                         int uiObj = LayerMask.NameToLayer("UIObject");
                         if (uiObj >= 0) uiMask |= (1 << uiObj);
-                        if (playerLay >= 0) uiMask |= playerMask;
+                        uiMask |= (1 << SvrModel.DarkSuitLayer);
                         c.cullingMask = uiMask;
                         c.clearFlags = CameraClearFlags.SolidColor;
                         c.backgroundColor = Color.black;
@@ -4402,6 +4304,7 @@ namespace Surveyor
 
             DrawDots(cam, scale, dotAlpha);
             DrawDemon(cam, scale, dotAlpha);
+            DrawChestXray(cam, scale);
             DrawPeekWash(scale);
             DrawHud(scale);
             GUI.color = old;
@@ -4828,7 +4731,7 @@ namespace Surveyor
             {
                 Vector3 muzzleWorld = _body.corePosition + cam.transform.right * 0.48f - cam.transform.up * 0.18f + cam.transform.forward * 0.55f;
                 Vector3 demonCenter = _demon.TetherTargetPos;
-                Vector3 trapWorld = muzzleWorld;
+                Vector3 canisterWorld = muzzleWorld;
 
                 // 1) Ghostbusters Proton Stream: crackling orange/red core beam + spiraling electric blue helix from gun to Demon
                 Vector3 prevCore = Vector3.zero, prevHelix = Vector3.zero;
@@ -4871,16 +4774,16 @@ namespace Surveyor
                     else hasPrevStream = false;
                 }
 
-                // 2) Luigi's Mansion Poltergust Suction Vortex: spiraling ectoplasm-green funnel pulling Demon into the Ghost-Trap
+                // 2) Luigi's Mansion Poltergust Suction Vortex: spiraling ectoplasm-green funnel pulling the Demon into her canister
                 Vector3 prevVortex = Vector3.zero;
                 bool hasPrevVortex = false;
                 const int vortexSegs = 26;
                 for (int v = 0; v <= vortexSegs; v++)
                 {
-                    float u = v / (float)vortexSegs; // 0 = Demon, 1 = Trap
+                    float u = v / (float)vortexSegs; // 0 = Demon, 1 = canister
                     float funnelRad = Mathf.Lerp(1.15f, 0.12f, u);
                     float vAng = Time.time * 32f + u * 22f;
-                    Vector3 vWorld = Vector3.Lerp(demonCenter, trapWorld, u)
+                    Vector3 vWorld = Vector3.Lerp(demonCenter, canisterWorld, u)
                         + new Vector3(Mathf.Cos(vAng) * funnelRad, Mathf.Sin(u * 3.14159f) * 0.45f, Mathf.Sin(vAng) * funnelRad);
                     Vector3 sv = cam.WorldToScreenPoint(vWorld);
                     if (sv.z > 0.3f)
@@ -5297,7 +5200,8 @@ namespace Surveyor
 
                     // Border color: Shielded (Crimson/Amber) vs Vulnerable (Bright Cyan/Green)
                     bool invuln = _demon.Invulnerable;
-                    Color frameCol = invuln ? new Color(1f, 0.30f, 0.22f, 0.98f) : new Color(0.25f, 1f, 0.65f, 0.98f);
+                    Color elemCol = SvrDemon.ElementColors[_demon.RequiredElement % 4];
+                    Color frameCol = invuln ? elemCol : new Color(0.25f, 1f, 0.65f, 0.98f);
                     GUI.color = frameCol;
                     GUI.DrawTexture(new Rect(bx, by, bw, 2f * scale), white);
                     GUI.DrawTexture(new Rect(bx, by + bh - 2f * scale, bw, 2f * scale), white);
@@ -5315,8 +5219,8 @@ namespace Surveyor
 
                     // Boss Phase Shield Status Badge
                     _label.alignment = TextAnchor.UpperRight;
-                    string statusTag = invuln ? "[PHASE SHIELD · VACUUM TO BREAK]" : ("[EXPOSED! ATTACK (" + _demon.VulnerableTimer.ToString("0.0") + "s)]");
-                    GUI.color = invuln ? (Mathf.Sin(Time.time * 8f) > 0f ? new Color(1f, 0.35f, 0.25f, 0.98f) : new Color(1f, 0.75f, 0.2f, 0.98f)) : new Color(0.3f, 1f, 0.65f, 0.98f);
+                    string statusTag = invuln ? ("[SHIELD · " + SvrDemon.ElementName(_demon.RequiredElement) + " ROUNDS · " + Mathf.RoundToInt(_demon.Crack * 100f) + "%]") : ("[EXPOSED! ATTACK (" + _demon.VulnerableTimer.ToString("0.0") + "s)]");
+                    GUI.color = invuln ? (Mathf.Sin(Time.time * 8f) > 0f ? elemCol : Color.Lerp(elemCol, Color.white, 0.45f)) : new Color(0.3f, 1f, 0.65f, 0.98f);
                     GUI.Label(new Rect(bx + bw * 0.45f - 12f * scale, by + 4f * scale, bw * 0.55f, 20f * scale), statusTag, _label);
 
                     // Health Bar
@@ -5329,8 +5233,13 @@ namespace Surveyor
                     GUI.DrawTexture(new Rect(barX, barY, barW, barH), white);
 
                     // Health bar fill
-                    GUI.color = invuln ? new Color(0.85f, 0.22f, 0.88f, 0.95f) : new Color(0.2f, 1f, 0.55f, 0.95f);
+                    GUI.color = invuln ? new Color(elemCol.r * 0.85f, elemCol.g * 0.85f, elemCol.b * 0.85f, 0.95f) : new Color(0.2f, 1f, 0.55f, 0.95f);
                     GUI.DrawTexture(new Rect(barX, barY, barW * hpPct, barH), white);
+                    if (invuln && _demon.Crack > 0.001f)          // shield crack meter under the bar
+                    {
+                        GUI.color = Color.white;
+                        GUI.DrawTexture(new Rect(barX, barY + barH + 2f * scale, barW * Mathf.Clamp01(_demon.Crack), 3f * scale), white);
+                    }
 
                     // Vacuum suction progress overlay inside the health bar if vacuuming
                     if (_demon.CaptureProgress > 0.01f)

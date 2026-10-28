@@ -184,6 +184,37 @@ namespace Surveyor
             _lidar = GetComponent<SvrLidar>();
             try { _tracer = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/Tracers/TracerCommandoDefault"); } catch { _tracer = null; }
             try { _hit = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/ImpactEffects/HitsparkCommando"); } catch { _hit = null; }
+            LoadModeFx();
+        }
+
+        // Per-ammo tracers and impacts (first prefab that exists wins; Commando's are the fallback)
+        private static readonly GameObject[] ModeTracer = new GameObject[4], ModeHit = new GameObject[4];
+        private static bool _modeFxLoaded;
+
+        private static GameObject LoadFirst(params string[] paths)
+        {
+            foreach (string p in paths)
+            {
+                try { GameObject g = LegacyResourcesAPI.Load<GameObject>(p); if (g) return g; } catch { }
+            }
+            return null;
+        }
+
+        private static void LoadModeFx()
+        {
+            if (_modeFxLoaded) return;
+            _modeFxLoaded = true;
+            ModeTracer[0] = LoadFirst("Prefabs/Effects/Tracers/TracerBandit2Rifle", "Prefabs/Effects/Tracers/TracerCommandoShotgun");
+            ModeHit[0] = LoadFirst("Prefabs/Effects/ImpactEffects/HitsparkBandit2", "Prefabs/Effects/ImpactEffects/HitsparkBandit", "Prefabs/Effects/ImpactEffects/HitsparkCommandoShotgun");
+            ModeTracer[1] = LoadFirst("Prefabs/Effects/Tracers/TracerMageIceLarge", "Prefabs/Effects/Tracers/TracerMageIceLaser", "Prefabs/Effects/Tracers/TracerHuntressSnipe");
+            ModeHit[1] = LoadFirst("Prefabs/Effects/ImpactEffects/IceRingImpact", "Prefabs/Effects/ImpactEffects/MageIceExplosion", "Prefabs/Effects/ImpactEffects/IceCullExplosion");
+            ModeTracer[2] = LoadFirst("Prefabs/Effects/Tracers/TracerMageFire", "Prefabs/Effects/Tracers/TracerClayBruiserMinigun");
+            ModeHit[2] = LoadFirst("Prefabs/Effects/ImpactEffects/IgniteExplosionVFX", "Prefabs/Effects/ImpactEffects/MissileExplosionVFX");
+            ModeTracer[3] = LoadFirst("Prefabs/Effects/Tracers/TracerMageLightningLarge", "Prefabs/Effects/Tracers/TracerMageLightning", "Prefabs/Effects/Tracers/TracerGolem");
+            ModeHit[3] = LoadFirst("Prefabs/Effects/ImpactEffects/LightningStrikeImpact", "Prefabs/Effects/ImpactEffects/ImpactMageLightning");
+            int found = 0;
+            for (int i = 0; i < 4; i++) { if (ModeTracer[i]) found++; if (ModeHit[i]) found++; }
+            SvrPlugin.Log.LogInfo("Minigun ammo effects: " + found + "/8 prefabs found (missing ones use Commando's).");
         }
 
         public override void FixedUpdate()
@@ -262,9 +293,10 @@ namespace Surveyor
                 maxSpread = spread,
                 damage = dmg,
                 force = isIridium ? 280f : 120f,
-                tracerEffectPrefab = _tracer,
+                tracerEffectPrefab = ModeTracer[mMode] ? ModeTracer[mMode] : _tracer,
                 muzzleName = "MuzzleRight",
-                hitEffectPrefab = _hit,
+                // the big ammo impacts every other round (13 rounds a second of explosions would bury the screen)
+                hitEffectPrefab = (ModeHit[mMode] && (_shotCounter % 2 == 0 || mMode == 0)) ? ModeHit[mMode] : _hit,
                 isCrit = RollCrit(),
                 radius = isIridium ? 0.45f : 0.25f,
                 smartCollision = true,
@@ -342,14 +374,23 @@ namespace Surveyor
     {
         private SvrLidar _lidar;
         private float _soundTimer;
+        private bool _firedOrb;
 
         public override void OnEnter()
         {
             base.OnEnter();
             _lidar = GetComponent<SvrLidar>();
+            // BLACK HOLE mode: pressing M2 fires a singularity orb (on its own cooldown) instead of channelling
+            if (isAuthority && _lidar && SvrLidar.VacuumMode % 4 == 1 && _lidar.TryFireSingularity(GetAimRay(), characterBody))
+            {
+                _firedOrb = true;
+                PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
+                AddRecoil(-1.5f, -2.5f, -0.5f, 0.5f);
+                return;
+            }
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
-            Util.PlaySound("Play_drone_repair", gameObject);
-            _soundTimer = 1.4f;
+            Util.PlaySound("Play_MULT_m2_aim", gameObject);         // one soft servo hum to start, then throttled (below)
+            _soundTimer = 1.6f;
         }
 
         public override void FixedUpdate()
@@ -358,6 +399,12 @@ namespace Surveyor
 
             Ray aim = GetAimRay();
             StartAimMode(aim, 1.5f, false);
+
+            if (_firedOrb)
+            {
+                if (isAuthority && fixedAge >= 0.35f && (!inputBank || !inputBank.skill2.down)) outer.SetNextStateToMain();
+                return;
+            }
 
             if (_lidar)
             {
@@ -386,11 +433,12 @@ namespace Surveyor
             {
                 _lidar.Demon.TetherActive = false;
             }
-            Util.PlaySound("Play_drone_repair", gameObject);
             base.OnExit();
         }
 
-        public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.Skill; }
+        // PrioritySkill, not Skill: with Skill, holding M2 let a fresh copy of this state interrupt itself every frame
+        // (OnEnter/OnExit 60 times a second, each playing a sound) = the screech.
+        public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.PrioritySkill; }
     }
 
     // ================================================================ Alt M2: Surveyor Lance

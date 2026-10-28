@@ -169,7 +169,13 @@ namespace Surveyor
             _emTex.Apply(false, true);
         }
 
-        public static int PlayerModelLayer
+        /// <summary>The suit's normal layer: the standard character layer, so every camera (and every other player) sees it,
+        /// and it stays in step with item displays.</summary>
+        public static int PlayerModelLayer => LayerIndex.defaultLayer.intVal;
+
+        /// <summary>Only on her own screen while the visor is down: the suit moves to this layer so it still shows against the
+        /// black LiDAR world (the scene camera then renders only UI + this layer). SvrLidar switches it back every frame otherwise.</summary>
+        public static int DarkSuitLayer
         {
             get
             {
