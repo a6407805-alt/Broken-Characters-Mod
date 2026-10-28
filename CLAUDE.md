@@ -21,6 +21,9 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
   plugins\<Mod> edits (newer than the pack install, or any diff when the pack equals main) to `staging/<login>` as
   "main + changes" with `[skip ci]`; never main. Owner sees a bell (badge = count) next to the title; it opens ReviewWindow for staging/* ahead of main:
   Approve applies the changed files on top of the NEWEST main (builds + publishes), Revert resets the branch to main.
+  No creator key? Friends with the extras use the shared upload key (`launcher/keys/staging.json`, a fine-grained PAT
+  locked with the extras key itself; the owner saves it in the review window) and stage as `staging/<windows user>`.
+  DeAndre6969 is Vince's GitHub name (same person).
 
 ## Build & release (nothing builds locally: no dotnet in the sandbox)
 - Every push to main: build Duelist + every `src/*/*.csproj` → package `Broken-Characters-Mod.zip` → Windows installer

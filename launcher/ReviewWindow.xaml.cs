@@ -52,7 +52,7 @@ namespace BrokenCharactersLauncher
                 return;
             }
             Remaining = all.Count;
-            StatusLine.Text = all.Count == 0 ? "Nothing waiting. When Vince or DeAndre drop new files into their game, they show up here."
+            StatusLine.Text = all.Count == 0 ? "Nothing waiting. When anyone drops new files into their game's plugins folder, they show up here."
                                              : all.Count + " update(s) waiting for you.";
             foreach (StagingStatus s in all) CardList.Children.Add(Card(s));
         }
@@ -159,6 +159,40 @@ namespace BrokenCharactersLauncher
                 StatusLine.Text = "Couldn't discard: " + ex.Message;
             }
             finally { _busy = false; }
+        }
+
+        // ------------------------------------------------------------------ friends' shared upload key
+
+        private async void SaveSharedKey_Click(object sender, RoutedEventArgs e)
+        {
+            string shared = SharedKeyBox.Password.Trim();
+            if (!KeyVault.LooksLikeKey(shared)) { SharedKeyText.Text = "That doesn't look like a GitHub key (they start with github_pat_ or ghp_)."; return; }
+            string? extras = KeyVault.ReadExtrasKey();
+            if (string.IsNullOrEmpty(extras)) { SharedKeyText.Text = "This PC needs the extras first (EXTRAS box): the upload key is locked with it."; return; }
+            SaveSharedKeyButton.IsEnabled = false;
+            try
+            {
+                SharedKeyText.Text = "Checking the key...";
+                // It must be able to write to the pack (create staging branches), or friends' uploads would just fail.
+                var probe = new Publisher(shared);
+                await probe.SignInAsync(_cts.Token);
+                string locked = await Task.Run(() => KeyVault.Lock(shared, extras), _cts.Token);
+                await new Publisher(_key).UpdateTextFileAsync(KeyVault.StagingPath, _ => locked, "Friends' upload key (locked with the extras key)", _cts.Token);
+                SharedKeyBox.Clear();
+                SharedKeyText.Text = "Saved. Everyone with the extras now sends you their mod changes automatically (after they update the launcher).";
+            }
+            catch (Exception ex) when (ex is GitHubException || ex is System.Net.Http.HttpRequestException || ex is TaskCanceledException)
+            {
+                SharedKeyText.Text = "Couldn't save it: " + ex.Message;
+            }
+            finally { SaveSharedKeyButton.IsEnabled = true; }
+        }
+
+        private void MakeKey_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true }); }
+            catch (System.ComponentModel.Win32Exception) { }
+            e.Handled = true;
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

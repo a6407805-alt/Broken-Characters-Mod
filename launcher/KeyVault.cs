@@ -25,6 +25,16 @@ namespace BrokenCharactersLauncher
         private const int Iterations = 600_000;
         public const int MinPasswordLength = 8;
         public const string ExtrasPath = "launcher/keys/extras.json";
+        /// <summary>The friends' shared upload key (for silent staging), locked with the EXTRAS KEY itself, so only
+        /// PCs that have the extras can unlock it.</summary>
+        public const string StagingPath = "launcher/keys/staging.json";
+
+        public static string? ReadExtrasKey()
+        {
+            string f = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BrokenCharacters", "extras-key.txt");
+            try { return System.IO.File.Exists(f) ? System.IO.File.ReadAllText(f).Trim() : null; }
+            catch (System.IO.IOException) { return null; }
+        }
         private const string ExtrasRepo = "a6407805-alt/BrokenCharacters-Extras";
 
         private static readonly HttpClient Http = CreateHttp();
