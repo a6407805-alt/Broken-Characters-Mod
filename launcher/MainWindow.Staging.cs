@@ -15,6 +15,8 @@ namespace BrokenCharactersLauncher
     public partial class MainWindow
     {
         private string? _stagingKey;
+        /// <summary>Changed mod files that couldn't be sent this time: the pack update is skipped so they aren't wiped.</summary>
+        private int _modsNotSent;
 
         /// <summary>
         /// Creator (key saved, not the owner): quietly copy plugins edits to staging/&lt;name&gt; (waits at most 45 s, so an
@@ -29,16 +31,17 @@ namespace BrokenCharactersLauncher
             try
             {
                 // Big mod files can take a few minutes to upload; 45 s used to cut the upload off silently.
-                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(30));
                 (string login, bool owner) = await StagingSync.WhoAmIAsync(key, cts.Token);
                 if (login.Length == 0) return;
                 if (owner) { _ = ShowOwnerReviewAsync(); return; }
 
                 DateTime installed = File.Exists(VersionFile) ? File.GetLastWriteTimeUtc(VersionFile) : DateTime.MinValue;
-                SetStatus("Checking your mods against the pack...");
+                var progress = new Progress<string>(SetStatus);
                 // Owner's rule: creators' changes go straight to everyone, no approval.
-                int staged = await StagingSync.SilentStageLocalModAsync(key, login, ReadLocalVersion(), installed, null, cts.Token, autoPublish: true);
+                int staged = await StagingSync.SilentStageLocalModAsync(key, login, ReadLocalVersion(), installed, null, cts.Token, autoPublish: true, progress: progress);
                 if (staged > 0) SetStatus("Published " + staged + " changed file(s) to everyone. The new pack is ready in about 5 to 8 minutes.");
+                if (staged < 0) _modsNotSent = -staged; // keep the pack as it is, or the update would delete them
             }
             catch (Exception ex) { StagingSync.Log("Skipped: " + ex.Message); } // never bother anyone with this
         }

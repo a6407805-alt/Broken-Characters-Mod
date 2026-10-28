@@ -250,8 +250,10 @@ namespace BrokenCharactersLauncher
         /// staging/&lt;login&gt;. Returns how many files are staged (0 = nothing to do). Never throws.
         /// </summary>
         public static async Task<int> SilentStageLocalModAsync(string key, string login, string? installedVersion, DateTime installedUtc,
-                                                              string? onlyMod = null, CancellationToken ct = default, bool autoPublish = false)
+                                                              string? onlyMod = null, CancellationToken ct = default, bool autoPublish = false,
+                                                              IProgress<string>? progress = null)
         {
+            int pending = 0; // files found to send; if sending then fails, the caller must NOT update the pack (it would wipe them)
             try
             {
                 string? game = FindGameFolders().FirstOrDefault();
@@ -284,6 +286,10 @@ namespace BrokenCharactersLauncher
 
                 // Local files that are newer than the pack install and not what main has.
                 var changed = new List<(string Remote, string Local)>();
+                int checkedFiles = 0;
+                progress?.Report("Checking your mods against the pack...");
+                await Task.Run(() =>
+                {
                 foreach (string modDir in Directory.GetDirectories(plugins))
                 {
                     string folder = Path.GetFileName(modDir);
@@ -311,18 +317,28 @@ namespace BrokenCharactersLauncher
                         if (fromSource.Contains(mod) && topLevel &&
                             (ext == ".dll" || ext == ".pdb" || file.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase))) continue;
                         string remote = "mods/" + mod + "/" + rel;
+                        if (++checkedFiles % 25 == 0) progress?.Report("Checking your mods against the pack... " + checkedFiles + " files checked, " + changed.Count + " different");
                         if (onMain.TryGetValue(remote, out string? sha) && sha == Publisher.GitBlobSha(file)) continue;
                         changed.Add((remote, file));
                     }
                 }
+                }, ct);
+                pending = changed.Count;
+                Log("Checked " + checkedFiles + " file(s), " + changed.Count + " differ from GitHub.");
                 if (changed.Count == 0) { Log("Nothing differs from GitHub. Nothing sent."); return 0; }
                 foreach ((string remote, _) in changed.Take(50)) Log("  differs: " + remote);
 
                 // "main + my changes", rebuilt fresh every time so the branch never drifts from main.
                 string branch = Prefix + login.ToLowerInvariant();
                 var entries = new JsonArray();
+                long totalBytes = changed.Sum(c => new FileInfo(c.Local).Length), sentBytes = 0;
+                int n = 0;
                 foreach ((string remote, string local) in changed)
                 {
+                    long size = new FileInfo(local).Length;
+                    progress?.Report("Uploading your mod changes " + (++n) + " of " + changed.Count + ": " + Path.GetFileName(local) +
+                                     " (" + (sentBytes / 1048576.0).ToString("0.0") + " of " + (totalBytes / 1048576.0).ToString("0.0") + " MB)");
+                    sentBytes += size;
                     JsonNode? blob = await CallAsync(key, HttpMethod.Post, "/git/blobs", new JsonObject
                     {
                         ["content"] = Convert.ToBase64String(await File.ReadAllBytesAsync(local, ct)),
@@ -383,8 +399,8 @@ namespace BrokenCharactersLauncher
             }
             catch (Exception ex) // silent on purpose: a creator never sees staging errors
             {
-                Log("Skipped (error): " + ex.Message);
-                return 0;
+                Log("Skipped (error): " + ex.Message + (pending > 0 ? "  (" + pending + " file(s) NOT sent)" : ""));
+                return pending > 0 ? -pending : 0;
             }
         }
     }

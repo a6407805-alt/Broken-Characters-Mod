@@ -144,6 +144,13 @@ namespace BrokenCharactersLauncher
 
             // Creators: stage their plugins edits BEFORE any update can replace those files. Owner: check for review.
             await RunStagingAsync();
+            if (_modsNotSent > 0)
+            {
+                // Updating now would replace the plugins folders and lose those files. Play what's here; try again next launch.
+                Ready("Couldn't send " + _modsNotSent + " changed mod file(s) to the pack, so the update was skipped to keep them safe. " +
+                      "Reopen the launcher to try again (details: %APPDATA%\\BrokenCharacters\\staging-log.txt).");
+                return;
+            }
 
             // A newer launcher on the release replaces this one and restarts it (also when Steam's Play button opened us).
             if (await TrySelfUpdateAsync(fromRefresh: false)) return;
