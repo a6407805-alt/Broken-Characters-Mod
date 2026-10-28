@@ -19,7 +19,7 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 
 - Silent staging (`StagingSync.cs`, `MainWindow.Staging.cs`): a creator's launcher (key saved, not the owner) copies
   plugins\<Mod> edits (newer than the pack install, or any diff when the pack equals main) to `staging/<login>` as
-  "main + changes" with `[skip ci]`; never main. Owner's launcher shows the gold review bar for staging/* ahead of main:
+  "main + changes" with `[skip ci]`; never main. Owner sees a bell (badge = count) next to the title; it opens ReviewWindow for staging/* ahead of main:
   Approve applies the changed files on top of the NEWEST main (builds + publishes), Revert resets the branch to main.
 
 ## Build & release (nothing builds locally: no dotnet in the sandbox)

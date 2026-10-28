@@ -342,6 +342,27 @@
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="24,0,0,0">
                         <TextBlock Text="BROKEN CHARACTERS" Foreground="White" FontSize="18" FontWeight="Black" />
                         <TextBlock Text="  MOD" Foreground="{StaticResource Accent}" FontSize="18" FontWeight="Black" />
+                        <!-- Owner only: creators' mod updates waiting for approval (ReviewWindow / StagingSync.cs) -->
+                        <Button x:Name="ReviewBellButton" Click="ReviewBell_Click" Visibility="Collapsed" Width="34" Height="30" Margin="14,0,0,0"
+                                Cursor="Hand" VerticalAlignment="Center" ToolTip="Mod updates from creators waiting for your approval">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Grid>
+                                        <Border x:Name="Bg" Background="#30FFFFFF" CornerRadius="6" />
+                                        <TextBlock Text="&#x1F514;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        <Border x:Name="Badge" Background="#FF4D4D" CornerRadius="8" MinWidth="16" Height="16" Padding="4,0"
+                                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-5,-6,0">
+                                            <TextBlock Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Foreground="White"
+                                                       FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </Grid>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bg" Property="Background" Value="#55FFC928" /></Trigger>
+                                        <Trigger Property="Tag" Value="{x:Null}"><Setter TargetName="Badge" Property="Visibility" Value="Collapsed" /></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,8,0">
                         <!-- Patch notes live in a pop-up now; the changelog code still fills ChangelogText -->
@@ -494,38 +515,6 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-
-                    <!-- Owner review bar (StagingSync.cs): a creator's mod changes waiting on a staging branch -->
-                    <Border x:Name="OwnerSyncBanner" Grid.Row="0" Visibility="Collapsed" Background="#2A1E05" BorderBrush="#FFC928"
-                            BorderThickness="0,0,0,2" CornerRadius="6" Padding="18,10" Margin="0,0,0,10">
-                        <DockPanel LastChildFill="False">
-                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="&#x1F514;" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center" />
-                                <StackPanel>
-                                    <TextBlock x:Name="OwnerSyncTitle" Text="Staging update waiting" Foreground="#FFC928" FontSize="13" FontWeight="Black" />
-                                    <TextBlock x:Name="OwnerSyncDetails" Text="" Foreground="#9FB3D1" FontSize="11" />
-                                </StackPanel>
-                            </StackPanel>
-                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button x:Name="InspectStagingButton" Content="Inspect" Style="{StaticResource GhostButton}" Margin="0,0,8,0" Click="InspectStaging_Click" />
-                                <Button x:Name="RevertStagingButton" Content="&#x21BA; Revert" Style="{StaticResource GhostButton}" Foreground="#FF6B6B" BorderBrush="#FF6B6B" Margin="0,0,8,0" Click="RevertStaging_Click" />
-                                <Button x:Name="ApproveStagingButton" Content="&#x2713; APPROVE &amp; PUSH" Foreground="#101420" FontWeight="Black" FontSize="13"
-                                        Padding="14,6" Cursor="Hand" Click="ApproveStaging_Click">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border x:Name="Bg" Background="#FFC928" CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bg" Property="Background" Value="#FFD95C" /></Trigger>
-                                                <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5" /></Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                            </StackPanel>
-                        </DockPanel>
-                    </Border>
 
                     <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="4,0,0,6">
                         <TextBlock Text="CHARACTERS" Foreground="{StaticResource Accent}" FontSize="14" FontWeight="Black" />
