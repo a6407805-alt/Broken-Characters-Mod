@@ -11,6 +11,10 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
 - `release/` installer (`install.ps1`), updater (`update.ps1`), `package.sh`. `.github/workflows/build.yml` does it all.
 - Launcher cards: one file per mod in `launcher/cards/<Mod>.json` (CI merges them into `roster.json` via
   `release/merge_roster.py` and attaches the result to the release). Never rewrite `launcher/roster.json` wholesale.
+  Owner's rule: EVERY new character / map / game mode needs a launcher picture. merge_roster.py auto-adds a card for any
+  mods/<Mod> character without one (NOT_CHARACTERS lists utility/map/mode mods); the publish job makes card-<Mod>.png
+  (mod's icon.png / Icons/portrait.png, else a lettered placeholder) on the release. Replace placeholders with real
+  art in launcher/Assets/Roster/<Mod>.png. Maps/modes are manual entries in roster.json with Assets/Tiles/<X>.png.
 - Creator window (`launcher/Publisher.cs`, `PublishWindow.xaml*`): lets any creator upload mods through the
   GitHub API. Every creator may update EVERY mod (owner's rule: one shared pack); `creators.json` just records who added a mod. Don't commit dlls into `mods/<Mod>/` when `src/<Mod>/` exists.
   Before changing a mod you don't own, check `creators.json` and `git log -- src/<Mod>`.
