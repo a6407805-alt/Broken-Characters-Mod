@@ -132,8 +132,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.6.8",
-      "note": "Active WIP (v0.6.8): fixed invisible 3rd-person model, M2 screech and pink world objects; floor trap removed; Black Hole orb; per-ammo tracers; hold M1/M2 + wheel; chest X-ray nameplates; Shimmer Demon elemental-shield raid boss with blinks and red loot"
+      "version": "0.6.9",
+      "note": "Active WIP (v0.6.9): LiDAR fixed (Black Hole code crashed the scanner every frame); v0.6.8 overhaul: Black Hole orb, chest X-ray, per-ammo tracers, elemental-shield Shimmer Demon"
     }
   ]
 }
