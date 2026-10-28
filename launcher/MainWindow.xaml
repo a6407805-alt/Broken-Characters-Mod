@@ -491,14 +491,48 @@
                 <Grid Grid.Row="1" Margin="0,4,0,0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <StackPanel Orientation="Horizontal" Margin="4,0,0,6">
+
+                    <!-- Owner review bar (StagingSync.cs): a creator's mod changes waiting on a staging branch -->
+                    <Border x:Name="OwnerSyncBanner" Grid.Row="0" Visibility="Collapsed" Background="#2A1E05" BorderBrush="#FFC928"
+                            BorderThickness="0,0,0,2" CornerRadius="6" Padding="18,10" Margin="0,0,0,10">
+                        <DockPanel LastChildFill="False">
+                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="&#x1F514;" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                <StackPanel>
+                                    <TextBlock x:Name="OwnerSyncTitle" Text="Staging update waiting" Foreground="#FFC928" FontSize="13" FontWeight="Black" />
+                                    <TextBlock x:Name="OwnerSyncDetails" Text="" Foreground="#9FB3D1" FontSize="11" />
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="InspectStagingButton" Content="Inspect" Style="{StaticResource GhostButton}" Margin="0,0,8,0" Click="InspectStaging_Click" />
+                                <Button x:Name="RevertStagingButton" Content="&#x21BA; Revert" Style="{StaticResource GhostButton}" Foreground="#FF6B6B" BorderBrush="#FF6B6B" Margin="0,0,8,0" Click="RevertStaging_Click" />
+                                <Button x:Name="ApproveStagingButton" Content="&#x2713; APPROVE &amp; PUSH" Foreground="#101420" FontWeight="Black" FontSize="13"
+                                        Padding="14,6" Cursor="Hand" Click="ApproveStaging_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="Bg" Background="#FFC928" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bg" Property="Background" Value="#FFD95C" /></Trigger>
+                                                <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5" /></Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="4,0,0,6">
                         <TextBlock Text="CHARACTERS" Foreground="{StaticResource Accent}" FontSize="14" FontWeight="Black" />
                         <TextBlock x:Name="RosterCountText" Foreground="{StaticResource TextDim}" FontSize="13" Margin="10,1,0,0" />
                     </StackPanel>
 
-                    <Grid Grid.Row="1">
+                    <Grid Grid.Row="2">
                         <!-- The roster itself: scroll with the wheel, by dragging, or with the arrows -->
                         <ScrollViewer x:Name="RosterScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
                                       CanContentScroll="False" Padding="0"

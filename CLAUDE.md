@@ -17,6 +17,11 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
   Quick upload (`QuickUpload.cs`, `PublishWindow.Quick.cs`): pick/drag a friend's .zip/.dll, it's staged as
   `%TEMP%\BrokenCharacters-QuickUpload\<id>\mods\<Mod>\` and the normal scan/publish runs on that.
 
+- Silent staging (`StagingSync.cs`, `MainWindow.Staging.cs`): a creator's launcher (key saved, not the owner) copies
+  plugins\<Mod> edits (newer than the pack install, or any diff when the pack equals main) to `staging/<login>` as
+  "main + changes" with `[skip ci]`; never main. Owner's launcher shows the gold review bar for staging/* ahead of main:
+  Approve applies the changed files on top of the NEWEST main (builds + publishes), Revert resets the branch to main.
+
 ## Build & release (nothing builds locally: no dotnet in the sandbox)
 - Every push to main: build Duelist + every `src/*/*.csproj` → package `Broken-Characters-Mod.zip` → Windows installer
   test → launcher exe + `launcher-preview.png` → GitHub release `latest` (also `Broken-Characters-Collection.zip` alias).

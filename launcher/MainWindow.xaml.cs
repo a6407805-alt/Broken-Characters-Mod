@@ -142,6 +142,9 @@ namespace BrokenCharactersLauncher
             // The changelog loads on its own; if it fails the launcher still works.
             _ = LoadChangelogAsync();
 
+            // Creators: stage their plugins edits BEFORE any update can replace those files. Owner: check for review.
+            await RunStagingAsync();
+
             // A newer launcher on the release replaces this one and restarts it (also when Steam's Play button opened us).
             if (await TrySelfUpdateAsync(fromRefresh: false)) return;
 
