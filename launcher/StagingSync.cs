@@ -250,7 +250,7 @@ namespace BrokenCharactersLauncher
         /// staging/&lt;login&gt;. Returns how many files are staged (0 = nothing to do). Never throws.
         /// </summary>
         public static async Task<int> SilentStageLocalModAsync(string key, string login, string? installedVersion, DateTime installedUtc,
-                                                              string? onlyMod = null, CancellationToken ct = default)
+                                                              string? onlyMod = null, CancellationToken ct = default, bool autoPublish = false)
         {
             try
             {
@@ -261,6 +261,12 @@ namespace BrokenCharactersLauncher
                 Log("Comparing " + plugins + " with GitHub as " + login + " (pack " + (installedVersion ?? "none") + ")");
 
                 string head = (await RefShaAsync(key, Main, ct))!;
+                // Auto-publish safety: if this PC's pack is older than the published one, only files edited AFTER the
+                // last install count. Otherwise an old copy of the pack would overwrite newer work for everyone.
+                string release = autoPublish ? await LatestReleaseShaAsync(key, ct) : "";
+                bool packIsCurrent = !autoPublish || (installedVersion != null && release.Length > 0 &&
+                                     release.StartsWith(installedVersion, StringComparison.OrdinalIgnoreCase));
+                if (!packIsCurrent) Log("Pack on this PC is older than the published one: only files edited after the last install count.");
                 string baseTree = await TreeOfAsync(key, head, ct);
                 JsonNode? tree = await CallAsync(key, HttpMethod.Get, "/git/trees/" + baseTree + "?recursive=1", null, ct);
                 var onMain = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -297,6 +303,7 @@ namespace BrokenCharactersLauncher
                         var info = new FileInfo(file);
                         // Owner's rule: compare EVERYTHING in the plugins folder with GitHub (the owner reviews it all).
                         if (info.Length > 90L * 1024 * 1024) continue;                       // GitHub refuses files over 100 MB
+                        if (!packIsCurrent && info.LastWriteTimeUtc <= installedUtc.AddMinutes(1)) continue;
                         string rel = Path.GetRelativePath(modDir, file).Replace('\\', '/');
                         string ext = info.Extension.ToLowerInvariant();
                         if (ext == ".cfg" || ext == ".log" || ext == ".tmp" || ext == ".bak") continue;
@@ -325,6 +332,38 @@ namespace BrokenCharactersLauncher
                 }
                 JsonNode? newTree = await CallAsync(key, HttpMethod.Post, "/git/trees", new JsonObject { ["base_tree"] = baseTree, ["tree"] = entries }, ct);
                 string newTreeSha = newTree!["sha"]!.GetValue<string>();
+
+                if (autoPublish)
+                {
+                    // No approval: straight onto main as one commit. The build server builds and publishes it for everyone.
+                    var modNames = changed.Select(c => c.Remote.Split('/')[1]).Distinct().ToList();
+                    for (int attempt = 1; ; attempt++)
+                    {
+                        JsonNode? auto = await CallAsync(key, HttpMethod.Post, "/git/commits", new JsonObject
+                        {
+                            ["message"] = "Auto-update from " + login + ": " + changed.Count + " file(s) in " + string.Join(", ", modNames) +
+                                          "\n\nSent automatically by " + login + "'s launcher (from BepInEx\\plugins). pack=" + (installedVersion ?? "none"),
+                            ["tree"] = newTreeSha,
+                            ["parents"] = Parents(head)
+                        }, ct);
+                        try
+                        {
+                            await CallAsync(key, new HttpMethod("PATCH"), "/git/refs/heads/" + Main,
+                                new JsonObject { ["sha"] = auto!["sha"]!.GetValue<string>(), ["force"] = false }, ct);
+                            Log("Published " + changed.Count + " file(s) to everyone (" + string.Join(", ", modNames) + "). The build takes about 5 to 8 minutes.");
+                            return changed.Count;
+                        }
+                        catch (GitHubException ex) when ((ex.Status == 422 || ex.Status == 409) && attempt < 4)
+                        {
+                            // Someone pushed at the same moment: rebuild the same files on top of their commit.
+                            await Task.Delay(1500, ct);
+                            head = (await RefShaAsync(key, Main, ct))!;
+                            baseTree = await TreeOfAsync(key, head, ct);
+                            newTree = await CallAsync(key, HttpMethod.Post, "/git/trees", new JsonObject { ["base_tree"] = baseTree, ["tree"] = entries }, ct);
+                            newTreeSha = newTree!["sha"]!.GetValue<string>();
+                        }
+                    }
+                }
 
                 // Same files as what's already staged? Leave the branch alone (no new commit every launch).
                 string? current = await RefShaAsync(key, branch, ct);
