@@ -20,6 +20,7 @@ namespace BrokenCharactersLauncher
         private readonly string _key;
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private bool _busy;
+        private string _releaseSha = "";
 
         /// <summary>How many updates are still waiting when the window closes (the bell's badge).</summary>
         public int Remaining { get; private set; }
@@ -52,6 +53,7 @@ namespace BrokenCharactersLauncher
                 return;
             }
             Remaining = all.Count;
+            _releaseSha = await StagingSync.LatestReleaseShaAsync(_key, _cts.Token);
             StatusLine.Text = all.Count == 0 ? "Nothing waiting. When anyone drops new files into their game's plugins folder, they show up here."
                                              : all.Count + " update(s) waiting for you.";
             foreach (StagingStatus s in all) CardList.Children.Add(Card(s));
@@ -71,6 +73,15 @@ namespace BrokenCharactersLauncher
                 Text = s.Files.Count + " file(s)" + (s.Date > DateTimeOffset.MinValue ? "  ·  " + s.Date.LocalDateTime.ToString("MMM d, h:mm tt") : ""),
                 Foreground = Dim, FontSize = 12, Margin = new Thickness(0, 2, 0, 8)
             });
+            bool oldPack = s.PackVersion.Length > 0 && _releaseSha.Length > 0 &&
+                           !_releaseSha.StartsWith(s.PackVersion, StringComparison.OrdinalIgnoreCase) && s.PackVersion != "none";
+            if (oldPack)
+                panel.Children.Add(new TextBlock
+                {
+                    Text = "\u26A0 " + s.Creator + "'s pack wasn't up to date when this was sent, so some of these may be OLDER copies " +
+                           "than what's on GitHub. Check the list before approving.",
+                    Foreground = Red, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8)
+                });
             foreach (var f in s.Files.Take(30))
             {
                 string mark = f.Status == "removed" ? "−" : f.Status == "added" ? "+" : "~";

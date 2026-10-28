@@ -2,8 +2,9 @@
 //  SILENT STAGING + OWNER APPROVAL.
 //
 //  Creators (anyone with a creator key who isn't the owner) just drop their mod files into
-//  Risk of Rain 2\BepInEx\plugins\<Mod>\. When their launcher opens, it quietly copies the files they changed
-//  (newer than the last pack install AND different from main) onto their own branch: staging/<github-name>.
+//  Risk of Rain 2\BepInEx\plugins\<Mod>\. When their launcher opens, it compares EVERY file in their plugins
+//  folder (pack mods + new mod folders, not libraries) with main and copies the differences onto their own branch:
+//  staging/<github-name>. The commit notes their installed pack version, so the owner is warned when it was old.
 //  That branch is "main + their changes". It never touches main, so nothing reaches friends yet.
 //
 //  The owner's launcher looks for staging/* branches that are ahead of main and shows the gold review bar:
@@ -36,6 +37,7 @@ namespace BrokenCharactersLauncher
         public string Branch { get; init; } = "";       // e.g. staging/deandre6969
         public string Creator { get; init; } = "";      // whose branch it is
         public string Author { get; init; } = "";       // who made the last commit
+        public string PackVersion { get; init; } = "";  // the pack version the creator had installed when they sent it
         public DateTimeOffset Date { get; init; }
         public List<(string Path, string Status, string? Sha)> Files { get; init; } = new List<(string, string, string?)>();
         public IEnumerable<string> Mods => Files.Select(f => f.Path.Split('/')).Where(p => p.Length > 1).Select(p => p[1]).Distinct();
@@ -128,6 +130,7 @@ namespace BrokenCharactersLauncher
                 {
                     Branch = branch,
                     Creator = branch.Substring(Prefix.Length),
+                    PackVersion = System.Text.RegularExpressions.Regex.Match(last?["commit"]?["message"]?.GetValue<string>() ?? "", @"pack=([0-9a-f]{7,40})").Groups[1].Value,
                     Author = last?["author"]?["login"]?.GetValue<string>() ?? last?["commit"]?["author"]?["name"]?.GetValue<string>() ?? branch.Substring(Prefix.Length),
                     Date = DateTimeOffset.TryParse(when, out DateTimeOffset d) ? d : DateTimeOffset.MinValue,
                     Files = files
@@ -169,6 +172,13 @@ namespace BrokenCharactersLauncher
                 await SetRefAsync(key, staged.Branch, sha2, true, ct); // staging now equals main again
                 return sha2;
             }
+        }
+
+        /// <summary>The commit the published pack (release "latest") was built from.</summary>
+        public static async Task<string> LatestReleaseShaAsync(string key, CancellationToken ct = default)
+        {
+            try { return (await CallAsync(key, HttpMethod.Get, "/releases/latest", null, ct))?["target_commitish"]?.GetValue<string>() ?? ""; }
+            catch (GitHubException) { return ""; }
         }
 
         /// <summary>Drops the creator's draft: the staging branch is reset to main's current commit.</summary>
@@ -233,9 +243,6 @@ namespace BrokenCharactersLauncher
                 if (!Directory.Exists(plugins)) return 0;
 
                 string head = (await RefShaAsync(key, Main, ct))!;
-                // Pack up to date with main: every difference is an edit. Otherwise only count files touched
-                // after the last install (an old copy of the pack must never look like "changes").
-                bool packIsCurrent = string.Equals(installedVersion, head, StringComparison.OrdinalIgnoreCase);
                 string baseTree = await TreeOfAsync(key, head, ct);
                 JsonNode? tree = await CallAsync(key, HttpMethod.Get, "/git/trees/" + baseTree + "?recursive=1", null, ct);
                 var onMain = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -256,13 +263,21 @@ namespace BrokenCharactersLauncher
                 foreach (string modDir in Directory.GetDirectories(plugins))
                 {
                     string folder = Path.GetFileName(modDir);
+                    // Every pack mod, plus brand-new mod folders (not libraries like R2API / RiskofThunder-*).
                     string? mod = packMods.FirstOrDefault(m => m.Equals(folder, StringComparison.OrdinalIgnoreCase));
-                    if (mod == null || mod.Equals("Duelist", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (mod == null)
+                    {
+                        bool library = QuickUpload.IsReservedName(folder) || folder.Contains('-') || folder.StartsWith("MMHOOK", StringComparison.OrdinalIgnoreCase)
+                                       || !Directory.EnumerateFiles(modDir, "*.dll", SearchOption.AllDirectories).Any();
+                        if (library || !QuickUpload.IsValidName(folder)) continue;
+                        mod = folder;
+                    }
+                    if (mod.Equals("Duelist", StringComparison.OrdinalIgnoreCase) || mod.Equals("DuelistMod", StringComparison.OrdinalIgnoreCase)) continue;
                     if (onlyMod != null && !mod.Equals(onlyMod, StringComparison.OrdinalIgnoreCase)) continue;
                     foreach (string file in Directory.EnumerateFiles(modDir, "*", SearchOption.AllDirectories))
                     {
                         var info = new FileInfo(file);
-                        if (!packIsCurrent && info.LastWriteTimeUtc <= installedUtc.AddMinutes(1)) continue; // came with the pack, not an edit
+                        // Owner's rule: compare EVERYTHING in the plugins folder with GitHub (the owner reviews it all).
                         if (info.Length > 90L * 1024 * 1024) continue;                       // GitHub refuses files over 100 MB
                         string rel = Path.GetRelativePath(modDir, file).Replace('\\', '/');
                         string ext = info.Extension.ToLowerInvariant();
@@ -299,7 +314,8 @@ namespace BrokenCharactersLauncher
                 var mods = changed.Select(c => c.Remote.Split('/')[1]).Distinct();
                 JsonNode? commit = await CallAsync(key, HttpMethod.Post, "/git/commits", new JsonObject
                 {
-                    ["message"] = "Staging: " + login + " changed " + changed.Count + " file(s) in " + string.Join(", ", mods) + " [skip ci]",
+                    ["message"] = "Staging: " + login + " changed " + changed.Count + " file(s) in " + string.Join(", ", mods) +
+                                  "\n\npack=" + (installedVersion ?? "none") + " [skip ci]",
                     ["tree"] = newTreeSha,
                     ["parents"] = Parents(head)
                 }, ct);

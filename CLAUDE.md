@@ -18,7 +18,7 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
   `%TEMP%\BrokenCharacters-QuickUpload\<id>\mods\<Mod>\` and the normal scan/publish runs on that.
 
 - Silent staging (`StagingSync.cs`, `MainWindow.Staging.cs`): a creator's launcher (key saved, not the owner) copies
-  plugins\<Mod> edits (newer than the pack install, or any diff when the pack equals main) to `staging/<login>` as
+  EVERY file in plugins\ (pack mods + new mod folders, not libraries) that differs from main to `staging/<login>` as
   "main + changes" with `[skip ci]`; never main. Owner sees a bell (badge = count) next to the title; it opens ReviewWindow for staging/* ahead of main:
   Approve applies the changed files on top of the NEWEST main (builds + publishes), Revert resets the branch to main.
   No creator key? Friends with the extras use the shared upload key (`launcher/keys/staging.json`, a fine-grained PAT
