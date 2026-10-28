@@ -345,7 +345,7 @@ namespace BrokenCharactersLauncher
         }
 
         /// <summary>The same fingerprint git gives a file, so we can tell "changed" from "same" without uploading.</summary>
-        private static string GitBlobSha(string path)
+        internal static string GitBlobSha(string path)
         {
             using FileStream fs = File.OpenRead(path);
             using var sha = SHA1.Create();
