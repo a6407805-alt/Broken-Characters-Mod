@@ -30,7 +30,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.6.7";
+        public const string PluginVersion = "0.6.8";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -47,11 +47,11 @@ namespace Surveyor
         public static ConfigEntry<int> MaxDots, RaysPerFrame, DotDivider;
         public static ConfigEntry<float> ScanRange, DotLife;
         public static ConfigEntry<float> PeekSeconds, PeekCooldown, OverdriveCooldown, SweepSeconds, FocusSeconds, EchoSeconds;
-        public static ConfigEntry<string> ScanNextKey, PeekKey, TrapKey, RepulsorKey, MinionKey, CashInKey;
-        public static ConfigEntry<float> TrapCooldown, TrapDuration, TrapPullSeconds;
+        public static ConfigEntry<string> ScanNextKey, PeekKey, RepulsorKey, MinionKey, CashInKey;
         public static ConfigEntry<bool> UseCustomModel;
         public static ConfigEntry<float> ModelScale, HeavyStepShake;
         public static ConfigEntry<bool> HeavyMotion;
+        public static ConfigEntry<float> BlackHoleCooldown, BlackHoleSeconds, BlackHoleRadius, BlackHoleDamage, BlackHoleTickDamage, XrayRange;
         public static ConfigEntry<bool> DemonEnabled;
         public static ConfigEntry<float> DemonFirstSpawn, DemonProwlSpeed, DemonHuntSpeed, DemonRespawn, DemonContactRange;
         public static ConfigEntry<float> MinigunPushSpool, LanceStagger, PulseStagger, MinigunStagger;
@@ -142,15 +142,17 @@ namespace Surveyor
             ModelScale = Config.Bind("9. Model", "ModelScale_v1", 1.08f, "Size of the armoured suit on the Commando skeleton (1 = fitted to the skeleton).");
             HeavyMotion = Config.Bind("9. Model", "HeavyMotion_v1", true, "Heavy-gunner body language: both hands on the gun, gun lag, lean, sway, recoil.");
             HeavyStepShake = Config.Bind("9. Model", "StepShake_v1", 1f, "Camera thud on each heavy step and landing (0 = off).");
+            BlackHoleCooldown = Config.Bind("10. Black Hole", "Cooldown_v1", 10f, "Seconds between Black Hole orbs (M2 in BLACK HOLE mode).");
+            BlackHoleSeconds = Config.Bind("10. Black Hole", "Seconds_v1", 4f, "How long the anchored singularity pulls before it implodes.");
+            BlackHoleRadius = Config.Bind("10. Black Hole", "Radius_v1", 16f, "Metres. Enemies and projectiles inside are pulled to the centre.");
+            BlackHoleDamage = Config.Bind("10. Black Hole", "ImplosionDamage_v1", 8f, "Implosion damage (8 = 800%), with a stun.");
+            BlackHoleTickDamage = Config.Bind("10. Black Hole", "TickDamage_v1", 0.4f, "Damage every half second near the event horizon (0.4 = 40%).");
+            XrayRange = Config.Bind("5. LiDAR", "ChestXrayRange_v1", 14f, "Metres. Closer than this, chests show a wireframe box, a tier nameplate and what is inside.");
             ScanNextKey = Config.Bind("8. Peek and Overdrive", "ScanModeKey_v2", "Q", "Tap to cycle scan modes: TOPOGRAPHY -> THERMAL -> SALVAGE -> STRUCTURAL. (E stays free for the game's Interact key.)");
             PeekKey = Config.Bind("8. Peek and Overdrive", "PeekKey_v1", "F", "Peek (visor off) on its own key, whatever skill is in the utility slot.");
-            TrapKey = Config.Bind("6. Shimmer Demon", "TrapKey_v1", "G", "Throw out a Ghost-Trap Containment Box. Hold M1 or M2 on the Shimmer Demon and counter-steer with WASD to capture it and restore a lost sense.");
             RepulsorKey = Config.Bind("6. Shimmer Demon", "RepulsorBlowKey_v1", "V", "Reverse-Flow Repulsor ('Blow' function): blast away swarms and reflect projectiles.");
             MinionKey = Config.Bind("6. Shimmer Demon", "RedeployMinionKey_v1", "H", "Redeploy a captured spirit from your Containment Cell as a friendly 30s Spectral Hologram Guardian.");
             CashInKey = Config.Bind("6. Shimmer Demon", "CashInTeleporterKey_v1", "B", "Cash in a captured spirit at the stage Teleporter for Gold, Item Scrap/Droplet, and Healing.");
-            TrapCooldown = Config.Bind("6. Shimmer Demon", "TrapCooldown_v1", 20f, "Seconds between containment trap deployments.");
-            TrapDuration = Config.Bind("6. Shimmer Demon", "TrapDuration_v1", 14f, "Seconds the containment trap stays open on the ground.");
-            TrapPullSeconds = Config.Bind("6. Shimmer Demon", "TrapCaptureSeconds_v1", 2.2f, "Seconds of Proton-Tether beam & vacuum pull needed to slam the Shimmer Demon into the trap.");
 
             DemonEnabled = Config.Bind("6. Shimmer Demon", "Enabled", true, "The Shimmer Demon stalks the Surveyor (only she can see it).");
             DemonFirstSpawn = Config.Bind("6. Shimmer Demon", "FirstSpawnSeconds", 80f, "Seconds into a stage before it appears.");

@@ -132,8 +132,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.6.7",
-      "note": "Active WIP (v0.6.7): Shimmer Demon Spectral Boss encounter (spawns once/stage, 6000 HP, invulnerable phase shield broken by Poltergust Vacuum, hunts all players, vulnerable to all players, top-center boss HUD) + Complete audio overhaul eliminating all loud ear-piercing sound loops."
+      "version": "0.6.8",
+      "note": "Active WIP (v0.6.8): fixed invisible 3rd-person model, M2 screech and pink world objects; floor trap removed; Black Hole orb; per-ammo tracers; hold M1/M2 + wheel; chest X-ray nameplates; Shimmer Demon elemental-shield raid boss with blinks and red loot"
     }
   ]
 }
