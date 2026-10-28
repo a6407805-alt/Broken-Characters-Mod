@@ -590,6 +590,7 @@ namespace Surveyor
                     {
                         DefeatDemon();
                     }
+                    }
                 }
                 else
                 {
@@ -861,6 +862,9 @@ namespace Surveyor
                 if (vacuuming && dDemon < 55f && angle < 32f)
                 {
                     VacuumBreakShield(dt, body);
+                    bool capturable = !Invulnerable && CurrentHp <= MaxHp * 0.35f;
+                    if (capturable)
+                    {
                     TetherActive = true;
                     State = Mode.Stagger;
                     _stagger = Mathf.Max(_stagger, 0.45f);
