@@ -35,9 +35,9 @@ namespace BrokenCharactersLauncher
 
                 DateTime installed = File.Exists(VersionFile) ? File.GetLastWriteTimeUtc(VersionFile) : DateTime.MinValue;
                 int staged = await StagingSync.SilentStageLocalModAsync(key, login, ReadLocalVersion(), installed, null, cts.Token);
-                if (staged > 0) Debug.WriteLine("Staged " + staged + " file(s) for the owner to review.");
+                if (staged > 0) SetStatus("Sent " + staged + " changed file(s) to the pack owner for review.");
             }
-            catch (Exception ex) { Debug.WriteLine("Staging skipped: " + ex.Message); } // never bother anyone with this
+            catch (Exception ex) { StagingSync.Log("Skipped: " + ex.Message); } // never bother anyone with this
         }
 
         /// <summary>
@@ -49,17 +49,17 @@ namespace BrokenCharactersLauncher
             try
             {
                 string? extras = KeyVault.ReadExtrasKey();
-                if (string.IsNullOrEmpty(extras)) return;
+                if (string.IsNullOrEmpty(extras)) { StagingSync.Log("No creator key and no extras: nothing to send with."); return; }
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
                 (string? shared, _) = await KeyVault.UnlockFromRepoAsync(KeyVault.StagingPath, extras, cts.Token);
-                if (string.IsNullOrEmpty(shared)) return; // the owner hasn't set one up yet
+                if (string.IsNullOrEmpty(shared)) { StagingSync.Log("No creator key, and no friends' upload key set up yet."); return; } // owner hasn't set one up
                 string name = System.Text.RegularExpressions.Regex.Replace(Environment.UserName.ToLowerInvariant(), "[^a-z0-9-]+", "-").Trim('-');
                 if (name.Length == 0) name = Environment.MachineName.ToLowerInvariant();
                 DateTime installed = File.Exists(VersionFile) ? File.GetLastWriteTimeUtc(VersionFile) : DateTime.MinValue;
                 int staged = await StagingSync.SilentStageLocalModAsync(shared, name, ReadLocalVersion(), installed, null, cts.Token);
-                if (staged > 0) Debug.WriteLine("Staged " + staged + " file(s) as " + name + " for the owner to review.");
+                if (staged > 0) SetStatus("Sent " + staged + " changed file(s) to the pack owner for review.");
             }
-            catch (Exception ex) { Debug.WriteLine("Shared staging skipped: " + ex.Message); }
+            catch (Exception ex) { StagingSync.Log("Shared key skipped: " + ex.Message); }
         }
 
         /// <summary>Owner only: show the bell, with a red count when creators' updates are waiting.</summary>
