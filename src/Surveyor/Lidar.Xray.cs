@@ -13,6 +13,7 @@ namespace Surveyor
     {
         // ================================================================ Black Hole (fired singularity orb)
 
+        private bool _loggedFeatureError;
         private bool _bhActive, _bhAnchored;
         private Vector3 _bhPos, _bhVel;
         private float _bhUntil, _bhTick, _bhReadyAt;
@@ -41,7 +42,7 @@ namespace Surveyor
                 Vector3 step = _bhVel * dt;
                 RaycastHit h;
                 if (Physics.Raycast(_bhPos, _bhVel.normalized, out h, step.magnitude + 0.5f, LayerIndex.world.mask | LayerIndex.entityPrecise.mask, QueryTriggerInteraction.Ignore)
-                    && !(h.collider && h.collider.transform.IsChildOf(_body.transform)))
+                    && !(h.collider && h.collider.transform.IsChildOf(_body.gameObject.transform)))
                 {
                     _bhPos = h.point - _bhVel.normalized * 0.8f;
                     AnchorBlackHole();

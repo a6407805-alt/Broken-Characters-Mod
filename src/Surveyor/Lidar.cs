@@ -3209,8 +3209,9 @@ namespace Surveyor
 
             float prevRestored = _demon.LastRestoredUntil;
             _demon.Tick(dt, _body, _input);
-            BlackHoleTick(dt);
-            DemonBlinkFx();
+            // new features never get to stop the scanner: an error here is logged once and skipped
+            try { BlackHoleTick(dt); DemonBlinkFx(); }
+            catch (Exception ex) { if (!_loggedFeatureError) { _loggedFeatureError = true; SvrPlugin.Log.LogError("Black Hole / blink fx: " + ex); } }
             if (_demon.LastRestoredUntil > prevRestored)
             {
                 // Celebratory containment burst when the Demon is captured and a lost sense is restored!
@@ -4304,7 +4305,7 @@ namespace Surveyor
 
             DrawDots(cam, scale, dotAlpha);
             DrawDemon(cam, scale, dotAlpha);
-            DrawChestXray(cam, scale);
+            try { DrawChestXray(cam, scale); } catch (Exception ex) { if (!_loggedFeatureError) { _loggedFeatureError = true; SvrPlugin.Log.LogError("Chest X-ray: " + ex); } }
             DrawPeekWash(scale);
             DrawHud(scale);
             GUI.color = old;
