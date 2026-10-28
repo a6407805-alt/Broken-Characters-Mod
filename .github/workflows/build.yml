@@ -200,9 +200,12 @@ jobs:
           sparse-checkout: |
             launcher
             release
+            mods
       - name: Merge the roster cards (launchers download roster.json from the release)
         run: |
-          python3 release/merge_roster.py
+          # New characters without a card get one automatically, with a picture (card-<Mod>.png on the release).
+          python3 -m pip install --quiet --user pillow 2>/dev/null || python3 -m pip install --quiet --break-system-packages pillow || echo "Pillow not installed: auto cards get no picture"
+          BCM_CARD_IMAGES_DIR="$PWD/card-images" python3 release/merge_roster.py
           cp launcher/roster.json roster.json
       - uses: actions/download-artifact@v4
         with:
@@ -227,6 +230,7 @@ jobs:
           [ -f publish-preview.png ] && files="$files publish-preview.png"
           [ -f jukebox-preview.png ] && files="$files jukebox-preview.png"
           [ -f roster.json ] && files="$files roster.json"
+          for f in card-images/card-*.png; do [ -f "$f" ] && cp "$f" . && files="$files $(basename "$f")"; done
           # release-info.json: version + sizes as a plain file, so launchers can check for updates even when
           # GitHub's API hourly limit (60 per home internet) is used up.
           exe_size=0; [ -f Broken-Characters-Mod.exe ] && exe_size=$(stat -c %s Broken-Characters-Mod.exe)
