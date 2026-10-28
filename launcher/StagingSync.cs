@@ -103,8 +103,13 @@ namespace BrokenCharactersLauncher
         // ------------------------------------------------------------------ owner side
 
         /// <summary>The first staging/* branch that has changes main doesn't have yet (null if none).</summary>
-        public static async Task<StagingStatus?> CheckStagingBranchAsync(string key, CancellationToken ct = default)
+        public static async Task<StagingStatus?> CheckStagingBranchAsync(string key, CancellationToken ct = default) =>
+            (await CheckAllStagingAsync(key, ct)).FirstOrDefault();
+
+        /// <summary>Every staging/* branch (one per creator) that has changes main doesn't have yet.</summary>
+        public static async Task<List<StagingStatus>> CheckAllStagingAsync(string key, CancellationToken ct = default)
         {
+            var found = new List<StagingStatus>();
             JsonNode? refs = await CallAsync(key, HttpMethod.Get, "/git/matching-refs/heads/" + Prefix, null, ct);
             foreach (JsonNode? r in refs?.AsArray() ?? new JsonArray())
             {
@@ -119,16 +124,16 @@ namespace BrokenCharactersLauncher
                 if (files.Count == 0) continue;
                 JsonNode? last = cmp?["commits"]?.AsArray().LastOrDefault();
                 string when = last?["commit"]?["author"]?["date"]?.GetValue<string>() ?? "";
-                return new StagingStatus
+                found.Add(new StagingStatus
                 {
                     Branch = branch,
                     Creator = branch.Substring(Prefix.Length),
                     Author = last?["author"]?["login"]?.GetValue<string>() ?? last?["commit"]?["author"]?["name"]?.GetValue<string>() ?? branch.Substring(Prefix.Length),
                     Date = DateTimeOffset.TryParse(when, out DateTimeOffset d) ? d : DateTimeOffset.MinValue,
                     Files = files
-                };
+                });
             }
-            return null;
+            return found;
         }
 
         /// <summary>

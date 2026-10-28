@@ -14,7 +14,6 @@ namespace BrokenCharactersLauncher
 {
     public partial class MainWindow
     {
-        private StagingStatus? _staged;
         private string? _stagingKey;
 
         /// <summary>
@@ -41,81 +40,33 @@ namespace BrokenCharactersLauncher
             catch (Exception ex) { Debug.WriteLine("Staging skipped: " + ex.Message); } // never bother anyone with this
         }
 
+        /// <summary>Owner only: show the bell, with a red count when creators' updates are waiting.</summary>
         private async Task ShowOwnerReviewAsync()
         {
             if (_stagingKey == null) return;
+            ReviewBellButton.Visibility = Visibility.Visible;
             try
             {
-                _staged = await StagingSync.CheckStagingBranchAsync(_stagingKey);
-                if (_staged == null) { OwnerSyncBanner.Visibility = Visibility.Collapsed; return; }
-                string mods = string.Join(", ", _staged.Mods);
-                OwnerSyncTitle.Text = _staged.Creator + " pushed a staging update";
-                OwnerSyncDetails.Text = _staged.Files.Count + " file(s) changed" + (mods.Length > 0 ? " in " + mods : "") +
-                    (_staged.Date > DateTimeOffset.MinValue ? " · " + _staged.Date.LocalDateTime.ToString("MMM d, h:mm tt") : "") +
-                    " · Awaiting your approval";
-                OwnerSyncBanner.Visibility = Visibility.Visible;
+                var all = await StagingSync.CheckAllStagingAsync(_stagingKey);
+                SetBell(all.Count);
+                if (all.Count > 0) SetStatus(all.Count + " mod update(s) from creators waiting for you: click the bell.");
             }
             catch (Exception ex) { Debug.WriteLine("Staging check skipped: " + ex.Message); }
         }
 
-        private void InspectStaging_Click(object sender, RoutedEventArgs e)
+        private void SetBell(int count)
         {
-            if (_staged == null) return;
-            string list = string.Join("\n", _staged.Files.Take(40).Select(f => (f.Status == "removed" ? "−  " : f.Status == "added" ? "+  " : "~  ") + f.Path));
-            if (_staged.Files.Count > 40) list += "\n... and " + (_staged.Files.Count - 40) + " more";
-            MessageBox.Show(this, _staged.Creator + " changed these files (+ new, ~ changed, − removed):\n\n" + list,
-                "Staging update from " + _staged.Creator, MessageBoxButton.OK, MessageBoxImage.Information);
+            ReviewBellButton.Tag = count > 0 ? count.ToString() : null;
+            ReviewBellButton.ToolTip = count > 0 ? count + " mod update(s) waiting for your approval" : "No mod updates waiting";
         }
 
-        private async void ApproveStaging_Click(object sender, RoutedEventArgs e)
+        private void ReviewBell_Click(object sender, RoutedEventArgs e)
         {
-            if (_staged == null || _stagingKey == null) return;
-            if (MessageBox.Show(this, "Publish " + _staged.Creator + "'s " + _staged.Files.Count + " changed file(s) to everyone?\n\n" +
-                    "The build server builds the pack and friends get it the next time they press PLAY.",
-                    "Approve", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-            SetStagingButtons(false);
-            SetStatus("Pushing to main...");
-            try
-            {
-                await StagingSync.ApproveAndPublishAsync(_stagingKey, _staged);
-                OwnerSyncBanner.Visibility = Visibility.Collapsed;
-                SetStatus("Update approved! GitHub Actions build started (about 5 to 8 minutes).");
-                _staged = null;
-                _ = ShowOwnerReviewAsync(); // another creator may be waiting too
-            }
-            catch (Exception ex) when (ex is GitHubException || ex is System.Net.Http.HttpRequestException || ex is TaskCanceledException)
-            {
-                SetStatus("Couldn't approve: " + ex.Message);
-            }
-            finally { SetStagingButtons(true); }
-        }
-
-        private async void RevertStaging_Click(object sender, RoutedEventArgs e)
-        {
-            if (_staged == null || _stagingKey == null) return;
-            if (MessageBox.Show(this, "Discard " + _staged.Creator + "'s staging draft and keep the current stable version?",
-                    "Revert", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-            SetStagingButtons(false);
-            try
-            {
-                await StagingSync.RevertStagingAsync(_stagingKey, _staged);
-                OwnerSyncBanner.Visibility = Visibility.Collapsed;
-                SetStatus("Discarded " + _staged.Creator + "'s draft. Nothing changed for friends.");
-                _staged = null;
-                _ = ShowOwnerReviewAsync();
-            }
-            catch (Exception ex) when (ex is GitHubException || ex is System.Net.Http.HttpRequestException || ex is TaskCanceledException)
-            {
-                SetStatus("Couldn't revert: " + ex.Message);
-            }
-            finally { SetStagingButtons(true); }
-        }
-
-        private void SetStagingButtons(bool on)
-        {
-            ApproveStagingButton.IsEnabled = on;
-            RevertStagingButton.IsEnabled = on;
-            InspectStagingButton.IsEnabled = on;
+            if (_stagingKey == null) return;
+            var w = new ReviewWindow(_stagingKey) { Owner = this };
+            w.ShowDialog();
+            SetBell(w.Remaining);
+            if (w.Approved) SetStatus("Update approved! The build server is publishing it (about 5 to 8 minutes).");
         }
     }
 }
