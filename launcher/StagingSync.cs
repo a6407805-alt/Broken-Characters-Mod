@@ -274,6 +274,7 @@ namespace BrokenCharactersLauncher
                 var onMain = new Dictionary<string, string>(StringComparer.Ordinal);
                 var packMods = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var fromSource = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var dllOwner = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // OatsBrother.dll -> OatsBrother
                 foreach (JsonNode? item in tree?["tree"]?.AsArray() ?? new JsonArray())
                 {
                     if (item?["type"]?.GetValue<string>() != "blob") continue;
@@ -282,6 +283,8 @@ namespace BrokenCharactersLauncher
                     string[] parts = p.Split('/');
                     if (parts.Length >= 3 && parts[0] == "mods") packMods.Add(parts[1]);
                     if (parts.Length >= 3 && parts[0] == "src") fromSource.Add(parts[1]);
+                    if (parts.Length == 3 && parts[0] == "mods" && parts[2].EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                        dllOwner.TryAdd(parts[2], parts[1]);
                 }
 
                 // Local files that are newer than the pack install and not what main has.
@@ -295,6 +298,11 @@ namespace BrokenCharactersLauncher
                     string folder = Path.GetFileName(modDir);
                     // Every pack mod, plus brand-new mod folders (not libraries like R2API / RiskofThunder-*).
                     string? mod = packMods.FirstOrDefault(m => m.Equals(folder, StringComparison.OrdinalIgnoreCase));
+                    // A folder named differently from the pack (plugins\Brother holds OatsBrother.dll): match it by its dll,
+                    // or it would be published as a second copy of the same mod.
+                    if (mod == null)
+                        foreach (string dll in Directory.GetFiles(modDir, "*.dll"))
+                            if (dllOwner.TryGetValue(Path.GetFileName(dll), out string? owner)) { mod = owner; break; }
                     if (mod == null)
                     {
                         bool library = QuickUpload.IsReservedName(folder) || folder.Contains('-') || folder.StartsWith("MMHOOK", StringComparison.OrdinalIgnoreCase)
