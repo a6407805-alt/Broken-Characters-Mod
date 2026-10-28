@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Broken Characters Mod - Mod updates to approve"
-        Width="680" Height="640"
+        Width="680" Height="740"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -62,7 +62,27 @@
                 <StackPanel x:Name="CardList" Margin="0,0,14,0" />
             </ScrollViewer>
 
-            <TextBlock Grid.Row="3" x:Name="StatusLine" Foreground="White" FontSize="14" TextWrapping="Wrap" Margin="0,12,0,0" Text="Checking for mod updates..." />
+            <StackPanel Grid.Row="3" Margin="0,12,0,0">
+                <TextBlock x:Name="StatusLine" Foreground="White" FontSize="14" TextWrapping="Wrap" Text="Checking for mod updates..." />
+                <Border Background="#1AFFC928" BorderBrush="#60FFC928" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,12,0,0">
+                    <StackPanel>
+                        <TextBlock Text="FRIENDS' UPLOAD KEY" Foreground="{StaticResource Accent}" FontSize="12" FontWeight="Black" />
+                        <TextBlock x:Name="SharedKeyText" Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,8"
+                                   Text="Lets everyone with the extras send you mod updates (no GitHub account needed). Make a key once, paste it here, press Save." />
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" x:Name="SaveSharedKeyButton" Content="Save" Margin="8,0,0,0" Padding="14,4" Cursor="Hand" Click="SaveSharedKey_Click" />
+                            <PasswordBox x:Name="SharedKeyBox" Height="30" FontSize="13" VerticalContentAlignment="Center"
+                                         Background="#30FFFFFF" Foreground="White" BorderBrush="#60FFFFFF" />
+                        </DockPanel>
+                        <TextBlock FontSize="12" Margin="0,6,0,0">
+                            <Hyperlink NavigateUri="https://github.com/settings/personal-access-tokens/new" RequestNavigate="MakeKey_RequestNavigate" Foreground="{StaticResource Accent}">
+                                <Run Text="Make the key on GitHub" />
+                            </Hyperlink>
+                            <Run Foreground="#C9D6EA" Text=": Repository access = Only select repositories → Broken-Characters-Mod; Permissions → Contents = Read and write; Generate." />
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
         </Grid>
     </Border>
 </Window>

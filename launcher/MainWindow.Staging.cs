@@ -24,7 +24,7 @@ namespace BrokenCharactersLauncher
         private async Task RunStagingAsync()
         {
             string? key = StagingSync.ReadCreatorKey();
-            if (string.IsNullOrEmpty(key)) return;
+            if (string.IsNullOrEmpty(key)) { await StageWithSharedKeyAsync(); return; }
             _stagingKey = key;
             try
             {
@@ -38,6 +38,28 @@ namespace BrokenCharactersLauncher
                 if (staged > 0) Debug.WriteLine("Staged " + staged + " file(s) for the owner to review.");
             }
             catch (Exception ex) { Debug.WriteLine("Staging skipped: " + ex.Message); } // never bother anyone with this
+        }
+
+        /// <summary>
+        /// Everyone else (no creator key): if this PC has the extras, unlock the friends' shared upload key with the
+        /// extras key and stage under staging/&lt;windows user name&gt;. Silent, like the creator path.
+        /// </summary>
+        private async Task StageWithSharedKeyAsync()
+        {
+            try
+            {
+                string? extras = KeyVault.ReadExtrasKey();
+                if (string.IsNullOrEmpty(extras)) return;
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+                (string? shared, _) = await KeyVault.UnlockFromRepoAsync(KeyVault.StagingPath, extras, cts.Token);
+                if (string.IsNullOrEmpty(shared)) return; // the owner hasn't set one up yet
+                string name = System.Text.RegularExpressions.Regex.Replace(Environment.UserName.ToLowerInvariant(), "[^a-z0-9-]+", "-").Trim('-');
+                if (name.Length == 0) name = Environment.MachineName.ToLowerInvariant();
+                DateTime installed = File.Exists(VersionFile) ? File.GetLastWriteTimeUtc(VersionFile) : DateTime.MinValue;
+                int staged = await StagingSync.SilentStageLocalModAsync(shared, name, ReadLocalVersion(), installed, null, cts.Token);
+                if (staged > 0) Debug.WriteLine("Staged " + staged + " file(s) as " + name + " for the owner to review.");
+            }
+            catch (Exception ex) { Debug.WriteLine("Shared staging skipped: " + ex.Message); }
         }
 
         /// <summary>Owner only: show the bell, with a red count when creators' updates are waiting.</summary>
