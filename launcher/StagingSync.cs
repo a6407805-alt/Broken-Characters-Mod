@@ -59,6 +59,23 @@ namespace BrokenCharactersLauncher
 
         public static string? ReadCreatorKey() => Publisher.ReadSavedKey();
 
+        /// <summary>%APPDATA%\BrokenCharacters\staging-log.txt: what silent staging did (it never shows errors on screen).</summary>
+        public static readonly string LogFile = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BrokenCharacters", "staging-log.txt");
+
+        public static void Log(string line)
+        {
+            Debug.WriteLine("Staging: " + line);
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(LogFile)!);
+                var lines = File.Exists(LogFile) ? File.ReadAllLines(LogFile).TakeLast(300).ToList() : new List<string>();
+                lines.Add(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + line);
+                File.WriteAllLines(LogFile, lines);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
+        }
+
         private static JsonArray Parents(string sha) { var a = new JsonArray(); a.Add(sha); return a; }
 
         // ------------------------------------------------------------------ GitHub helpers
@@ -238,9 +255,10 @@ namespace BrokenCharactersLauncher
             try
             {
                 string? game = FindGameFolders().FirstOrDefault();
-                if (game == null) return 0;
+                if (game == null) { Log("No Risk of Rain 2 folder found through Steam."); return 0; }
                 string plugins = Path.Combine(game, "BepInEx", "plugins");
-                if (!Directory.Exists(plugins)) return 0;
+                if (!Directory.Exists(plugins)) { Log("No plugins folder at " + plugins); return 0; }
+                Log("Comparing " + plugins + " with GitHub as " + login + " (pack " + (installedVersion ?? "none") + ")");
 
                 string head = (await RefShaAsync(key, Main, ct))!;
                 string baseTree = await TreeOfAsync(key, head, ct);
@@ -290,7 +308,8 @@ namespace BrokenCharactersLauncher
                         changed.Add((remote, file));
                     }
                 }
-                if (changed.Count == 0) return 0;
+                if (changed.Count == 0) { Log("Nothing differs from GitHub. Nothing sent."); return 0; }
+                foreach ((string remote, _) in changed.Take(50)) Log("  differs: " + remote);
 
                 // "main + my changes", rebuilt fresh every time so the branch never drifts from main.
                 string branch = Prefix + login.ToLowerInvariant();
@@ -309,7 +328,7 @@ namespace BrokenCharactersLauncher
 
                 // Same files as what's already staged? Leave the branch alone (no new commit every launch).
                 string? current = await RefShaAsync(key, branch, ct);
-                if (current != null && await TreeOfAsync(key, current, ct) == newTreeSha) return changed.Count;
+                if (current != null && await TreeOfAsync(key, current, ct) == newTreeSha) { Log("Same " + changed.Count + " file(s) already sent, still waiting for the owner."); return changed.Count; }
 
                 var mods = changed.Select(c => c.Remote.Split('/')[1]).Distinct();
                 JsonNode? commit = await CallAsync(key, HttpMethod.Post, "/git/commits", new JsonObject
@@ -320,11 +339,12 @@ namespace BrokenCharactersLauncher
                     ["parents"] = Parents(head)
                 }, ct);
                 await SetRefAsync(key, branch, commit!["sha"]!.GetValue<string>(), true, ct);
+                Log("Sent " + changed.Count + " file(s) to " + branch + " for the owner to review.");
                 return changed.Count;
             }
             catch (Exception ex) // silent on purpose: a creator never sees staging errors
             {
-                Debug.WriteLine("Silent staging skipped: " + ex.Message);
+                Log("Skipped (error): " + ex.Message);
                 return 0;
             }
         }
