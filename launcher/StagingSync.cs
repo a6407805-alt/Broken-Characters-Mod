@@ -316,8 +316,7 @@ namespace BrokenCharactersLauncher
                     {
                         var info = new FileInfo(file);
                         // Owner's rule: compare EVERYTHING in the plugins folder with GitHub (the owner reviews it all).
-                        if (info.Length > 90L * 1024 * 1024) continue;                       // GitHub refuses files over 100 MB
-                        if (!packIsCurrent && info.LastWriteTimeUtc <= installedUtc.AddMinutes(1)) continue;
+                        if (info.Length > 90L * 1024 * 1024) { Log("  too big for GitHub (over 90 MB), not sent: " + file); continue; }
                         string rel = Path.GetRelativePath(modDir, file).Replace('\\', '/');
                         string ext = info.Extension.ToLowerInvariant();
                         if (ext == ".cfg" || ext == ".log" || ext == ".tmp" || ext == ".bak") continue;
@@ -325,6 +324,9 @@ namespace BrokenCharactersLauncher
                         if (fromSource.Contains(mod) && topLevel &&
                             (ext == ".dll" || ext == ".pdb" || file.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase))) continue;
                         string remote = "mods/" + mod + "/" + rel;
+                        // Stale guard only for files GitHub already has (an old copy must not overwrite newer work).
+                        // Files GitHub doesn't have at all (a new mod's bundle, icons...) always go up.
+                        if (!packIsCurrent && onMain.ContainsKey(remote) && info.LastWriteTimeUtc <= installedUtc.AddMinutes(1)) continue;
                         if (++checkedFiles % 25 == 0) progress?.Report("Checking your mods against the pack... " + checkedFiles + " files checked, " + changed.Count + " different");
                         if (onMain.TryGetValue(remote, out string? sha) && sha == Publisher.GitBlobSha(file)) continue;
                         changed.Add((remote, file));
