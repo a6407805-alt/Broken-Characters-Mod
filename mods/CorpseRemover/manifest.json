@@ -1,0 +1,9 @@
+{
+  "name": "CorpseRemover",
+  "version_number": "1.0.0",
+  "website_url": "",
+  "description": "Opened chests disappear 10 seconds after they're opened.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2121"
+  ]
+}
