@@ -334,9 +334,11 @@ namespace Surveyor
                 grip = g.transform;
             }
             if (model.GetComponentInParent<CharacterBody>() && !model.root.name.Contains("Display"))
+            {
                 SvrHeavy oldHeavy = model.gameObject.GetComponent<SvrHeavy>();
                 if (oldHeavy) UnityEngine.Object.DestroyImmediate(oldHeavy);
                 model.gameObject.AddComponent<SvrHeavy>().Setup(game, grip);
+            }
 
             foreach (Renderer r in originals)       // hide Commando (item displays added later still show)
                 if (r) r.forceRenderingOff = true;
