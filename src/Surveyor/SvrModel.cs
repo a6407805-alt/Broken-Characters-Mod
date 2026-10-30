@@ -334,6 +334,8 @@ namespace Surveyor
                 grip = g.transform;
             }
             if (model.GetComponentInParent<CharacterBody>() && !model.root.name.Contains("Display"))
+                SvrHeavy oldHeavy = model.gameObject.GetComponent<SvrHeavy>();
+                if (oldHeavy) UnityEngine.Object.DestroyImmediate(oldHeavy);
                 model.gameObject.AddComponent<SvrHeavy>().Setup(game, grip);
 
             foreach (Renderer r in originals)       // hide Commando (item displays added later still show)
@@ -600,24 +602,66 @@ namespace Surveyor
     /// <summary>Put on the body's and the lobby display's model; swaps in the Surveyor model once it spawns.</summary>
     public class SvrCustomModel : MonoBehaviour
     {
-        private bool _done;
+        private bool _done, _applied;
+        private float _nextCheck;
+        private int _rebuilds;
 
         private System.Collections.IEnumerator Start()
         {
             if (_done) yield break;
             _done = true;
-            // skins load asynchronously: wait (up to ~3 s) until the skinned mesh and its bones exist,
-            // so the parts can be lined up with the skeleton's rest pose
-            for (int i = 0; i < 180 && !SkeletonReady(); i++) yield return null;
-            try { SvrModel.Apply(transform); }
+            // skins load asynchronously, and on later stages she arrives mid teleport-in (model shrunk, skeleton
+            // still filling in): wait (up to ~10 s) for the full skeleton at normal size before lining the suit up
+            for (int i = 0; i < 600 && !SkeletonReady(); i++) yield return null;
+            Build();
+        }
+
+        private void Build()
+        {
+            try { SvrModel.Apply(transform); _applied = true; }
             catch (Exception e) { SvrPlugin.Log.LogError("Surveyor model failed, keeping Commando: " + e); }
         }
 
         private bool SkeletonReady()
         {
+            Vector3 ls = transform.lossyScale;
+            if (float.IsNaN(ls.x) || Mathf.Abs(ls.x) < 0.3f || Mathf.Abs(ls.y) < 0.3f) return false;
+            int most = 0;
             foreach (SkinnedMeshRenderer smr in GetComponentsInChildren<SkinnedMeshRenderer>(true))
-                if (smr.sharedMesh && smr.bones != null && smr.bones.Length > 0 && smr.sharedMesh.bindposes.Length > 0) return true;
-            return false;
+                if (smr.sharedMesh && smr.bones != null && smr.sharedMesh.bindposes.Length > 0) most = Mathf.Max(most, smr.bones.Length);
+            return most >= 30;
+        }
+
+        // Watchdog: if the suit is ever missing, collapsed or left behind (stage teleport, respawn), rebuild it.
+        private void LateUpdate()
+        {
+            if (!_applied || Time.time < _nextCheck || !SvrPlugin.UseCustomModel.Value) return;
+            _nextCheck = Time.time + 0.5f;
+            if (_rebuilds >= 6 || !SkeletonReady()) return;
+            bool bad = false;
+            int parts = 0;
+            Vector3 root = transform.position;
+            foreach (MeshRenderer mr in GetComponentsInChildren<MeshRenderer>(true))
+            {
+                if (!mr || !mr.name.StartsWith("SvrPart_")) continue;
+                parts++;
+                Vector3 s = mr.transform.lossyScale;
+                if (float.IsNaN(s.x) || float.IsInfinity(s.x) || Mathf.Abs(s.x) < 0.05f || Mathf.Abs(s.x) > 20f) { bad = true; break; }
+                if ((mr.bounds.center - root).sqrMagnitude > 64f) { bad = true; break; }
+            }
+            if (parts == 0) bad = true;
+            if (!bad) return;
+            _rebuilds++;
+            SvrPlugin.Log.LogWarning("Surveyor suit was " + (parts == 0 ? "missing" : "out of place") + "; rebuilding it (" + _rebuilds + ").");
+            foreach (Transform t in GetComponentsInChildren<Transform>(true))
+                if (t && t != transform && (t.name.StartsWith("SvrPart_") || t.name == "SvrForegrip")) UnityEngine.Object.Destroy(t.gameObject);
+            StartCoroutine(RebuildNextFrame());
+        }
+
+        private System.Collections.IEnumerator RebuildNextFrame()
+        {
+            yield return null;          // let Destroy finish so the new parts are the only ones
+            Build();
         }
     }
 

@@ -62,7 +62,7 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
   3. Only switch a character to `"green"` when the owner explicitly states it is finished.
 - **Current Status & Active Work Log**:
   - **Actively Working (`active`)**:
-    - **The Surveyor** (`v0.6.9`): elemental-shield Shimmer Demon raid boss (blinks, red loot), Black Hole orb, chest X-ray nameplates, per-ammo tracers; suit on the normal layer (moves to UIObject only while the visor is down).
+    - **The Surveyor** (`v0.6.10`): elemental-shield Shimmer Demon raid boss (blinks, red loot), Black Hole orb, chest X-ray nameplates, per-ammo tracers; suit on the normal layer (moves to UIObject only while the visor is down).
     - **Jukebox** (`v1.1.3`, utility mod): RoR2-styled HUD panel under objective box, keys 1/2 volume boost, Vote to Skip (`0`).
   - **Complete (`green` — owner confirmed done)**: Billy Bigsuits (`v1.0.2`), Brother (`v1.0.2`), Clay Rebel (`v1.0.1`), Reaper (`v1.0.0`).
   - **In Progress (`yellow` — `>= 0.3.0`, not yet declared done)**: CarMax Specialist (`v1.0.0`), Audi Technician (`v1.0.1`), Wilbur (`v1.0.0`), Ashwing Drake (`v1.8.4`), Nidus (`v1.0.9`), Phantom Assassin (`v1.0.3`), Infested General (`v1.1.11`), Gravitos (`v1.2.0`), Emberwarden (`v1.0.0`), The Duelist (`v1.0.0`).

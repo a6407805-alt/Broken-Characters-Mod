@@ -6,8 +6,8 @@
       "added": "2026-10-24T10:06:00-04:00",
       "accent": "#7AD33A",
       "status": "active",
-      "version": "0.6.9",
-      "note": "Active WIP (v0.6.9): LiDAR fixed (Black Hole code crashed the scanner every frame); v0.6.8 overhaul: Black Hole orb, chest X-ray, per-ammo tracers, elemental-shield Shimmer Demon",
+      "version": "0.6.10",
+      "note": "Active WIP (v0.6.10): suit no longer vanishes after a stage teleport (waits for the full skeleton, self-repairs); Shimmer Demon hitbox fixed",
       "image": "Assets/Roster/Surveyor.png"
     }
   ]
