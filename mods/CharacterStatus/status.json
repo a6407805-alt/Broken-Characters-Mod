@@ -15,7 +15,7 @@
         "auditechnician",
         "auditech"
       ],
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     {
       "name": "BILLY BIGSUITS",
@@ -32,7 +32,7 @@
       "match": [
         "wilbur"
       ],
-      "version": "1.0.0"
+      "version": "2.5.0"
     },
     {
       "name": "BROTHER",
@@ -41,7 +41,7 @@
         "oatsbrother",
         "brother"
       ],
-      "version": "1.0.2"
+      "version": "1.0.4"
     },
     {
       "name": "ASHWING DRAKE",
@@ -57,7 +57,7 @@
       "match": [
         "nidus"
       ],
-      "version": "1.0.9"
+      "version": "1.0.11"
     },
     {
       "name": "PHANTOM ASSASSIN",
@@ -74,7 +74,7 @@
       "match": [
         "infestedgeneral"
       ],
-      "version": "1.1.11"
+      "version": "1.1.13"
     },
     {
       "name": "GRAVITOS",
@@ -98,16 +98,14 @@
       "status": "yellow",
       "match": [
         "emberwarden"
-      ],
-      "version": "1.0.0"
+      ]
     },
     {
       "name": "REAPER",
       "status": "green",
       "match": [
         "reaper"
-      ],
-      "version": "1.0.0"
+      ]
     },
     {
       "name": "THE DUELIST",
@@ -115,16 +113,7 @@
       "match": [
         "duelist"
       ],
-      "version": "1.0.0"
-    },
-    {
-      "name": "MOMMY MILKERS",
-      "status": "green",
-      "match": [
-        "mommymilkers",
-        "mommy"
-      ],
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     {
       "name": "THE SURVEYOR",
@@ -134,6 +123,15 @@
       ],
       "version": "0.6.9",
       "note": "Active WIP (v0.6.9): LiDAR fixed (Black Hole code crashed the scanner every frame); v0.6.8 overhaul: Black Hole orb, chest X-ray, per-ammo tracers, elemental-shield Shimmer Demon"
+    },
+    {
+      "name": "MOMMY MILKERS",
+      "status": "green",
+      "match": [
+        "mommymilkers",
+        "mommy"
+      ],
+      "version": "1.0.0"
     }
   ]
 }
