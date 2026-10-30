@@ -730,7 +730,9 @@ namespace Surveyor
 
                 HurtBoxGroup hbg = PhysicalGo.AddComponent<HurtBoxGroup>();
                 HurtBox hb = PhysicalGo.AddComponent<HurtBox>();
-                hb.collider = col;
+                // HurtBox.collider has a private setter the game blocks for mods (MethodAccessException): set it by reflection
+                try { typeof(HurtBox).GetProperty("collider", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).GetSetMethod(true).Invoke(hb, new object[] { col }); }
+                catch (Exception cex) { SvrPlugin.Log.LogWarning("Demon hurtbox collider: " + cex.Message); }
                 hb.healthComponent = hc;
                 hb.isBullseye = true;
                 hb.damageModifier = HurtBox.DamageModifier.Normal;
