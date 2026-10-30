@@ -100,7 +100,7 @@ for char in data.get("characters", []):
 # card-<Mod>.png (from the mod's icon.png / Icons/portrait.png, or a lettered placeholder) and attaches it to the release.
 NOT_CHARACTERS = {
     "BCMDevTools", "CharacterStatus", "DropPodRevive", "EffectBudgetFix", "Jukebox", "MoreEnemiesMod",
-    "ScrollableLobby", "winhttp", "VincesQualityOfLife", "LocustHorde", "SpecialForces", "AudiWPB",
+    "ScrollableLobby", "winhttp", "LocustHorde", "SpecialForces", "AudiWPB",
 }
 REPO = "a6407805-alt/Broken-Characters-Mod"
 GENERATE = os.environ.get("BCM_CARD_IMAGES_DIR")  # set on the publish job: where to write card-<Mod>.png

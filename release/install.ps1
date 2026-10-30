@@ -367,6 +367,16 @@ foreach ($game in $games) {
         }
         Say "  Installed $($mods.Count) group mods: $(($mods | ForEach-Object Name) -join ', ')" 'Green'
     }
+    # Mods the owner took out of the pack: delete them here too (release/removed-mods.txt).
+    $removedList = Join-Path $PSScriptRoot 'removed-mods.txt'
+    if (Test-Path $removedList) {
+        foreach ($r in Get-Content $removedList) {
+            $r = $r.Trim()
+            if (-not $r -or $r.StartsWith('#') -or $r -match '[\\/.]') { continue }
+            $rDir = Join-Path $plugins $r
+            if (Test-Path $rDir) { Remove-Item $rDir -Recurse -Force -ErrorAction SilentlyContinue; Say "  Removed $r (taken out of the pack)." 'DarkYellow' }
+        }
+    }
     if ($extrasDir -and (Test-Path $extrasDir)) {
         foreach ($m in Get-ChildItem $extrasDir -Directory) {
             $mDest = Join-Path $plugins $m.Name

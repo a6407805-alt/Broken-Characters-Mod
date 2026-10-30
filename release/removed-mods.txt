@@ -1,0 +1,3 @@
+# Mods taken out of the pack. The installer deletes these from BepInEx\plugins on every PC, and creators'
+# launchers never send them back (StagingSync.cs). One folder name per line.
+VincesQualityOfLife

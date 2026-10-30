@@ -329,6 +329,15 @@ namespace BrokenCharactersLauncher
                 var packMods = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var fromSource = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var dllOwner = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // OatsBrother.dll -> OatsBrother
+                var removedMods = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    string? list = (await CallAsync(key, HttpMethod.Get, "/contents/release/removed-mods.txt?ref=" + Main, null, ct))?["content"]?.GetValue<string>();
+                    if (list != null)
+                        foreach (string line in Encoding.UTF8.GetString(Convert.FromBase64String(list.Replace("\n", ""))).Split('\n'))
+                            if (line.Trim().Length > 0 && !line.TrimStart().StartsWith("#")) removedMods.Add(line.Trim());
+                }
+                catch (GitHubException) { }
                 foreach (JsonNode? item in tree?["tree"]?.AsArray() ?? new JsonArray())
                 {
                     if (item?["type"]?.GetValue<string>() != "blob") continue;
@@ -365,6 +374,7 @@ namespace BrokenCharactersLauncher
                         mod = folder;
                     }
                     if (mod.Equals("Duelist", StringComparison.OrdinalIgnoreCase) || mod.Equals("DuelistMod", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (removedMods.Contains(mod) || removedMods.Contains(folder)) continue; // taken out of the pack by the owner
                     if (onlyMod != null && !mod.Equals(onlyMod, StringComparison.OrdinalIgnoreCase)) continue;
                     foreach (string file in Directory.EnumerateFiles(modDir, "*", SearchOption.AllDirectories))
                     {
