@@ -14,7 +14,7 @@ for f in duel_mat.jpg duel_mat_glow.png; do [ -f "$duelist/$f" ] && cp "$duelist
 [ -d "$duelist/sounds" ] && cp -r "$duelist/sounds" "$stage/Duelist/sounds"
 # the other mods we play with (each goes into its own BepInEx\plugins\<Mod> folder)
 [ -d "$mod/mods" ] && cp -r "$mod/mods" "$stage/Mods"
-for f in INSTALL.bat UNINSTALL.bat "Restore Steam Play.bat" install.ps1 README.txt manifest.json icon.png "Update Broken Characters.bat" update.ps1 "Add Extras.bat"; do
+for f in INSTALL.bat UNINSTALL.bat "Restore Steam Play.bat" install.ps1 README.txt manifest.json icon.png "Update Broken Characters.bat" update.ps1 "Add Extras.bat" removed-mods.txt; do
   [ -f "$mod/release/$f" ] && cp "$mod/release/$f" "$stage/"
 done
 (cd "$stage" && zip -qr9 "$mod/Broken-Characters-Mod.zip" .)

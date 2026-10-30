@@ -1,9 +1,0 @@
-{
-  "name": "VincesQualityOfLife",
-  "version_number": "1.0.2",
-  "website_url": "",
-  "description": "A few more chests per player (on top of the game's own scaling), opened chests disappear after 10 seconds, and item pickers (Artifact of Command) show item descriptions.",
-  "dependencies": [
-    "bbepis-BepInExPack-5.4.2121"
-  ]
-}
