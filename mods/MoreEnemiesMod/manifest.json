@@ -1,0 +1,9 @@
+{
+  "name": "MoreEnemies",
+  "version_number": "1.1.0",
+  "website_url": "",
+  "description": "Multiplies how many enemies the Director spawns (1x-20x), with optional reward scaling, a raised enemy cap and faster spawns.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2121"
+  ]
+}
