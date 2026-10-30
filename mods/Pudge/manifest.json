@@ -1,0 +1,15 @@
+{
+  "name": "Pudge",
+  "version_number": "1.0.3",
+  "website_url": "",
+  "description": "Dota 2's Pudge as a survivor, played like Dota: Flesh Heap, Meat Hook, Rot (toggle), Meat Shield (F) and Dismember, eight Dota item-set skins. Valve's model and art: personal use only.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2121",
+    "RiskofThunder-RoR2BepInExPack-1.41.0",
+    "RiskofThunder-R2API_Core-5.3.0",
+    "RiskofThunder-R2API_ContentManagement-1.0.11",
+    "RiskofThunder-R2API_Prefab-1.1.1",
+    "RiskofThunder-R2API_Language-1.1.0",
+    "RiskofThunder-R2API_RecalculateStats-1.6.6"
+  ]
+}
