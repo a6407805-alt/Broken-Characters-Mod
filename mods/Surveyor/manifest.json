@@ -1,6 +1,6 @@
 {
   "name": "Surveyor",
-  "version_number": "0.6.10",
+  "version_number": "0.6.9",
   "website_url": "",
   "description": "The Surveyor: blind heavy EVA engineer with real-time animated skeletal LiDAR wireframes, 3D hologram discovery loop (SvrLiDARScanTarget), and Ghostbusters/Luigi's Mansion Demon capture. Personal use.",
   "dependencies": [
