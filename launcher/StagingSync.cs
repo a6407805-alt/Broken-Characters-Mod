@@ -198,6 +198,60 @@ namespace BrokenCharactersLauncher
             catch (GitHubException) { return ""; }
         }
 
+        private const int ChunkFiles = 25;
+        private const long ChunkBytes = 25L * 1024 * 1024;
+
+        /// <summary>Uploads one file as a git blob. Waits and retries when GitHub says "slow down" or the line drops.</summary>
+        private static async Task<string> UploadBlobAsync(string key, string local, IProgress<string>? progress, CancellationToken ct)
+        {
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    JsonNode? blob = await CallAsync(key, HttpMethod.Post, "/git/blobs", new JsonObject
+                    {
+                        ["content"] = Convert.ToBase64String(await File.ReadAllBytesAsync(local, ct)),
+                        ["encoding"] = "base64"
+                    }, ct);
+                    return blob!["sha"]!.GetValue<string>();
+                }
+                catch (GitHubException ex) when ((ex.Status == 403 || ex.Status == 429) && attempt < 6)
+                {
+                    progress?.Report("GitHub asked us to slow down. Waiting a minute, then carrying on...");
+                    Log("Rate limited on " + Path.GetFileName(local) + ", waiting 60 s (try " + attempt + ")");
+                    await Task.Delay(TimeSpan.FromSeconds(60), ct);
+                }
+                catch (Exception ex) when ((ex is HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested)) && attempt < 4)
+                {
+                    Log("Upload of " + Path.GetFileName(local) + " dropped (" + ex.Message + "), retrying");
+                    await Task.Delay(TimeSpan.FromSeconds(5 * attempt), ct);
+                }
+            }
+        }
+
+        /// <summary>One commit on top of the newest main with these files; retries if someone pushed at the same moment.</summary>
+        private static async Task CommitOnMainAsync(string key, JsonArray entries, string message, CancellationToken ct)
+        {
+            for (int attempt = 1; ; attempt++)
+            {
+                string head = (await RefShaAsync(key, Main, ct))!;
+                string baseTree = await TreeOfAsync(key, head, ct);
+                JsonNode? tree = await CallAsync(key, HttpMethod.Post, "/git/trees",
+                    new JsonObject { ["base_tree"] = baseTree, ["tree"] = JsonNode.Parse(entries.ToJsonString()) }, ct);
+                JsonNode? commit = await CallAsync(key, HttpMethod.Post, "/git/commits", new JsonObject
+                {
+                    ["message"] = message, ["tree"] = tree!["sha"]!.GetValue<string>(), ["parents"] = Parents(head)
+                }, ct);
+                try
+                {
+                    await CallAsync(key, new HttpMethod("PATCH"), "/git/refs/heads/" + Main,
+                        new JsonObject { ["sha"] = commit!["sha"]!.GetValue<string>(), ["force"] = false }, ct);
+                    return;
+                }
+                catch (GitHubException ex) when ((ex.Status == 422 || ex.Status == 409) && attempt < 5) { await Task.Delay(1500, ct); }
+            }
+        }
+
         /// <summary>Drops the creator's draft: the staging branch is reset to main's current commit.</summary>
         public static async Task RevertStagingAsync(string key, StagingStatus staged, CancellationToken ct = default)
         {
@@ -320,6 +374,9 @@ namespace BrokenCharactersLauncher
                         string rel = Path.GetRelativePath(modDir, file).Replace('\\', '/');
                         string ext = info.Extension.ToLowerInvariant();
                         if (ext == ".cfg" || ext == ".log" || ext == ".tmp" || ext == ".bak") continue;
+                        // Unity project sources (plugins\<Mod>\Unity\*.fbx, textures) belong in unity/<Mod>, not in the shipped pack.
+                        if (rel.Split('/').Any(seg => seg.Equals("Unity", StringComparison.OrdinalIgnoreCase) ||
+                                                      seg.Equals("obj", StringComparison.OrdinalIgnoreCase) || seg.Equals("bin", StringComparison.OrdinalIgnoreCase))) continue;
                         bool topLevel = !rel.Contains('/');
                         if (fromSource.Contains(mod) && topLevel &&
                             (ext == ".dll" || ext == ".pdb" || file.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase))) continue;
@@ -337,6 +394,53 @@ namespace BrokenCharactersLauncher
                 Log("Checked " + checkedFiles + " file(s), " + changed.Count + " differ from GitHub.");
                 if (changed.Count == 0) { Log("Nothing differs from GitHub. Nothing sent."); return 0; }
                 foreach ((string remote, _) in changed.Take(50)) Log("  differs: " + remote);
+
+                if (autoPublish)
+                {
+                    // In CHUNKS (owner's request): a few hundred files in one go kept failing. Each chunk is its own commit on
+                    // main, so whatever got through stays; next launch only the rest still differs. Only the last chunk
+                    // starts a build ([skip ci] on the others), so friends get one update, not twenty.
+                    var ordered = changed.OrderBy(c => c.Remote.Split('/')[1], StringComparer.OrdinalIgnoreCase)
+                                         .ThenBy(c => new FileInfo(c.Local).Length).ToList();
+                    var chunks = new List<List<(string Remote, string Local)>>();
+                    var cur = new List<(string Remote, string Local)>();
+                    long curBytes = 0;
+                    foreach (var c in ordered)
+                    {
+                        long len = new FileInfo(c.Local).Length;
+                        if (cur.Count > 0 && (cur.Count >= ChunkFiles || curBytes + len > ChunkBytes)) { chunks.Add(cur); cur = new List<(string, string)>(); curBytes = 0; }
+                        cur.Add(c); curBytes += len;
+                    }
+                    if (cur.Count > 0) chunks.Add(cur);
+                    Log("Sending " + changed.Count + " file(s) in " + chunks.Count + " chunk(s).");
+
+                    long total = changed.Sum(c => new FileInfo(c.Local).Length), sent = 0;
+                    int done = 0;
+                    for (int k = 0; k < chunks.Count; k++)
+                    {
+                        var chunk = chunks[k];
+                        var chunkEntries = new JsonArray();
+                        foreach ((string remote, string local) in chunk)
+                        {
+                            progress?.Report("Uploading your mod changes: chunk " + (k + 1) + " of " + chunks.Count + ", file " + (++done) + " of " +
+                                             changed.Count + " (" + (sent / 1048576.0).ToString("0.0") + " of " + (total / 1048576.0).ToString("0.0") + " MB)");
+                            string blobSha = await UploadBlobAsync(key, local, progress, ct);
+                            sent += new FileInfo(local).Length;
+                            chunkEntries.Add(new JsonObject { ["path"] = remote, ["mode"] = "100644", ["type"] = "blob", ["sha"] = blobSha });
+                        }
+                        bool last = k == chunks.Count - 1;
+                        var chunkMods = chunk.Select(c => c.Remote.Split('/')[1]).Distinct().ToList();
+                        string message = "Auto-update from " + login + (chunks.Count > 1 ? " (part " + (k + 1) + " of " + chunks.Count + ")" : "") + ": " +
+                                         chunk.Count + " file(s) in " + string.Join(", ", chunkMods) +
+                                         "\n\nSent automatically by " + login + "'s launcher (from BepInEx\\plugins). pack=" + (installedVersion ?? "none") +
+                                         (last ? "" : " [skip ci]");
+                        await CommitOnMainAsync(key, chunkEntries, message, ct);
+                        pending -= chunk.Count;
+                        Log("Chunk " + (k + 1) + " of " + chunks.Count + " published (" + chunk.Count + " file(s): " + string.Join(", ", chunkMods) + ").");
+                    }
+                    Log("Published " + changed.Count + " file(s) to everyone. The build takes about 5 to 8 minutes.");
+                    return changed.Count;
+                }
 
                 // "main + my changes", rebuilt fresh every time so the branch never drifts from main.
                 string branch = Prefix + login.ToLowerInvariant();
@@ -358,38 +462,6 @@ namespace BrokenCharactersLauncher
                 }
                 JsonNode? newTree = await CallAsync(key, HttpMethod.Post, "/git/trees", new JsonObject { ["base_tree"] = baseTree, ["tree"] = entries }, ct);
                 string newTreeSha = newTree!["sha"]!.GetValue<string>();
-
-                if (autoPublish)
-                {
-                    // No approval: straight onto main as one commit. The build server builds and publishes it for everyone.
-                    var modNames = changed.Select(c => c.Remote.Split('/')[1]).Distinct().ToList();
-                    for (int attempt = 1; ; attempt++)
-                    {
-                        JsonNode? auto = await CallAsync(key, HttpMethod.Post, "/git/commits", new JsonObject
-                        {
-                            ["message"] = "Auto-update from " + login + ": " + changed.Count + " file(s) in " + string.Join(", ", modNames) +
-                                          "\n\nSent automatically by " + login + "'s launcher (from BepInEx\\plugins). pack=" + (installedVersion ?? "none"),
-                            ["tree"] = newTreeSha,
-                            ["parents"] = Parents(head)
-                        }, ct);
-                        try
-                        {
-                            await CallAsync(key, new HttpMethod("PATCH"), "/git/refs/heads/" + Main,
-                                new JsonObject { ["sha"] = auto!["sha"]!.GetValue<string>(), ["force"] = false }, ct);
-                            Log("Published " + changed.Count + " file(s) to everyone (" + string.Join(", ", modNames) + "). The build takes about 5 to 8 minutes.");
-                            return changed.Count;
-                        }
-                        catch (GitHubException ex) when ((ex.Status == 422 || ex.Status == 409) && attempt < 4)
-                        {
-                            // Someone pushed at the same moment: rebuild the same files on top of their commit.
-                            await Task.Delay(1500, ct);
-                            head = (await RefShaAsync(key, Main, ct))!;
-                            baseTree = await TreeOfAsync(key, head, ct);
-                            newTree = await CallAsync(key, HttpMethod.Post, "/git/trees", new JsonObject { ["base_tree"] = baseTree, ["tree"] = entries }, ct);
-                            newTreeSha = newTree!["sha"]!.GetValue<string>();
-                        }
-                    }
-                }
 
                 // Same files as what's already staged? Leave the branch alone (no new commit every launch).
                 string? current = await RefShaAsync(key, branch, ct);
