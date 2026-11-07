@@ -344,12 +344,13 @@
                         <TextBlock Text="  MOD" Foreground="{StaticResource Accent}" FontSize="18" FontWeight="Black" />
                         <!-- Owner only: creators' mod updates waiting for approval (ReviewWindow / StagingSync.cs) -->
                         <Button x:Name="ReviewBellButton" Click="ReviewBell_Click" Visibility="Collapsed" Width="34" Height="30" Margin="14,0,0,0"
-                                Cursor="Hand" VerticalAlignment="Center" ToolTip="Mod updates from creators waiting for your approval">
+                                Cursor="Hand" VerticalAlignment="Center" ToolTip="Mod uploads and updates" Background="#30FFFFFF" Foreground="White">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Grid>
-                                        <Border x:Name="Bg" Background="#30FFFFFF" CornerRadius="6" />
-                                        <TextBlock Text="&#x1F514;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        <Border x:Name="Bg" Background="{TemplateBinding Background}" CornerRadius="6" />
+                                        <TextBlock Text="&#xEA8F;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="{TemplateBinding Foreground}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         <Border x:Name="Badge" Background="#FF4D4D" CornerRadius="8" MinWidth="16" Height="16" Padding="4,0"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-5,-6,0">
                                             <TextBlock Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Foreground="White"

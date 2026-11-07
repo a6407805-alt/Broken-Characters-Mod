@@ -36,10 +36,71 @@ namespace BrokenCharactersLauncher
         {
             _key = key;
             InitializeComponent();
-            Closed += (_, __) => _cts.Cancel();
+            Closed += (_, __) => { _cts.Cancel(); _uploadTimer.Stop(); };
+            _uploadTimer.Tick += async (_, __) => await LoadUploadsAsync();
         }
 
-        private async void Window_Loaded(object sender, RoutedEventArgs e) => await LoadAsync();
+        private readonly System.Windows.Threading.DispatcherTimer _uploadTimer =
+            new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+
+        /// <summary>The RECENT UPLOADS list: every commit on main with its build state (refreshes while open).</summary>
+        private async Task LoadUploadsAsync()
+        {
+            List<UploadItem> items;
+            try { items = await StagingSync.RecentUploadsAsync(_key, 20, _cts.Token); }
+            catch (Exception ex) when (ex is GitHubException || ex is System.Net.Http.HttpRequestException || ex is TaskCanceledException) { return; }
+            UploadList.Children.Clear();
+            foreach (UploadItem u in items)
+            {
+                (string label, Brush color) = u.Build switch
+                {
+                    "built" => ("\u2713 LIVE", (Brush)new SolidColorBrush(Color.FromRgb(0x4C, 0xD9, 0x64))),
+                    "building" => ("\u23F3 BUILDING", Gold),
+                    "queued" => ("\u2026 QUEUED", Gold),
+                    "failed" => ("\u2715 FAILED", Red),
+                    _ => ("PART", Dim)
+                };
+                var row = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+                var badge = new Border
+                {
+                    BorderBrush = color, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), Padding = new Thickness(6, 1, 6, 1),
+                    Margin = new Thickness(0, 2, 10, 0), VerticalAlignment = VerticalAlignment.Top, Width = 96,
+                    Child = new TextBlock { Text = label, Foreground = color, FontSize = 11, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center }
+                };
+                DockPanel.SetDock(badge, Dock.Left);
+                row.Children.Add(badge);
+                var text = new StackPanel();
+                text.Children.Add(new TextBlock
+                {
+                    Text = u.Title, Foreground = u.FromCreator ? Gold : Brushes.White, FontSize = 13,
+                    FontWeight = u.FromCreator ? FontWeights.Bold : FontWeights.Normal, TextTrimming = TextTrimming.CharacterEllipsis
+                });
+                text.Children.Add(new TextBlock
+                {
+                    Text = u.Author + (u.Date > DateTimeOffset.MinValue ? "  ·  " + u.Date.LocalDateTime.ToString("MMM d, h:mm tt") : ""),
+                    Foreground = Dim, FontSize = 11
+                });
+                row.Children.Add(text);
+                if (u.Url.Length > 0)
+                {
+                    row.Cursor = Cursors.Hand;
+                    row.ToolTip = "Open this upload on GitHub";
+                    string url = u.Url;
+                    row.MouseLeftButtonUp += (_, __) =>
+                    {
+                        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); }
+                        catch (System.ComponentModel.Win32Exception) { }
+                    };
+                }
+                UploadList.Children.Add(row);
+            }
+        }
+
+        private async void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            _uploadTimer.Start();
+            await Task.WhenAll(LoadAsync(), LoadUploadsAsync());
+        }
 
         private async Task LoadAsync()
         {

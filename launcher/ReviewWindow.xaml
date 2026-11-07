@@ -59,7 +59,20 @@
                        Text="Creators dropped these files into their game. Approve to put them in the pack for everyone (the build server publishes it in about 5 to 8 minutes), or Discard to throw the draft away." />
 
             <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-                <StackPanel x:Name="CardList" Margin="0,0,14,0" />
+                <StackPanel Margin="0,0,14,0">
+                    <StackPanel x:Name="CardList" />
+                    <DockPanel Margin="0,8,0,6">
+                        <TextBlock DockPanel.Dock="Right" FontSize="12" VerticalAlignment="Bottom">
+                            <Hyperlink NavigateUri="https://github.com/a6407805-alt/Broken-Characters-Mod/actions" RequestNavigate="MakeKey_RequestNavigate" Foreground="{StaticResource Accent}">
+                                <Run Text="Open builds on GitHub" />
+                            </Hyperlink>
+                        </TextBlock>
+                        <TextBlock Text="RECENT UPLOADS" Foreground="{StaticResource Accent}" FontSize="14" FontWeight="Black" />
+                    </DockPanel>
+                    <TextBlock Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="Everything that reached the pack, newest first, and how its build went. Refreshes every 15 seconds." />
+                    <StackPanel x:Name="UploadList" />
+                </StackPanel>
             </ScrollViewer>
 
             <StackPanel Grid.Row="3" Margin="0,12,0,0">
