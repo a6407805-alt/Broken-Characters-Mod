@@ -1,14 +1,6 @@
 {
   "songs": [
     {
-      "id": "mp3-bigger-problem",
-      "title": "mp3-bigger-problem",
-      "artist": "DeAndre6969",
-      "audio": "https://github.com/a6407805-alt/Broken-Characters-Mod/releases/download/jukebox/mp3-bigger-problem.mp3",
-      "added": "2026-10-24T04:04:03.5453391Z",
-      "addedBy": "DeAndre6969"
-    },
-    {
       "id": "mp3-white-bitches",
       "title": "White Bitches",
       "artist": "DeAndre6969",
@@ -20,6 +12,7 @@
   "removed": [
     "mp3-my-sprinkler-goes-like-this",
     "mp3-jussipussi-edm",
-    "mp3-i-told-my-wife-she-should-embrace-her-mistakes"
+    "mp3-i-told-my-wife-she-should-embrace-her-mistakes",
+    "mp3-bigger-problem"
   ]
 }
