@@ -3197,7 +3197,7 @@ namespace Surveyor
                     Transform tr = gpc.gameObject.transform;
                     if ((tr.position - me).sqrMagnitude > maxDistSqr * 1.3f) continue;
                     string tag = "ITEM";
-                    string desc = "HOLD [M2] TO VACUUM ITEM";
+                    string desc = "DROPPED ITEM";
                     Color col = new Color(0.32f, 1f, 0.94f, 1f);
                     ResolvePickupDisplay(gpc.gameObject, ref tag, ref col, ref desc);
                     Vector3 ext = new Vector3(0.55f, 0.55f, 0.55f);
@@ -4964,21 +4964,6 @@ namespace Surveyor
             }
 
             {
-                // Top-center banner when tapping Q switches scanner mode (clean border lines, zero black box)
-                if (sinceSwitch < 1.35f)
-                {
-                    float bAlpha = Mathf.Clamp01(1.35f - sinceSwitch);
-                    float bw = 480f * scale, bh = 46f * scale;
-                    float bx = Screen.width * 0.5f - bw * 0.5f, by = Screen.height * 0.16f;
-                    GUI.color = new Color(accent.r, accent.g, accent.b, 0.96f * bAlpha);
-                    GUI.DrawTexture(new Rect(bx, by, bw, 2.5f * scale), white);
-                    GUI.DrawTexture(new Rect(bx, by + bh, bw, 1.5f * scale), white);
-                    DrawModeIcon(new Vector2(bx + 20f * scale, by + 23f * scale), 11f * scale, mIdx, GUI.color, scale, white);
-                    GUI.Label(new Rect(bx + 38f * scale, by + 4f * scale, bw - 44f * scale, 22f * scale), "SCANNER MODE: " + OdNames[mIdx] + "  (" + (mIdx + 1) + "/" + OdNames.Length + ")", _label);
-                    GUI.color = new Color(0.82f, 0.95f, 1f, 0.9f * bAlpha);
-                    GUI.Label(new Rect(bx + 38f * scale, by + 22f * scale, bw - 44f * scale, 22f * scale), OdDescs[mIdx], _label);
-                }
-
                 // Prompt when standing next to a LiDAR-Exclusive Hidden Tech Cache (clean glowing frame, zero black box)
                 if (_nearCacheIdx >= 0 && _nearCacheIdx < _techCaches.Count && !_techCaches[_nearCacheIdx].Collected)
                 {
