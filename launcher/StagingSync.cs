@@ -198,6 +198,26 @@ namespace BrokenCharactersLauncher
             catch (GitHubException) { return ""; }
         }
 
+        /// <summary>"version_number" from a Thunderstore-style manifest.json (null if missing).</summary>
+        internal static string? ManifestVersion(string json)
+        {
+            try { return JsonNode.Parse(json)?["version_number"]?.GetValue<string>()?.Trim(); }
+            catch (Exception ex) when (ex is JsonException || ex is InvalidOperationException || ex is FormatException) { return null; }
+        }
+
+        /// <summary>Compares "1.2.10" with "1.2.9" number by number (1.2.10 is newer). Missing parts count as 0.</summary>
+        internal static int CompareVersions(string a, string b)
+        {
+            int[] Parse(string v) => v.TrimStart('v', 'V').Split('.', '-', '+').Select(p => int.TryParse(p, out int n) ? n : 0).ToArray();
+            int[] x = Parse(a), y = Parse(b);
+            for (int i = 0; i < Math.Max(x.Length, y.Length); i++)
+            {
+                int p = i < x.Length ? x[i] : 0, q = i < y.Length ? y[i] : 0;
+                if (p != q) return p.CompareTo(q);
+            }
+            return 0;
+        }
+
         private const int ChunkFiles = 25;
         private const long ChunkBytes = 25L * 1024 * 1024;
 
@@ -350,6 +370,22 @@ namespace BrokenCharactersLauncher
                         dllOwner.TryAdd(parts[2], parts[1]);
                 }
 
+                // Each pack mod's version on GitHub (manifest.json "version_number"), so the HIGHER version always wins:
+                // a newer local mod goes up even if this PC's pack is old; an older local mod never replaces GitHub's.
+                var mainVer = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var manifests = onMain.Where(kv => kv.Key.StartsWith("mods/", StringComparison.Ordinal) && kv.Key.Split('/').Length == 3 &&
+                                                   kv.Key.EndsWith("/manifest.json", StringComparison.OrdinalIgnoreCase)).ToList();
+                await Task.WhenAll(manifests.Select(async kv =>
+                {
+                    try
+                    {
+                        string? b64 = (await CallAsync(key, HttpMethod.Get, "/git/blobs/" + kv.Value, null, ct))?["content"]?.GetValue<string>();
+                        string? v = b64 == null ? null : ManifestVersion(Encoding.UTF8.GetString(Convert.FromBase64String(b64.Replace("\n", ""))));
+                        if (v != null) lock (mainVer) mainVer[kv.Key.Split('/')[1]] = v;
+                    }
+                    catch (Exception ex) when (ex is GitHubException || ex is HttpRequestException || ex is FormatException) { }
+                }));
+
                 // Local files that are newer than the pack install and not what main has.
                 var changed = new List<(string Remote, string Local)>();
                 int checkedFiles = 0;
@@ -376,6 +412,19 @@ namespace BrokenCharactersLauncher
                     if (mod.Equals("Duelist", StringComparison.OrdinalIgnoreCase) || mod.Equals("DuelistMod", StringComparison.OrdinalIgnoreCase)) continue;
                     if (removedMods.Contains(mod) || removedMods.Contains(folder)) continue; // taken out of the pack by the owner
                     if (onlyMod != null && !mod.Equals(onlyMod, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    // Version check (owner's rule: always use the latest version number).
+                    string? localVer = null;
+                    try { string mf = Path.Combine(modDir, "manifest.json"); if (File.Exists(mf)) localVer = ManifestVersion(File.ReadAllText(mf)); }
+                    catch (IOException) { }
+                    bool newerHere = false;
+                    if (localVer != null && mainVer.TryGetValue(mod, out string? packVer))
+                    {
+                        int cmp = CompareVersions(localVer, packVer);
+                        if (cmp < 0) { Log("  " + mod + ": yours is v" + localVer + ", the pack has newer v" + packVer + ". Not sent."); continue; }
+                        if (cmp > 0) { newerHere = true; Log("  " + mod + ": yours is newer (v" + localVer + " vs v" + packVer + "). Sending it."); }
+                    }
+
                     foreach (string file in Directory.EnumerateFiles(modDir, "*", SearchOption.AllDirectories))
                     {
                         var info = new FileInfo(file);
@@ -393,7 +442,8 @@ namespace BrokenCharactersLauncher
                         string remote = "mods/" + mod + "/" + rel;
                         // Stale guard only for files GitHub already has (an old copy must not overwrite newer work).
                         // Files GitHub doesn't have at all (a new mod's bundle, icons...) always go up.
-                        if (!packIsCurrent && onMain.ContainsKey(remote) && info.LastWriteTimeUtc <= installedUtc.AddMinutes(1)) continue;
+                        // A higher version number always goes up, however old the files' dates are.
+                        if (!newerHere && !packIsCurrent && onMain.ContainsKey(remote) && info.LastWriteTimeUtc <= installedUtc.AddMinutes(1)) continue;
                         if (++checkedFiles % 25 == 0) progress?.Report("Checking your mods against the pack... " + checkedFiles + " files checked, " + changed.Count + " different");
                         if (onMain.TryGetValue(remote, out string? sha) && sha == Publisher.GitBlobSha(file)) continue;
                         changed.Add((remote, file));
