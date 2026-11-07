@@ -654,11 +654,28 @@ namespace Surveyor
         // ---- bind pose: where each bone sits in the skeleton's rest pose (from the skinned mesh's bindposes)
         private static readonly Dictionary<Transform, Matrix4x4> Bind = new Dictionary<Transform, Matrix4x4>();
 
+        // the body's own rest pose, remembered per bone name relative to the model (item displays can carry skinned meshes
+        // bound to the same bones with their own bind poses; late in a run those used to win and the suit flew off)
+        private static readonly Dictionary<string, Matrix4x4> BindCache = new Dictionary<string, Matrix4x4>();
+
+        private static bool IsItemDisplay(Transform t, Transform model)
+        {
+            for (Transform p = t; p && p != model; p = p.parent)
+            {
+                string n = p.name;
+                if (n.StartsWith("Display") || n.Contains("(Clone)") || n.StartsWith("SvrPart_")) return true;
+            }
+            return false;
+        }
+
         private static void BuildBindPose(Transform model)
         {
             Bind.Clear();
+            Matrix4x4 toLocal = model.worldToLocalMatrix, toWorld = model.localToWorldMatrix;
+            // 1) the body's own skinned meshes only (never item displays)
             foreach (SkinnedMeshRenderer smr in model.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
+                if (IsItemDisplay(smr.transform, model)) continue;
                 Mesh mesh = smr.sharedMesh;
                 Transform[] bones = smr.bones;
                 if (!mesh || bones == null) continue;
@@ -666,8 +683,17 @@ namespace Surveyor
                 if (bp == null) continue;
                 Matrix4x4 rootM = smr.transform.localToWorldMatrix;
                 for (int i = 0; i < bones.Length && i < bp.Length; i++)
-                    if (bones[i] && !Bind.ContainsKey(bones[i])) Bind[bones[i]] = rootM * bp[i].inverse;
+                {
+                    if (!bones[i] || Bind.ContainsKey(bones[i])) continue;
+                    Matrix4x4 m = rootM * bp[i].inverse;
+                    Bind[bones[i]] = m;
+                    if (!BindCache.ContainsKey(bones[i].name)) BindCache[bones[i].name] = toLocal * m;
+                }
             }
+            // 2) any bone still missing: what we remembered from an earlier, clean build
+            foreach (Transform t in model.GetComponentsInChildren<Transform>(true))
+                if (t && !Bind.ContainsKey(t) && !IsItemDisplay(t, model) && BindCache.TryGetValue(t.name, out Matrix4x4 lm))
+                    Bind[t] = toWorld * lm;
             if (Bind.Count == 0) SvrPlugin.Log.LogWarning("Surveyor model: no bind pose found, using the current pose.");
             else SvrPlugin.Log.LogInfo($"Surveyor model: bind pose for {Bind.Count} bones.");
         }
@@ -730,7 +756,8 @@ namespace Surveyor
             int sk = SvrModel.SkinOf(transform);
             if (_skin < 0) _skin = sk;
             else if (sk != _skin) { _skin = sk; try { SvrModel.Repaint(transform, sk); } catch { } }
-            if (_rebuilds >= 6 || !SkeletonReady()) return;
+            if (_rebuilds >= 6) { ShowFallback(); return; }
+            if (!SkeletonReady()) return;
             bool bad = false;
             int parts = 0;
             Vector3 root = transform.position;
@@ -749,6 +776,18 @@ namespace Surveyor
             foreach (Transform t in GetComponentsInChildren<Transform>(true))
                 if (t && t != transform && (t.name.StartsWith("SvrPart_") || t.name == "SvrForegrip")) UnityEngine.Object.Destroy(t.gameObject);
             StartCoroutine(RebuildNextFrame());
+        }
+
+        private bool _fellBack;
+
+        /// <summary>The suit could not be placed: show the plain body instead of nothing.</summary>
+        private void ShowFallback()
+        {
+            if (_fellBack) return;
+            _fellBack = true;
+            SvrPlugin.Log.LogWarning("Surveyor suit could not be placed; showing the base body so she is never invisible.");
+            foreach (Renderer r in GetComponentsInChildren<Renderer>(true))
+                if (r && !r.name.StartsWith("SvrPart_")) r.forceRenderingOff = false;
         }
 
         private System.Collections.IEnumerator RebuildNextFrame()

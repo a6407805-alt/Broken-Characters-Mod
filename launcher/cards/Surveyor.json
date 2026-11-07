@@ -6,8 +6,8 @@
       "added": "2026-10-24T10:06:00-04:00",
       "accent": "#7AD33A",
       "status": "active",
-      "version": "0.7.3",
-      "note": "Active WIP (v0.7.3): Stalker crawls on all fours from the start, smooth blended animation, telegraphed attacks (ground rings for slam/pounce/shriek), whistling sound loops removed, start in normal view, HUD moved bottom-right, Q and F buttons on the skill bar",
+      "version": "0.7.4",
+      "note": "Active WIP (v0.7.4): fix the suit vanishing late in a run (item displays broke the bind pose), never-invisible fallback, Stalker size fixed; plus v0.7.3 all-fours telegraphed Stalker, Q/F skill-bar buttons, HUD bottom-right",
       "image": "Assets/Roster/Surveyor.png"
     }
   ]

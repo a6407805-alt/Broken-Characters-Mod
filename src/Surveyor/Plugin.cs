@@ -32,7 +32,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.7.3";
+        public const string PluginVersion = "0.7.4";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
