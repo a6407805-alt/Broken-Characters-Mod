@@ -121,8 +121,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.7.2",
-      "note": "Active WIP (v0.7.2): Stalker on its own animated rig (stalk/crawl/slam/spike hurl/pounce/shriek) with matching hitboxes, real sound design, EVA mission skins, Lead 4x fire rate + heavy effect rounds, Rad meltdown crowd control, F button on the skill bar, Q LiDAR modes back"
+      "version": "0.7.3",
+      "note": "Active WIP (v0.7.3): Stalker crawls on all fours from the start, smooth blended animation, telegraphed attacks (ground rings for slam/pounce/shriek), whistling sound loops removed, start in normal view, HUD moved bottom-right, Q and F buttons on the skill bar"
     },
     {
       "name": "MOMMY MILKERS",

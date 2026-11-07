@@ -185,7 +185,8 @@ namespace Surveyor
     {
         private CharacterMaster _master;
         private BaseAI _ai;
-        private float _next, _nextCatchUp, _nextPounce, _nextShriek, _pounceAt, _shriekHitAt;
+        private float _next, _nextCatchUp, _nextPounce, _nextShriek, _pounceAt, _shriekHitAt, _pounceWindEnd, _shriekAt;
+        private Vector3 _pounceSpot;
         private bool _raged, _pouncing;
         private CharacterBody _prey;
 
@@ -230,10 +231,17 @@ namespace Surveyor
             Vector3 to = prey.footPosition - me.footPosition;
             float flat = new Vector2(to.x, to.z).magnitude;
 
-            if (now >= _nextShriek && flat < 35f)
+            // shriek: rears back for 0.9 s (purple ring = how far it reaches), then screams
+            if (now >= _nextShriek && flat < 35f && _pounceWindEnd <= 0f)
             {
                 _nextShriek = now + Random.Range(16f, 24f);
-                _shriekHitAt = now + 0.45f;
+                _shriekAt = now + 0.9f;
+                SvrStalkerEventMessage.Broadcast(me.gameObject, 5, me.footPosition, 35f);
+            }
+            if (_shriekAt > 0f && now >= _shriekAt)
+            {
+                _shriekAt = 0f;
+                _shriekHitAt = now + 0.1f;
                 SvrStalkerEventMessage.Broadcast(me.gameObject, 3);
             }
             if (_shriekHitAt > 0f && now >= _shriekHitAt)
@@ -255,9 +263,18 @@ namespace Surveyor
                 }
             }
 
-            if (now >= _nextPounce && motor && motor.isGrounded && flat > 10f && flat < 45f)
+            // pounce: coils for 0.95 s while a red ring marks the spot it will land on (dodge it!), then leaps there
+            if (_pounceWindEnd <= 0f && _shriekAt <= 0f && now >= _nextPounce && motor && motor.isGrounded && flat > 10f && flat < 45f)
             {
-                _nextPounce = now + (_raged ? Random.Range(5f, 8f) : Random.Range(10f, 14f));
+                _nextPounce = now + (_raged ? Random.Range(6f, 9f) : Random.Range(10f, 14f));
+                _pounceSpot = prey.footPosition;
+                _pounceWindEnd = now + 0.95f;
+                SvrStalkerEventMessage.Broadcast(me.gameObject, 4, _pounceSpot, 11f);
+            }
+            if (_pounceWindEnd > 0f && now >= _pounceWindEnd && motor)
+            {
+                _pounceWindEnd = 0f;
+                to = _pounceSpot - me.footPosition;
                 const float T = 0.95f;
                 float g = Mathf.Abs(Physics.gravity.y);
                 Vector3 v = new Vector3(to.x, 0f, to.z) / T;

@@ -230,7 +230,7 @@ namespace Surveyor
         {
             if (Time.time < _shieldDeflectToastUntil) return;
             _shieldDeflectToastUntil = Time.time + 1.8f;
-            Util.PlaySound("Play_item_use_EMPScanner_activate", PhysicalGo);
+            Util.PlaySound("Play_item_use_EMPScanner_findChest", PhysicalGo);
             LastRestoredSense = "PHASE SHIELD — " + ElementName(RequiredElement) + " ROUNDS NEEDED (HOLD M1 + SCROLL)";
             LastRestoredUntil = Time.time + 2.5f;
         }
@@ -777,7 +777,7 @@ namespace Surveyor
         public void OnShieldRecharge()
         {
             RotateElement();
-            Util.PlaySound("Play_item_use_EMPScanner_activate", PhysicalGo);
+            Util.PlaySound("Play_item_use_EMPScanner_findChest", PhysicalGo);
             LastRestoredSense = "PHASE SHIELD RE-ATTUNED — " + ElementName(RequiredElement) + " ROUNDS NEEDED!";
             LastRestoredUntil = Time.time + 2.5f;
         }
@@ -1006,7 +1006,7 @@ namespace Surveyor
                 try { Chat.AddMessage("<color=#ff4a4a>[DEMON STRIKE] The Shimmer Demon savaged " + victim.GetUserName() + " for " + Mathf.RoundToInt(bossDmg) + " damage!</color>"); } catch { }
             }
 
-            Util.PlaySound("Play_engi_R_turret_rotate_start", victim.gameObject);
+            Util.PlaySound("Play_UI_menuClick", victim.gameObject);
 
             State = Mode.Prowl;
             _modeTimer = Random.Range(16f, 24f);
@@ -1586,6 +1586,7 @@ namespace Surveyor
         public static int MinigunMode = 0; // 0 = IRIDIUM AP, 1 = CRYO COLD, 2 = INCENDIARY, 3 = PLASMA SHOCK
         public static int VacuumMode = 0;  // 0 = POLTERGUST, 1 = SINGULARITY, 2 = CRYO-EXHAUST, 3 = REPULSOR
         private float _miniModeFlash = -10f;
+        private bool _startedVisorOpen;
         /// <summary>The R swap calls this: shows the ammo banner.</summary>
         public void FlashAmmo() { _miniModeFlash = Time.time; }
 
@@ -2848,7 +2849,7 @@ namespace Surveyor
             _peekUntil = Time.time;
             _rebootStart = Time.time;
             _peekReady = Time.time + 0.35f;
-            Util.PlaySound("Play_engi_R_turret_rotate_start", gameObject);
+            Util.PlaySound("Play_UI_menuClick", gameObject);
             SvrRigPart.CloseVisor(gameObject);
         }
 
@@ -2963,7 +2964,7 @@ namespace Surveyor
         private void FireRepulsorBlow()
         {
             _repulsorReadyAt = Time.time + (SvrUpgrades.Has(SvrUpgrades.REPULSOR_BLOW) ? 4.5f : 7.5f);
-            Util.PlaySound("Play_engi_R_turret_rotate_start", gameObject);
+            Util.PlaySound("Play_UI_menuClick", gameObject);
             Vector3 o = _input ? _input.aimOrigin : _body.corePosition;
             Vector3 aim = _input ? _input.aimDirection : transform.forward;
 
@@ -3089,6 +3090,7 @@ namespace Surveyor
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
+            if (!_startedVisorOpen) { _startedVisorOpen = true; StartPeek(); }
             // v0.7.1 kit: F toggles LiDAR mode, 1/2/3 pick the LiDAR view (each fires a pulse across the map), R swaps ammo.
             ViewKeys();
             KeyCode qk;
@@ -3106,7 +3108,7 @@ namespace Surveyor
                 else
                 {
                     StartPeek();
-                    Util.PlaySound("Play_engi_R_turret_rotate_start", gameObject);
+                    Util.PlaySound("Play_UI_menuClick", gameObject);
                 }
             }
 
@@ -3834,6 +3836,8 @@ namespace Surveyor
         }
 
         // Scan-mode accent colors for the HUD (0=BIO-SCAN, 1=SALVAGE, 2=TOPOGRAPHY, 3=PERIPHERAL FLOOD).
+        public static Color ModeColorOf(int mode) => ModeAccent(mode);
+
         private static Color ModeAccent(int mode)
         {
             switch (mode % 4)
@@ -4839,10 +4843,10 @@ namespace Surveyor
             // v0.7.1 panel (left, under the money): LiDAR state, the view keys, the ammo. Rows have room so text never squashes.
             _label.clipping = TextClipping.Overflow;
             _label.wordWrap = false;
-            float sx = 20f * scale, sy = 240f * scale;
-            float row = 28f * scale;
-            float panelW = 520f * scale;
+            float row = 26f * scale;
+            float panelW = 470f * scale;
             float panelH = row * 4f + 6f * scale;
+            float sx = Screen.width - 285f * scale - panelW, sy = Screen.height - 140f * scale - panelH;
             GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.72f);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy - 6f * scale, panelW + 16f * scale, panelH + 12f * scale), white);
             GUI.color = new Color(0.2f, 0.85f, 1f, 0.45f);
@@ -4852,7 +4856,7 @@ namespace Surveyor
             {
                 float ry = sy + 2f * scale;
                 GUI.color = Peeking ? new Color(0.4f, 1f, 0.7f, 0.95f) : new Color(0.3f, 0.95f, 1f, 0.95f);
-                GUI.Label(new Rect(sx, ry, panelW, row), Peeking ? "LIDAR OFF · VISOR OPEN" : "LIDAR ON", _label);
+                GUI.Label(new Rect(sx, ry, panelW, row), Peeking ? "[F] LIDAR OFF · NORMAL VIEW" : "[F] LIDAR ON", _label);
                 GUI.color = ModeAccent(OdMode);
                 GUI.Label(new Rect(sx, ry + row, panelW, row), "[Q] MODE: " + OdNames[OdMode & 3], _label);
                 ry += row;
@@ -4868,7 +4872,7 @@ namespace Surveyor
                 }
                 int am = SvrAmmo.Current;
                 GUI.color = SvrAmmo.Colors[am];
-                GUI.Label(new Rect(sx, ry + row * 2f, panelW, row), "[R] AMMO: " + SvrAmmo.Names[am] + "  ·  " + SvrAmmo.Descs[am], _label);
+                GUI.Label(new Rect(sx, ry + row * 2f, panelW, row), "[R] AMMO: " + SvrAmmo.Names[am], _label);
             }
 
             // ammo swap / view banner (centre, lower third)

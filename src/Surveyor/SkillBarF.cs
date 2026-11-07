@@ -12,10 +12,8 @@ namespace Surveyor
     /// </summary>
     public class SvrFSlot : MonoBehaviour
     {
-        private GameObject _slot;
-        private Image _icon;
-        private Component _keyText;
-        private HUD _hud;
+        private class Slot { public GameObject Go; public Image Icon; public Component Key; }
+        private Slot _f, _q;
         private float _nextTry;
         private SvrLidar _lidar;
 
@@ -24,73 +22,86 @@ namespace Surveyor
         private void Update()
         {
             if (!_lidar) return;
-            if (!_slot)
+            if (_f == null || !_f.Go)
             {
                 if (Time.time < _nextTry) return;
                 _nextTry = Time.time + 1f;
-                try { Make(); } catch (System.Exception e) { SvrPlugin.Log.LogWarning("F skill button: " + e.Message); _nextTry = Time.time + 10f; }
+                try { Make(); } catch (System.Exception e) { SvrPlugin.Log.LogWarning("Q/F skill buttons: " + e.Message); _nextTry = Time.time + 10f; }
                 return;
             }
             bool peek = _lidar.Peeking;
-            if (_icon) _icon.color = peek ? new Color(0.45f, 1f, 0.6f, 1f) : new Color(0.55f, 0.95f, 1f, 1f);
-            SetText(_keyText, "F");
+            if (_f.Icon) _f.Icon.color = peek ? new Color(0.55f, 0.6f, 0.65f, 1f) : new Color(0.55f, 0.95f, 1f, 1f);
+            if (_q != null && _q.Icon) _q.Icon.color = Color.Lerp(Color.white, SvrLidar.ModeColorOf(SvrLidar.OdMode), 0.6f);
+            SetText(_f.Key, "F");
+            if (_q != null) SetText(_q.Key, "Q");
         }
 
         private void Make()
         {
-            _hud = null;
+            HUD hud = null;
             foreach (HUD h in HUD.readOnlyInstanceList)
-                if (h && h.targetBodyObject == gameObject) { _hud = h; break; }
-            if (!_hud || _hud.skillIcons == null || _hud.skillIcons.Length < 2 || !_hud.skillIcons[0] || !_hud.skillIcons[1]) return;
+                if (h && h.targetBodyObject == gameObject) { hud = h; break; }
+            if (!hud || hud.skillIcons == null || hud.skillIcons.Length < 2 || !hud.skillIcons[0] || !hud.skillIcons[1]) return;
+            SkillIcon m1 = hud.skillIcons[0], m2 = hud.skillIcons[1];
+            _f = Clone(m1, m2, 1, "peek", "F");
+            _q = Clone(m1, m2, 2, "special", "Q");
+        }
 
-            SkillIcon m1 = _hud.skillIcons[0], m2 = _hud.skillIcons[1];
+        /// <summary>A copy of the M1 button, `steps` slots further out than M1 (away from M2), showing our own icon and key.</summary>
+        private static Slot Clone(SkillIcon m1, SkillIcon m2, int steps, string icon, string key)
+        {
             GameObject clone = Instantiate(m1.gameObject, m1.transform.parent);
-            clone.name = "SurveyorFSlot";
+            clone.name = "SurveyorSlot_" + key;
+            Slot s = new Slot { Go = clone };
             SkillIcon si = clone.GetComponent<SkillIcon>();
-            _icon = si ? si.iconImage : null;
+            s.Icon = si ? si.iconImage : null;
             if (si) DestroyImmediate(si);
-            // find the key label: the shortest text on the copied icon (usually "M1")
+            // the key label is rewritten every frame by the game's input / language helpers: remove them from the copy
+            foreach (Component c in clone.GetComponentsInChildren<Component>(true))
+            {
+                if (!c) continue;
+                string tn = c.GetType().Name;
+                if (tn.Contains("InputBindingDisplay") || tn.Contains("LanguageTextMesh") || tn.Contains("TooltipProvider")) DestroyImmediate(c);
+            }
             Component best = null;
             int bestLen = int.MaxValue;
             foreach (Component c in clone.GetComponentsInChildren<Component>(true))
             {
                 if (!c || !c.GetType().Name.Contains("TextMeshPro")) continue;
                 string t = GetText(c);
-                if (t == null) continue;
-                if (t.Length > 0 && t.Length < bestLen) { bestLen = t.Length; best = c; }
-                else if (t.Length == 0) continue;
+                if (!string.IsNullOrEmpty(t) && t.Length < bestLen) { bestLen = t.Length; best = c; }
             }
             foreach (Component c in clone.GetComponentsInChildren<Component>(true))
                 if (c && c != best && c.GetType().Name.Contains("TextMeshPro")) SetText(c, "");
-            _keyText = best;
-            // hide the cooldown / stock / flash overlays we can't drive
+            s.Key = best;
+            SetText(best, key);
             foreach (Transform t in clone.GetComponentsInChildren<Transform>(true))
             {
                 string n = t.name.ToLowerInvariant();
                 if (t != clone.transform && (n.Contains("cooldown") || n.Contains("stock") || n.Contains("flash") || n.Contains("remap") || n.Contains("isready")))
                     t.gameObject.SetActive(false);
             }
-            if (_icon)
+            if (s.Icon)
             {
-                Sprite s = SvrIcons.Get("peek", null);
-                if (s) _icon.sprite = s;
-                _icon.enabled = true;
+                Sprite sp = SvrIcons.Get(icon, null);
+                if (sp) s.Icon.sprite = sp;
+                s.Icon.enabled = true;
             }
-            // one slot further out than M1, on the side away from M2
             RectTransform r1 = m1.transform as RectTransform, r2 = m2.transform as RectTransform, rc = clone.transform as RectTransform;
             if (r1 && r2 && rc)
             {
-                rc.anchoredPosition = r1.anchoredPosition - (r2.anchoredPosition - r1.anchoredPosition);
                 rc.anchorMin = r1.anchorMin; rc.anchorMax = r1.anchorMax; rc.pivot = r1.pivot;
+                rc.anchoredPosition = r1.anchoredPosition - (r2.anchoredPosition - r1.anchoredPosition) * steps;
             }
             LayoutGroup lg = clone.transform.parent ? clone.transform.parent.GetComponent<LayoutGroup>() : null;
-            if (lg) clone.transform.SetSiblingIndex(m1.transform.GetSiblingIndex());
+            if (lg) clone.transform.SetSiblingIndex(Mathf.Max(0, m1.transform.GetSiblingIndex()));
             clone.SetActive(true);
-            _slot = clone;
+            return s;
         }
 
         private static string GetText(Component c)
         {
+            if (!c) return null;
             PropertyInfo p = c.GetType().GetProperty("text", BindingFlags.Instance | BindingFlags.Public);
             return p != null ? p.GetValue(c, null) as string : null;
         }
@@ -102,6 +113,10 @@ namespace Surveyor
             if (p != null && p.CanWrite && (p.GetValue(c, null) as string) != v) p.SetValue(c, v, null);
         }
 
-        private void OnDestroy() { if (_slot) Destroy(_slot); }
+        private void OnDestroy()
+        {
+            if (_f != null && _f.Go) Destroy(_f.Go);
+            if (_q != null && _q.Go) Destroy(_q.Go);
+        }
     }
 }

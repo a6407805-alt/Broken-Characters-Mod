@@ -183,7 +183,6 @@ namespace Surveyor
             base.OnEnter();
             _spool = GetComponent<SvrSpool>();
             _lidar = GetComponent<SvrLidar>();
-            Util.PlaySound("Play_clayBruiser_attack1_windUp", gameObject);
             try { _tracer = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/Tracers/TracerCommandoDefault"); } catch { _tracer = null; }
             try { _hit = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/ImpactEffects/HitsparkCommando"); } catch { _hit = null; }
             LoadModeFx();
@@ -249,7 +248,6 @@ namespace Surveyor
         public override void OnExit()
         {
             Util.PlaySound("Stop_clayBruiser_attack1_shootLoop", gameObject);
-            Util.PlaySound("Play_clayBruiser_attack1_windDown", gameObject);
             base.OnExit();
         }
 
@@ -263,7 +261,6 @@ namespace Surveyor
             _remoteTimer -= Time.deltaTime;
             if (_remoteTimer > 0f) return;
             _remoteTimer = 1f / 11f;
-            if (!_loopOn) { _loopOn = true; Util.PlaySound("Play_clayBruiser_attack1_shootLoop", gameObject); }
             Util.PlaySound("Play_clayBruiser_attack1_shoot_bullet", gameObject);
         }
 
@@ -291,7 +288,6 @@ namespace Surveyor
             // sound: the base rattle every round, the ammo's own layer every 2nd / 3rd round
             Util.PlaySound("Play_clayBruiser_attack1_shoot_bullet", gameObject);
             string[] snd = AmmoSounds[ammo];
-            if (!_loopOn) { _loopOn = true; Util.PlaySound("Play_clayBruiser_attack1_shootLoop", gameObject); }
             bool heavy = ammo != SvrAmmo.Lead;          // heavy rounds are 4x slower, so every one gets its full voice
             if ((heavy || _shotCounter % 3 == 0) && snd[0] != null) Util.PlaySound(snd[0], gameObject);
             if (heavy && _shotCounter % 2 == 0 && snd[1] != null) Util.PlaySound(snd[1], gameObject);
@@ -373,7 +369,7 @@ namespace Surveyor
                 return;
             }
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
-            Util.PlaySound("Play_engi_R_turret_rotate_start", gameObject);         // one soft servo hum to start, then throttled (below)
+            Util.PlaySound("Play_UI_menuClick", gameObject);         // one soft servo hum to start, then throttled (below)
             _soundTimer = 1.6f;
         }
 
@@ -399,7 +395,7 @@ namespace Surveyor
             if (_soundTimer <= 0f)
             {
                 _soundTimer = 1.6f;
-                Util.PlaySound("Play_engi_R_turret_rotate_start", gameObject);
+                Util.PlaySound("Play_UI_menuClick", gameObject);
             }
 
             if (isAuthority)
@@ -619,7 +615,7 @@ namespace Surveyor
                 else
                 {
                     lidar.StartPeek();
-                    Util.PlaySound("Play_engi_R_turret_rotate_start", gameObject);
+                    Util.PlaySound("Play_UI_menuClick", gameObject);
                 }
             }
         }

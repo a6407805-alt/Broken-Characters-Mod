@@ -18,7 +18,7 @@ namespace Surveyor
     /// </summary>
     public class SvrStalkerRig : MonoBehaviour
     {
-        public enum Act { None, Slam, Throw, Pounce, Shriek, Spawn, Death }
+        public enum Act { None, Slam, Throw, PounceWindup, Pounce, Land, ShriekWindup, Shriek, Spawn, Death }
 
         private CharacterBody _body;
         private Transform _root;
@@ -228,7 +228,7 @@ namespace Surveyor
             return child != null && bones.TryGetValue(child, out var cb) ? cb[0] : tail;
         }
 
-        // ---------------------------------------------------------------- actions
+        // ---------------------------------------------------------------- actions (every attack is telegraphed)
 
         public void Trigger(Act a, float duration)
         {
@@ -236,35 +236,58 @@ namespace Surveyor
             _act = a;
             _actT = 0f;
             _actDur = Mathf.Max(0.3f, duration);
-            _lastEvent = Time.time;
             switch (a)
             {
-                case Act.Shriek:
                 case Act.Spawn:
                     _jawTarget = 80f;
                     Util.PlaySound("Play_imp_overlord_spawn", gameObject);
-                    Util.PlaySound("Play_voidRaid_fog_affectPlayer", gameObject);
                     break;
-                case Act.Slam: _jawTarget = 55f; Util.PlaySound("Play_imp_overlord_attack2_tell", gameObject); break;
-                case Act.Throw: _jawTarget = 40f; break;
-                case Act.Pounce: _jawTarget = 70f; Util.PlaySound("Play_moonBrother_phaseJump_jumpAway", gameObject); Util.PlaySound("Play_imp_overlord_idle_VO", gameObject); break;
-                case Act.Death: _jawTarget = 85f; break;
+                case Act.Slam:
+                    // the slam: a red ring shows where it lands while it rears up
+                    _jawTarget = 55f;
+                    Util.PlaySound("Play_imp_overlord_attack2_tell", gameObject);
+                    SvrGroundRing.Show(_body.footPosition, 14f, duration * 0.55f, new Color(1f, 0.15f, 0.1f));
+                    break;
+                case Act.Throw: _jawTarget = 40f; Util.PlaySound("Play_imp_overlord_attack1_throw", gameObject); break;
+                case Act.Death: _jawTarget = 85f; Util.PlaySound("Play_imp_overlord_death", gameObject); break;
             }
         }
 
-        public void OnEvent(byte kind)
+        public void OnEvent(byte kind, Vector3 pos, float radius)
         {
             switch (kind)
             {
-                case 1: Trigger(Act.Pounce, 1.2f); break;
-                case 2:
+                case 4:   // pounce wind-up: crouches, hisses, and the landing spot glows
+                    Trigger(Act.PounceWindup, 0.95f);
+                    _jawTarget = 60f;
+                    Util.PlaySound("Play_imp_overlord_attack2_tell", gameObject);
+                    Util.PlaySound("Play_imp_overlord_idle_VO", gameObject);
+                    SvrGroundRing.Show(pos, radius, 1.9f, new Color(1f, 0.1f, 0.05f));
+                    break;
+                case 1:   // leap
+                    _act = Act.Pounce; _actT = 0f; _actDur = 1.4f;
+                    _jawTarget = 75f;
+                    Util.PlaySound("Play_moonBrother_phaseJump_jumpAway", gameObject);
+                    break;
+                case 2:   // landed
                     if (Time.time - _lastLand < 0.4f) break;
                     _lastLand = Time.time;
                     Util.PlaySound("Play_moonBrother_phaseJump_land_impact", gameObject);
-                    if (_act == Act.Pounce) _actT = _actDur;
+                    if (_act == Act.Pounce) { _act = Act.Land; _actT = 0f; _actDur = 0.7f; }
                     ShakeNear(1.2f, 24f);
                     break;
-                case 3: Trigger(Act.Shriek, 1.8f); ShakeNear(1.6f, 40f); break;
+                case 5:   // shriek wind-up: rears back and draws breath, a purple ring shows how far the scream reaches
+                    Trigger(Act.ShriekWindup, 0.9f);
+                    _jawTarget = 0f;
+                    Util.PlaySound("Play_imp_overlord_idle_VO", gameObject);
+                    SvrGroundRing.Show(_body.footPosition, radius, 0.9f, new Color(0.7f, 0.2f, 1f));
+                    break;
+                case 3:   // shriek
+                    _act = Act.Shriek; _actT = 0f; _actDur = 1.6f;
+                    _jawTarget = 90f;
+                    Util.PlaySound("Play_imp_overlord_spawn", gameObject);
+                    ShakeNear(1.6f, 40f);
+                    break;
             }
         }
 
@@ -292,9 +315,9 @@ namespace Surveyor
                 {
                     if (_act != Act.Slam) Trigger(Act.Slam, Duration(m.state, 1.6f));
                 }
-                else if (n.Contains("Spike") || n.Contains("Throw") || n.Contains("Fire"))
+                else if (n.Contains("Spike") || n.Contains("Throw") || n.Contains("FireVoid"))
                 {
-                    if (_act != Act.Throw) Trigger(Act.Throw, Duration(m.state, 1.4f));
+                    if (_act != Act.Throw && _act != Act.Pounce && _act != Act.PounceWindup) Trigger(Act.Throw, Duration(m.state, 1.4f));
                 }
                 else if (n.Contains("Death") && _act != Act.Death) Trigger(Act.Death, 3f);
             }
@@ -314,6 +337,16 @@ namespace Surveyor
 
         // ---------------------------------------------------------------- animation (every client)
 
+        // the all-fours stance, posed and checked in Blender: hands and hind feet both on the ground
+        private static readonly Vector3 HipsQ = new Vector3(55f, 0f, 0f), SpineQ = new Vector3(6f, 0f, 0f), ChestQ = new Vector3(4f, 0f, 0f);
+        private static readonly Vector3 NeckQ = new Vector3(-48f, 0f, 0f), HeadQ = new Vector3(-22f, 0f, 0f);
+        private static readonly Vector3 ThighRQ = new Vector3(-65f, 0f, 8f), ThighLQ = new Vector3(-65f, 0f, -8f), ShinQ = new Vector3(30f, 0f, 0f), FootQ = new Vector3(-15f, 0f, 0f);
+        private static readonly Vector3 UpperArmRQ = new Vector3(-100f, 0f, 18f), UpperArmLQ = new Vector3(-100f, 0f, -18f), ForearmQ = new Vector3(22f, 0f, 0f);
+        private const float DropQ = -0.22f;
+
+        private readonly Dictionary<string, Quaternion> _cur = new Dictionary<string, Quaternion>();
+        private float _drop = DropQ;
+
         private void LateUpdate()
         {
             if (!_built || !_body || !_root) return;
@@ -325,186 +358,211 @@ namespace Surveyor
             if (_act != Act.None)
             {
                 _actT += dt;
-                if (_actT >= _actDur && _act != Act.Death) _act = Act.None;
+                if (_actT >= _actDur && _act != Act.Death && _act != Act.PounceWindup) _act = Act.None;
+                if (_act == Act.PounceWindup && _actT > 2.5f) _act = Act.None;      // the leap never came
             }
-            _actW = Mathf.MoveTowards(_actW, _act != Act.None ? 1f : 0f, dt * 6f);
 
             Vector3 pos = _body.footPosition;
             Vector3 v = (pos - _lastPos) / dt;
             _lastPos = pos;
             if (v.sqrMagnitude > 2500f) v = Vector3.zero;     // a teleport, not a step
             _vel = Vector3.Lerp(_vel, v, 1f - Mathf.Exp(-8f * dt));
-            Vector3 flat = new Vector3(_vel.x, 0f, _vel.z);
-            float speed = flat.magnitude;
+            float speed = new Vector3(_vel.x, 0f, _vel.z).magnitude;
             bool airborne = Mathf.Abs(_vel.y) > 3f && !Physics.Raycast(pos + Vector3.up * 0.5f, Vector3.down, 1.6f + _s * 0.2f, LayerIndex.world.mask);
-
             bool rage = _body.healthComponent && _body.healthComponent.combinedHealthFraction < 0.5f;
-            _crawlK = Mathf.MoveTowards(_crawlK, rage ? 1f : 0f, dt * 0.8f);
-            float moveK = Mathf.Clamp01(speed / (6f + 3f * _crawlK));
-            float stride = (2.1f + 0.8f * _crawlK) * _s;
-            _phase += speed * dt / Mathf.Max(0.5f, stride) * Mathf.PI;
-            float ph = _phase;
-            float sn = Mathf.Sin(ph), cs = Mathf.Cos(ph);
 
-            // footsteps (heavy, and hands too once it crawls)
+            float moveK = Mathf.Clamp01(speed / 7f);
+            float stride = 2.6f * _s;
+            _phase += speed * dt / Mathf.Max(0.5f, stride) * Mathf.PI;
+            float ph = _phase, sn = Mathf.Sin(ph), cs = Mathf.Cos(ph);
             float stepPhase = Mathf.Floor(ph / Mathf.PI);
             if (stepPhase != _lastStepPhase)
             {
                 _lastStepPhase = stepPhase;
-                if (moveK > 0.25f && !airborne) Util.PlaySound(_crawlK > 0.5f ? "Play_grandparent_handStep" : "Play_parent_step", gameObject);
+                if (moveK > 0.2f && !airborne) Util.PlaySound((stepPhase % 2f) == 0f ? "Play_grandparent_handStep" : "Play_parent_step", gameObject);
             }
 
-            // twitches: the head snaps to odd angles and back
+            // head twitches (snap there, ease back), look at the prey
             if (Time.time >= _nextTwitch)
             {
-                _nextTwitch = Time.time + Random.Range(0.6f, 2.8f);
-                _twitchTarget = Random.value < 0.6f ? new Vector3(Random.Range(-12f, 12f), Random.Range(-28f, 28f), Random.Range(-30f, 30f)) : Vector3.zero;
-                if (Random.value < 0.15f) Util.PlaySound("Play_gravekeeper_idle_twitch", gameObject);
+                _nextTwitch = Time.time + Random.Range(0.8f, 3f);
+                _twitchTarget = Random.value < 0.55f ? new Vector3(Random.Range(-10f, 10f), Random.Range(-24f, 24f), Random.Range(-28f, 28f)) : Vector3.zero;
+                if (Random.value < 0.12f) Util.PlaySound("Play_gravekeeper_idle_twitch", gameObject);
             }
-            _twitch = Vector3.Lerp(_twitch, _twitchTarget, 1f - Mathf.Exp(-30f * dt));
-            _twitchTarget = Vector3.Lerp(_twitchTarget, Vector3.zero, dt * 1.2f);
-
-            // look at the prey
+            _twitch = Vector3.Lerp(_twitch, _twitchTarget, 1f - Mathf.Exp(-25f * dt));
+            _twitchTarget = Vector3.Lerp(_twitchTarget, Vector3.zero, dt * 1.5f);
             float lookYaw = 0f, lookPitch = 0f;
             CharacterBody prey = NearestPlayer();
-            if (prey)
+            if (prey && Head)
             {
-                Vector3 d = _root.InverseTransformDirection(prey.corePosition - (Head ? Head.position : _body.corePosition));
-                lookYaw = Mathf.Clamp(Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg, -70f, 70f);
-                lookPitch = Mathf.Clamp(-Mathf.Atan2(d.y, new Vector2(d.x, d.z).magnitude) * Mathf.Rad2Deg, -35f, 35f);
+                Vector3 d = _root.InverseTransformDirection(prey.corePosition - Head.position);
+                lookYaw = Mathf.Clamp(Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg, -60f, 60f);
+                lookPitch = Mathf.Clamp(-Mathf.Atan2(d.y, new Vector2(d.x, d.z).magnitude) * Mathf.Rad2Deg, -30f, 30f);
             }
 
-            float breathe = Mathf.Sin(_t * 1.3f);
             float idle = 1f - moveK;
-            float c = _crawlK;
+            float breathe = Mathf.Sin(_t * (rage ? 2.4f : 1.4f));
+            float gait = 22f * moveK * (rage ? 1.15f : 1f);
 
-            // ---- base pose: stalking walk / idle, blended into the all-fours crawl
-            Vector3 hips = new Vector3(60f * c, sn * 6f * moveK, sn * 5f * moveK * (1f - c));
-            Vector3 spine = new Vector3(6f * moveK + 8f * c + breathe * 1.5f * idle, -sn * 4f * moveK, 0f);
-            Vector3 chest = new Vector3(breathe * 2.5f * idle + 6f * c, sn * 6f * moveK, -sn * 3f * moveK);
-            Vector3 neck = new Vector3(-40f * c + lookPitch * 0.4f, lookYaw * 0.4f, 0f);
-            Vector3 headR = new Vector3(lookPitch * 0.6f - 18f * c, lookYaw * 0.6f, 0f) + _twitch;
+            // ---- base: the prowl (diagonal gait: right hand with left foot)
+            Vector3 hips = HipsQ + new Vector3(breathe * 1.5f * idle, sn * 5f * moveK, sn * 4f * moveK);
+            Vector3 spine = SpineQ + new Vector3(breathe * 2f * idle, -sn * 5f * moveK, 0f);
+            Vector3 chest = ChestQ + new Vector3(breathe * 2.5f * idle, sn * 6f * moveK, -sn * 3f * moveK);
+            Vector3 neck = NeckQ + new Vector3(lookPitch * 0.4f, lookYaw * 0.45f, 0f);
+            Vector3 headR = HeadQ + new Vector3(lookPitch * 0.6f, lookYaw * 0.55f, 0f) + _twitch;
+            Vector3 thR = ThighRQ + new Vector3(-sn * gait, 0f, 0f), thL = ThighLQ + new Vector3(sn * gait, 0f, 0f);
+            Vector3 shR = ShinQ + new Vector3(Mathf.Max(0f, cs) * 30f * moveK, 0f, 0f), shL = ShinQ + new Vector3(Mathf.Max(0f, -cs) * 30f * moveK, 0f, 0f);
+            Vector3 ftR = FootQ - new Vector3(Mathf.Max(0f, cs) * 15f * moveK, 0f, 0f), ftL = FootQ - new Vector3(Mathf.Max(0f, -cs) * 15f * moveK, 0f, 0f);
+            Vector3 uaR = UpperArmRQ + new Vector3(sn * gait, 0f, Mathf.Sin(_t * 0.6f) * 2f * idle), uaL = UpperArmLQ + new Vector3(-sn * gait, 0f, -Mathf.Sin(_t * 0.6f + 1f) * 2f * idle);
+            Vector3 faR = ForearmQ + new Vector3(Mathf.Max(0f, -cs) * 28f * moveK, 0f, 0f), faL = ForearmQ + new Vector3(Mathf.Max(0f, cs) * 28f * moveK, 0f, 0f);
+            Vector3 hR = new Vector3(Mathf.Sin(_t * 0.9f) * 8f * idle, 0f, 0f), hL = new Vector3(Mathf.Sin(_t * 0.9f + 2f) * 8f * idle, 0f, 0f);
+            float drop = DropQ - Mathf.Abs(cs) * 0.05f * moveK;
 
-            float legSwing = (28f - 6f * c) * moveK;
-            Vector3 thighR = new Vector3(-sn * legSwing - 60f * c - 18f * c, 0f, 0f);
-            Vector3 thighL = new Vector3(sn * legSwing - 60f * c - 18f * c, 0f, 0f);
-            Vector3 shinR = new Vector3(Mathf.Max(0f, -cs) * 35f * moveK + 28f * c, 0f, 0f);
-            Vector3 shinL = new Vector3(Mathf.Max(0f, cs) * 35f * moveK + 28f * c, 0f, 0f);
-            Vector3 footR = new Vector3(-shinR.x * 0.6f, 0f, 0f), footL = new Vector3(-shinL.x * 0.6f, 0f, 0f);
-
-            // arms: swing against the legs upright; in the crawl they are front legs (diagonal gait)
-            float armSwing = Mathf.Lerp(20f, 34f, c) * moveK;
-            Vector3 uaR = new Vector3(Mathf.Lerp(sn, sn, c) * armSwing - 20f * c + Mathf.Sin(_t * 0.7f) * 3f * idle, 0f, 4f + 6f * idle);
-            Vector3 uaL = new Vector3(-sn * armSwing - 20f * c + Mathf.Sin(_t * 0.7f + 1f) * 3f * idle, 0f, -4f - 6f * idle);
-            if (c > 0.01f)
+            // ---- actions over the base: wind-up (readable), strike (fast), recover (smooth)
+            float u = Mathf.Clamp01(_actT / Mathf.Max(0.01f, _actDur));
+            switch (_act)
             {
-                uaR.x = Mathf.Lerp(uaR.x, sn * armSwing - 25f, c);
-                uaL.x = Mathf.Lerp(uaL.x, -sn * armSwing - 25f, c);
-            }
-            Vector3 faR = new Vector3(-12f - Mathf.Abs(sn) * 12f * moveK - 10f * c, 0f, 0f);
-            Vector3 faL = new Vector3(-12f - Mathf.Abs(cs) * 12f * moveK - 10f * c, 0f, 0f);
-            Vector3 hR = new Vector3(Mathf.Sin(_t * 0.9f) * 10f * idle, 0f, 0f), hL = new Vector3(Mathf.Sin(_t * 0.9f + 2f) * 10f * idle, 0f, 0f);
-            float rootDrop = (Mathf.Abs(cs) * 0.07f * moveK - 0.32f * c) * _s;
-
-            // ---- attacks and events, layered over the base pose
-            if (_actW > 0.001f)
-            {
-                float w = _actW;
-                float u = Mathf.Clamp01(_actT / _actDur);
-                switch (_act)
+                case Act.Slam:
                 {
-                    case Act.Slam:
-                    {
-                        // rear up with both scythes overhead, then smash them down
-                        float up = Smooth(0f, 0.5f, u) * (1f - Smooth(0.52f, 0.62f, u));
-                        float down = Smooth(0.52f, 0.62f, u) * (1f - Smooth(0.85f, 1f, u));
-                        spine += new Vector3(-28f * up + 45f * down, 0f, 0f) * w;
-                        chest += new Vector3(-12f * up + 15f * down, 0f, 0f) * w;
-                        uaR += new Vector3(-160f * up - 60f * down, 0f, 18f * up) * w;
-                        uaL += new Vector3(-160f * up - 60f * down, 0f, -18f * up) * w;
-                        faR += new Vector3(-35f * up, 0f, 0f) * w;
-                        faL += new Vector3(-35f * up, 0f, 0f) * w;
-                        rootDrop -= 0.25f * _s * down * w;
-                        if (u > 0.55f && u < 0.6f) { _jawTarget = 70f; }
-                        break;
-                    }
-                    case Act.Throw:
-                    {
-                        // hurl spikes, one arm after the other: wind back, whip forward
-                        float cyc = (_actT % 0.5f) / 0.5f;
-                        bool right = ((int)(_actT / 0.5f) & 1) == 0;
-                        float wind = Smooth(0f, 0.45f, cyc) * (1f - Smooth(0.45f, 0.6f, cyc));
-                        float whip = Smooth(0.45f, 0.6f, cyc) * (1f - Smooth(0.8f, 1f, cyc));
-                        Vector3 arm = new Vector3(70f * wind - 120f * whip, 0f, 0f) * w;
-                        if (right) { uaR += arm + new Vector3(0f, 0f, 25f * wind) * w; faR += new Vector3(-40f * wind, 0f, 0f) * w; }
-                        else { uaL += arm + new Vector3(0f, 0f, -25f * wind) * w; faL += new Vector3(-40f * wind, 0f, 0f) * w; }
-                        chest += new Vector3(0f, (right ? -1f : 1f) * (22f * wind - 30f * whip), 0f) * w;
-                        break;
-                    }
-                    case Act.Pounce:
-                    {
-                        // airborne: claws thrown forward, legs trailing, maw wide
-                        float k = airborne ? 1f : 1f - Smooth(0.6f, 1f, u);
-                        spine += new Vector3(-15f, 0f, 0f) * k * w;
-                        uaR += new Vector3(-110f, 0f, 20f) * k * w;
-                        uaL += new Vector3(-110f, 0f, -20f) * k * w;
-                        faR += new Vector3(-20f, 0f, 0f) * k * w;
-                        faL += new Vector3(-20f, 0f, 0f) * k * w;
-                        thighR += new Vector3(55f, 0f, 0f) * k * w;
-                        thighL += new Vector3(55f, 0f, 0f) * k * w;
-                        neck += new Vector3(-20f, 0f, 0f) * k * w;
-                        break;
-                    }
-                    case Act.Shriek:
-                    case Act.Spawn:
-                    {
-                        // head thrown back, arms flung wide, the whole body shaking
-                        float k = Smooth(0f, 0.2f, u) * (1f - Smooth(0.8f, 1f, u));
-                        Vector3 shake = new Vector3(Random.Range(-4f, 4f), Random.Range(-4f, 4f), Random.Range(-4f, 4f)) * k;
-                        chest += (new Vector3(-24f, 0f, 0f) + shake) * w * k;
-                        neck += new Vector3(-35f, 0f, 0f) * w * k;
-                        headR += (new Vector3(-30f, 0f, 0f) + shake * 2f) * w * k;
-                        uaR += new Vector3(-30f, 0f, 70f) * w * k;
-                        uaL += new Vector3(-30f, 0f, -70f) * w * k;
-                        faR += new Vector3(-30f, 0f, 0f) * w * k;
-                        faL += new Vector3(-30f, 0f, 0f) * w * k;
-                        if (u < 0.85f) _jawTarget = 85f;
-                        break;
-                    }
-                    case Act.Death:
-                    {
-                        float k = Smooth(0f, 1f, u);
-                        hips += new Vector3(80f, 0f, 20f) * k;
-                        thighR += new Vector3(-80f, 0f, 0f) * k; thighL += new Vector3(-60f, 0f, 0f) * k;
-                        uaR += new Vector3(-40f, 0f, 30f) * k; uaL += new Vector3(-50f, 0f, -20f) * k;
-                        rootDrop -= 0.9f * _s * k;
-                        break;
-                    }
+                    float up = Smooth(0f, 0.5f, u) * (1f - Smooth(0.52f, 0.6f, u));
+                    float down = Smooth(0.52f, 0.6f, u) * (1f - Smooth(0.8f, 1f, u));
+                    hips += new Vector3(-40f * up + 5f * down, 0f, 0f);
+                    thR += new Vector3(35f * up, 0f, 0f); thL += new Vector3(35f * up, 0f, 0f);
+                    chest += new Vector3(-15f * up + 10f * down, 0f, 0f);
+                    neck += new Vector3(-10f * up + 20f * down, 0f, 0f);
+                    uaR += new Vector3(-75f * up + 20f * down, 0f, 10f * up); uaL += new Vector3(-75f * up + 20f * down, 0f, -10f * up);
+                    faR += new Vector3(-40f * up, 0f, 0f); faL += new Vector3(-40f * up, 0f, 0f);
+                    drop += 0.35f * up - 0.15f * down;
+                    if (u > 0.52f && u < 0.56f && !_slamShook) { _slamShook = true; _jawTarget = 75f; ShakeNear(1.4f, 30f); }
+                    break;
+                }
+                case Act.Throw:
+                {
+                    // rises onto its hind legs a little and whips one scythe after the other
+                    float rise = Smooth(0f, 0.2f, u) * (1f - Smooth(0.85f, 1f, u));
+                    hips += new Vector3(-20f * rise, 0f, 0f);
+                    thR += new Vector3(18f * rise, 0f, 0f); thL += new Vector3(18f * rise, 0f, 0f);
+                    float cyc = (_actT % 0.5f) / 0.5f;
+                    bool right = ((int)(_actT / 0.5f) & 1) == 0;
+                    float wind = Smooth(0f, 0.45f, cyc) * (1f - Smooth(0.45f, 0.6f, cyc));
+                    float whip = Smooth(0.45f, 0.6f, cyc) * (1f - Smooth(0.8f, 1f, cyc));
+                    Vector3 arm = new Vector3(55f * wind - 70f * whip, 0f, 0f) * rise;
+                    if (right) { uaR += arm; faR += new Vector3(-30f * wind, 0f, 0f) * rise; }
+                    else { uaL += arm; faL += new Vector3(-30f * wind, 0f, 0f) * rise; }
+                    chest += new Vector3(0f, (right ? -1f : 1f) * (20f * wind - 26f * whip), 0f) * rise;
+                    break;
+                }
+                case Act.PounceWindup:
+                {
+                    // coils down low, head pinned on the prey, a shiver building
+                    float k = Smooth(0f, 0.6f, u);
+                    float shiver = Mathf.Sin(_t * 55f) * 2.5f * k;
+                    hips += new Vector3(8f * k, 0f, shiver);
+                    thR += new Vector3(-15f * k, 0f, 0f); thL += new Vector3(-15f * k, 0f, 0f);
+                    shR += new Vector3(25f * k, 0f, 0f); shL += new Vector3(25f * k, 0f, 0f);
+                    uaR += new Vector3(25f * k, 0f, 6f * k); uaL += new Vector3(25f * k, 0f, -6f * k);
+                    faR += new Vector3(15f * k, 0f, 0f); faL += new Vector3(15f * k, 0f, 0f);
+                    neck += new Vector3(-12f * k, 0f, shiver);
+                    drop -= 0.35f * k;
+                    break;
+                }
+                case Act.Pounce:
+                {
+                    // stretched out in the air, claws first
+                    float k = airborne || u < 0.4f ? 1f : 1f - Smooth(0.4f, 1f, u);
+                    hips += new Vector3(-12f, 0f, 0f) * k;
+                    uaR += new Vector3(-35f, 0f, 14f) * k; uaL += new Vector3(-35f, 0f, -14f) * k;
+                    faR += new Vector3(-30f, 0f, 0f) * k; faL += new Vector3(-30f, 0f, 0f) * k;
+                    thR += new Vector3(60f, 0f, 0f) * k; thL += new Vector3(60f, 0f, 0f) * k;
+                    shR += new Vector3(20f, 0f, 0f) * k; shL += new Vector3(20f, 0f, 0f) * k;
+                    neck += new Vector3(-10f, 0f, 0f) * k;
+                    break;
+                }
+                case Act.Land:
+                {
+                    // slams down, absorbs, rises back to the prowl
+                    float k = 1f - Smooth(0.2f, 1f, u);
+                    drop -= 0.4f * k;
+                    hips += new Vector3(10f * k, 0f, 0f);
+                    uaR += new Vector3(15f * k, 0f, 10f * k); uaL += new Vector3(15f * k, 0f, -10f * k);
+                    shR += new Vector3(25f * k, 0f, 0f); shL += new Vector3(25f * k, 0f, 0f);
+                    break;
+                }
+                case Act.ShriekWindup:
+                {
+                    // rears back onto its haunches, head drawn in, ribs swelling
+                    float k = Smooth(0f, 1f, u);
+                    hips += new Vector3(-35f * k, 0f, 0f);
+                    thR += new Vector3(30f * k, 0f, 0f); thL += new Vector3(30f * k, 0f, 0f);
+                    chest += new Vector3(-8f * k, 0f, 0f);
+                    neck += new Vector3(15f * k, 0f, 0f);
+                    uaR += new Vector3(-20f * k, 0f, 20f * k); uaL += new Vector3(-20f * k, 0f, -20f * k);
+                    drop += 0.25f * k;
+                    break;
+                }
+                case Act.Shriek:
+                case Act.Spawn:
+                {
+                    // head thrown up, arms flung wide, the whole body shaking
+                    float k = Smooth(0f, 0.12f, u) * (1f - Smooth(0.8f, 1f, u));
+                    float sh = Mathf.Sin(_t * 47f) * 3f * k;
+                    hips += new Vector3(-35f * k, 0f, 0f);
+                    thR += new Vector3(30f * k, 0f, 0f); thL += new Vector3(30f * k, 0f, 0f);
+                    chest += new Vector3(-20f * k + sh, sh, 0f);
+                    neck += new Vector3(-45f * k, 0f, sh);
+                    headR += new Vector3(-25f * k + sh * 2f, 0f, sh);
+                    uaR += new Vector3(-10f * k, 0f, 55f * k); uaL += new Vector3(-10f * k, 0f, -55f * k);
+                    faR += new Vector3(-25f * k, 0f, 0f); faL += new Vector3(-25f * k, 0f, 0f);
+                    drop += 0.3f * k;
+                    if (u < 0.8f) _jawTarget = 90f;
+                    break;
+                }
+                case Act.Death:
+                {
+                    float k = Smooth(0f, 1f, u);
+                    hips += new Vector3(25f * k, 0f, 35f * k);
+                    uaR += new Vector3(60f * k, 0f, 30f * k); uaL += new Vector3(70f * k, 0f, -25f * k);
+                    thR += new Vector3(30f * k, 0f, 0f);
+                    neck += new Vector3(40f * k, 0f, 30f * k);
+                    drop -= 0.5f * k;
+                    _jawTarget = 70f;
+                    break;
                 }
             }
+            if (_act != Act.Slam) _slamShook = false;
 
             // jaw: hangs open, snaps now and then, chatters in a rage
-            if (Time.time >= _nextSnap)
+            if (Time.time >= _nextSnap && _act == Act.None)
             {
-                _nextSnap = Time.time + Random.Range(rage ? 0.5f : 1.8f, rage ? 1.4f : 4.5f);
-                _jawTarget = Mathf.Max(_jawTarget, Random.Range(14f, rage ? 45f : 32f));
+                _nextSnap = Time.time + Random.Range(rage ? 0.6f : 2f, rage ? 1.6f : 5f);
+                _jawTarget = Mathf.Max(_jawTarget, Random.Range(14f, rage ? 42f : 30f));
             }
-            _jawTarget = Mathf.MoveTowards(_jawTarget, 4f, dt * 40f);
-            _jaw = Mathf.Lerp(_jaw, _jawTarget, 1f - Mathf.Exp(-16f * dt));
-            float chatter = rage ? Mathf.Sin(_t * 40f) * 4f : 0f;
+            _jawTarget = Mathf.MoveTowards(_jawTarget, 4f, dt * 35f);
+            _jaw = Mathf.Lerp(_jaw, _jawTarget, 1f - Mathf.Exp(-14f * dt));
+            float chatter = rage ? Mathf.Sin(_t * 40f) * 3f : 0f;
 
-            _root.position = pos + Vector3.up * rootDrop;
-            Set("hips", hips); Set("spine", spine); Set("chest", chest); Set("neck", neck); Set("head", headR);
-            Set("jaw", new Vector3(_jaw + chatter, 0f, 0f));
-            Set("upper_arm.R", uaR); Set("forearm.R", faR); Set("hand.R", hR);
-            Set("upper_arm.L", uaL); Set("forearm.L", faL); Set("hand.L", hL);
-            Set("thigh.R", thighR); Set("shin.R", shinR); Set("foot.R", footR);
-            Set("thigh.L", thighL); Set("shin.L", shinL); Set("foot.L", footL);
+            // smooth everything (no snapping between poses), quicker during strikes
+            float rate = (_act == Act.Slam && u > 0.5f && u < 0.65f) || _act == Act.Pounce ? 30f : 12f;
+            float a = 1f - Mathf.Exp(-rate * dt);
+            _drop = Mathf.Lerp(_drop, drop, a);
+            _root.position = pos + Vector3.up * (_drop * _s);
+            Set("hips", hips, a); Set("spine", spine, a); Set("chest", chest, a); Set("neck", neck, a); Set("head", headR, a);
+            Set("jaw", new Vector3(_jaw + chatter, 0f, 0f), 1f);
+            Set("upper_arm.R", uaR, a); Set("forearm.R", faR, a); Set("hand.R", hR, a);
+            Set("upper_arm.L", uaL, a); Set("forearm.L", faL, a); Set("hand.L", hL, a);
+            Set("thigh.R", thR, a); Set("shin.R", shR, a); Set("foot.R", ftR, a);
+            Set("thigh.L", thL, a); Set("shin.L", shL, a); Set("foot.L", ftL, a);
         }
 
-        private void Set(string n, Vector3 e)
+        private bool _slamShook;
+
+        private void Set(string n, Vector3 e, float a)
         {
-            if (_j.TryGetValue(n, out Transform t)) t.localRotation = Quaternion.Euler(e);
+            if (!_j.TryGetValue(n, out Transform t)) return;
+            Quaternion want = Quaternion.Euler(e);
+            Quaternion q = _cur.TryGetValue(n, out Quaternion c) ? Quaternion.Slerp(c, want, a) : want;
+            _cur[n] = q;
+            t.localRotation = q;
         }
 
         private static float Smooth(float a, float b, float x) { float t = Mathf.Clamp01((x - a) / Mathf.Max(1e-4f, b - a)); return t * t * (3f - 2f * t); }
@@ -532,25 +590,111 @@ namespace Surveyor
         }
     }
 
-    /// <summary>Host -> everyone: the Stalker pounced (1), landed (2) or shrieked (3), so every client animates it.</summary>
+    /// <summary>Host -> everyone: the Stalker's attack events (4 pounce wind-up + landing spot, 1 leap, 2 landed, 5 shriek wind-up, 3 shriek).</summary>
     public class SvrStalkerEventMessage : INetMessage
     {
         public GameObject Body;
         public byte Kind;
-        public void Serialize(NetworkWriter w) { w.Write(Body); w.Write(Kind); }
-        public void Deserialize(NetworkReader r) { Body = r.ReadGameObject(); Kind = r.ReadByte(); }
+        public Vector3 Pos;
+        public float Radius;
+        public void Serialize(NetworkWriter w) { w.Write(Body); w.Write(Kind); w.Write(Pos); w.Write(Radius); }
+        public void Deserialize(NetworkReader r) { Body = r.ReadGameObject(); Kind = r.ReadByte(); Pos = r.ReadVector3(); Radius = r.ReadSingle(); }
         public void OnReceived()
         {
-            if (!Body) return;
+            if (!Body || NetworkServer.active) return;          // the host already played it
             SvrStalkerRig rig = Body.GetComponent<SvrStalkerRig>();
-            if (rig) rig.OnEvent(Kind);
+            if (rig) rig.OnEvent(Kind, Pos, Radius);
         }
 
-        public static void Broadcast(GameObject body, byte kind)
+        public static void Broadcast(GameObject body, byte kind, Vector3 pos = default, float radius = 0f)
         {
             SvrStalkerRig rig = body ? body.GetComponent<SvrStalkerRig>() : null;
-            if (rig) rig.OnEvent(kind);                    // the host's own copy right away
-            try { new SvrStalkerEventMessage { Body = body, Kind = kind }.Send(NetworkDestination.Clients); } catch { }
+            if (rig) rig.OnEvent(kind, pos, radius);
+            try { new SvrStalkerEventMessage { Body = body, Kind = kind, Pos = pos, Radius = radius }.Send(NetworkDestination.Clients); } catch { }
+        }
+    }
+
+    /// <summary>A glowing ring on the ground that marks where an attack will hit; its inner ring grows out to the edge as the hit gets near.</summary>
+    public class SvrGroundRing : MonoBehaviour
+    {
+        private static Mesh _ring;
+        private float _start, _life, _radius;
+        private Transform _outer, _inner;
+        private Material _mat;
+
+        public static void Show(Vector3 at, float radius, float seconds, Color color)
+        {
+            try
+            {
+                RaycastHit h;
+                if (Physics.Raycast(at + Vector3.up * 3f, Vector3.down, out h, 20f, LayerIndex.world.mask)) at = h.point;
+                GameObject g = new GameObject("SvrAttackRing");
+                g.transform.position = at + Vector3.up * 0.08f;
+                g.AddComponent<SvrGroundRing>().Setup(radius, seconds, color);
+            }
+            catch { }
+        }
+
+        private void Setup(float radius, float seconds, Color c)
+        {
+            _start = Time.time; _life = Mathf.Max(0.2f, seconds); _radius = Mathf.Max(1f, radius);
+            if (!_ring) _ring = MakeRing(72, 0.94f);
+            Shader hg = Shader.Find("Hopoo Games/Deferred/Standard");
+            if (hg)
+            {
+                _mat = new Material(hg) { name = "SvrAttackRing" };
+                _mat.SetColor("_Color", c);
+                if (_mat.HasProperty("_EmColor")) _mat.SetColor("_EmColor", c);
+                if (_mat.HasProperty("_EmTex")) _mat.SetTexture("_EmTex", Texture2D.whiteTexture);
+                if (_mat.HasProperty("_EmPower")) _mat.SetFloat("_EmPower", 4f);
+                if (_mat.HasProperty("_Cull")) _mat.SetFloat("_Cull", 0f);
+            }
+            _outer = Part("Outer");
+            _inner = Part("Inner");
+            Update();
+        }
+
+        private Transform Part(string n)
+        {
+            GameObject g = new GameObject(n);
+            g.transform.SetParent(transform, false);
+            g.AddComponent<MeshFilter>().sharedMesh = _ring;
+            MeshRenderer mr = g.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = _mat;
+            mr.shadowCastingMode = ShadowCastingMode.Off;
+            return g.transform;
+        }
+
+        private void Update()
+        {
+            if (!_outer) return;
+            float k = (Time.time - _start) / _life;
+            if (k >= 1f) { if (_mat) Destroy(_mat); Destroy(gameObject); return; }
+            float pulse = 1f + 0.03f * Mathf.Sin(Time.time * 20f);
+            _outer.localScale = new Vector3(_radius * pulse, 1f, _radius * pulse);
+            float ir = Mathf.Max(0.3f, _radius * k);
+            _inner.localScale = new Vector3(ir, 1f, ir);
+            if (_mat && _mat.HasProperty("_EmPower")) _mat.SetFloat("_EmPower", 2f + 6f * k);
+        }
+
+        /// <summary>A flat ring in the XZ plane: outer radius 1, inner radius `inner`.</summary>
+        private static Mesh MakeRing(int seg, float inner)
+        {
+            Vector3[] v = new Vector3[seg * 2];
+            int[] t = new int[seg * 6];
+            for (int i = 0; i < seg; i++)
+            {
+                float a = i * Mathf.PI * 2f / seg;
+                Vector3 d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                v[i * 2] = d; v[i * 2 + 1] = d * inner;
+                int j = (i + 1) % seg;
+                t[i * 6] = i * 2; t[i * 6 + 1] = j * 2; t[i * 6 + 2] = i * 2 + 1;
+                t[i * 6 + 3] = i * 2 + 1; t[i * 6 + 4] = j * 2; t[i * 6 + 5] = j * 2 + 1;
+            }
+            Mesh m = new Mesh { name = "SvrRing", vertices = v, triangles = t };
+            m.RecalculateNormals();
+            m.RecalculateBounds();
+            return m;
         }
     }
 }
