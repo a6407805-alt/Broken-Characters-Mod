@@ -1568,7 +1568,6 @@ namespace Surveyor
         // Each mode offers a distinct purpose: Bio-Scan reveals monsters through walls in a needle beam,
         // Salvage reveals chests/loot through walls, Topography maps terrain paths, and Peripheral gives wide close-range footing.
         public static readonly string[] OdNames = { "BIO-SCAN (THREAT RADAR)", "SALVAGE SPECTROMETER", "TOPOGRAPHY RECON", "WIDE PERIPHERAL FLOOD" };
-        public static readonly string[] OdDescs = { "NARROW LONG BEAM · TRACKS LIVING THINGS", "FINDS LOOT · CHESTS GLOW BRIGHTER", "WIDE TERRAIN SWEEP · SEE THE GROUND AHEAD", "FULL DOME AROUND YOU · SHORT RANGE" };
         public static readonly string[] OdDescs =
         {
             "NARROW 10° · REACH 180M · REVEALS MONSTERS & DEMON THROUGH WALLS",
@@ -1586,7 +1585,7 @@ namespace Surveyor
         // Minigun & Vacuum selectable upgrade modes (scroll wheel to switch, middle click to cycle)
         public static int MinigunMode = 0; // 0 = IRIDIUM AP, 1 = CRYO COLD, 2 = INCENDIARY, 3 = PLASMA SHOCK
         public static int VacuumMode = 0;  // 0 = POLTERGUST, 1 = SINGULARITY, 2 = CRYO-EXHAUST, 3 = REPULSOR
-        private float _miniModeFlash = -10f, _modeFlash = -10f;
+        private float _miniModeFlash = -10f;
         /// <summary>The R swap calls this: shows the ammo banner.</summary>
         public void FlashAmmo() { _miniModeFlash = Time.time; }
 
