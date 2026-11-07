@@ -43,6 +43,18 @@ namespace BrokenCharactersLauncher
         public IEnumerable<string> Mods => Files.Select(f => f.Path.Split('/')).Where(p => p.Length > 1).Select(p => p[1]).Distinct();
     }
 
+    /// <summary>One commit on main, with how its build went (the review window's upload list).</summary>
+    public sealed class UploadItem
+    {
+        public string Sha { get; init; } = "";
+        public string Title { get; init; } = "";
+        public string Author { get; init; } = "";
+        public DateTimeOffset Date { get; init; }
+        public string Build { get; init; } = "";      // building / built / failed / queued / part (no build of its own)
+        public bool FromCreator { get; init; }        // an auto-update or an approved creator update
+        public string Url { get; init; } = "";
+    }
+
     public static class StagingSync
     {
         private const string Repo = Publisher.Repo;
@@ -189,6 +201,64 @@ namespace BrokenCharactersLauncher
                 await SetRefAsync(key, staged.Branch, sha2, true, ct); // staging now equals main again
                 return sha2;
             }
+        }
+
+        /// <summary>The newest commits on main and how each one's build went (newest first).</summary>
+        public static async Task<List<UploadItem>> RecentUploadsAsync(string key, int count = 20, CancellationToken ct = default)
+        {
+            JsonNode? commits = await CallAsync(key, HttpMethod.Get, "/commits?sha=" + Main + "&per_page=" + count, null, ct);
+            var runs = new Dictionary<string, (string Status, string Conclusion)>();
+            try
+            {
+                JsonNode? r = await CallAsync(key, HttpMethod.Get, "/actions/runs?branch=" + Main + "&per_page=50", null, ct);
+                foreach (JsonNode? run in r?["workflow_runs"]?.AsArray() ?? new JsonArray())
+                {
+                    string sha = run?["head_sha"]?.GetValue<string>() ?? "";
+                    if (sha.Length > 0 && !runs.ContainsKey(sha))
+                        runs[sha] = (run!["status"]?.GetValue<string>() ?? "", run["conclusion"]?.GetValue<string>() ?? "");
+                }
+            }
+            catch (GitHubException) { }
+            var list = new List<UploadItem>();
+            foreach (JsonNode? c in commits?.AsArray() ?? new JsonArray())
+            {
+                if (c == null) continue;
+                string sha = c["sha"]!.GetValue<string>();
+                string msg = c["commit"]?["message"]?.GetValue<string>() ?? "";
+                string title = msg.Split('\n')[0];
+                string build;
+                if (runs.TryGetValue(sha, out var run))
+                    build = run.Status != "completed" ? (run.Status == "queued" ? "queued" : "building")
+                          : run.Conclusion == "success" ? "built" : run.Conclusion == "skipped" || run.Conclusion == "cancelled" ? "part" : "failed";
+                else build = msg.Contains("[skip ci]") ? "part" : "queued";
+                list.Add(new UploadItem
+                {
+                    Sha = sha,
+                    Title = title,
+                    Author = c["author"]?["login"]?.GetValue<string>() ?? c["commit"]?["author"]?["name"]?.GetValue<string>() ?? "",
+                    Date = DateTimeOffset.TryParse(c["commit"]?["author"]?["date"]?.GetValue<string>(), out DateTimeOffset d) ? d : DateTimeOffset.MinValue,
+                    Build = build,
+                    FromCreator = title.StartsWith("Auto-update from", StringComparison.Ordinal) || title.Contains("(approved by owner)"),
+                    Url = c["html_url"]?.GetValue<string>() ?? ""
+                });
+            }
+            return list;
+        }
+
+        /// <summary>When the owner last opened the bell (uploads after this light it up).</summary>
+        public static readonly string BellSeenFile = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BrokenCharacters", "bell-seen.txt");
+
+        public static DateTimeOffset BellSeen()
+        {
+            try { return File.Exists(BellSeenFile) && DateTimeOffset.TryParse(File.ReadAllText(BellSeenFile), out DateTimeOffset d) ? d : DateTimeOffset.UtcNow.AddDays(-2); }
+            catch (IOException) { return DateTimeOffset.UtcNow.AddDays(-2); }
+        }
+
+        public static void MarkBellSeen()
+        {
+            try { Directory.CreateDirectory(Path.GetDirectoryName(BellSeenFile)!); File.WriteAllText(BellSeenFile, DateTimeOffset.UtcNow.ToString("o")); }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException) { }
         }
 
         /// <summary>The commit the published pack (release "latest") was built from.</summary>
