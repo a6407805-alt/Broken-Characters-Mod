@@ -276,8 +276,8 @@ namespace Surveyor
             if (lidarOn && View > 0) DrawViewMarkers(cam, scale, me, white);
 
             // radar map (always): bottom right, just above the skill icons. You in the middle, facing up. Dots labelled.
-            float R = 96f * scale;
-            float cx = Screen.width - 60f * scale - R, cy = Screen.height - 215f * scale - R;
+            float R = 110f * scale;
+            float cx = Screen.width - 70f * scale - R, cy = Screen.height - 200f * scale - R;
             float range = 90f;
             GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.75f);
             GUI.DrawTexture(new Rect(cx - R, cy - R, R * 2f, R * 2f), white);
