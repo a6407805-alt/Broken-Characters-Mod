@@ -15,7 +15,7 @@ A skinny, lanky grocery bagger. He can't afford anything... so he takes out a mo
 
 ## Ja-Ja-Jimmy (primary, 3 s)
 
-- A stuttering sonic shout in a cone. Every "ja" is a pulse that hits for **20%**, then the shout hits for **20% / 50% / 80% / 500%**: the longer he stutters, the more pulses (1, 2, 4 or 8) and the harder the shout (the big one is rare).
+- A stuttering sonic shout in a cone. Every "ja" is a pulse that hits for **20%**, then the shout hits for **80% / 160% / 240% / 550%**: the longer he stutters, the more pulses (1, 2, 4 or 8) and the harder the shout (the big one is rare).
 
 ## Bagging (secondary, 8 s)
 
