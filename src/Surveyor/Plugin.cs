@@ -32,7 +32,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.7.8";
+        public const string PluginVersion = "0.7.9";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -315,29 +315,17 @@ namespace Surveyor
                     if (skins != null && skins.Length > 0) baseSkin = skins[0];
                 }
                 if (!baseSkin) return;
-                // one skin per real EVA suit. Built fresh (NOT copies of Commando's skins: other mods in the pack change
-                // those, and a copy then swaps in their meshes). The suit is repainted from its palette (SvrModel.SkinRoles).
+                // one skin per real EVA suit: copies of THIS model's own default skin (the game gets the body mesh from
+                // the skin, so a skin without it leaves the suit nothing to line up with). The display model gets copies
+                // of its own default, so the select screen never shows another character's skin.
                 SkinDef[] mine = new SkinDef[SvrModel.SkinKeys.Length];
                 for (int i = 0; i < mine.Length; i++)
                 {
-                    SkinDef skin = ScriptableObject.CreateInstance<SkinDef>();
+                    SkinDef skin = Object.Instantiate(baseSkin);
                     ((ScriptableObject)skin).name = "skinBCSurveyor" + SvrModel.SkinKeys[i];
                     SetMember(skin, "nameToken", T + "SKIN_" + SvrModel.SkinKeys[i]);
-                    SetMember(skin, "rootObject", model.gameObject);
                     Sprite icon = SvrIcons.Get("skin_" + SvrModel.SkinKeys[i].ToLowerInvariant(), SvrIcons.Get("skin", null));
                     if (icon) SetMember(skin, "icon", icon);
-                    EmptyArrays(skin);
-                    try
-                    {
-                        Type pt = typeof(SkinDef).Assembly.GetType("RoR2.SkinDefParams");
-                        if (pt != null)
-                        {
-                            object prm = ScriptableObject.CreateInstance(pt);
-                            EmptyArrays(prm);
-                            SetMember(skin, "skinDefParams", prm);
-                        }
-                    }
-                    catch { }
                     mine[i] = skin;
                 }
                 sf.SetValue(old, mine);

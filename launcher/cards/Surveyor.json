@@ -6,8 +6,8 @@
       "added": "2026-10-24T10:06:00-04:00",
       "accent": "#7AD33A",
       "status": "active",
-      "version": "0.7.8",
-      "note": "Active WIP (v0.7.8): suit pose fixed (gun/arms), boost flames no longer smear across the screen, Stalker much tankier (25x Imp Overlord HP, +70 armor), radar bigger and centred under the HUD panel",
+      "version": "0.7.9",
+      "note": "Active WIP (v0.7.9): suit head/lean fixed (skins carry the body mesh again so the suit finds its rest pose), thruster flame error spam fixed; plus hound Stalker with spring physics, tankier boss, centred radar",
       "image": "Assets/Roster/Surveyor.png"
     }
   ]
