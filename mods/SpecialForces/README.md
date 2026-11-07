@@ -44,6 +44,15 @@ storm, sounds). Custom sounds play on Windows only.
 
 ## Changelog
 
+- **1.0.9**: the Hurricane heals a flat 500 health per second during the fight (it was a percentage).
+- **1.0.8**: the control tower heals a flat 5 health per second (it was 3% per second).
+- **1.0.7**: the Hurricane starts at 25M health (still +1M every 5 minutes until the fight) and regenerates 0.01% of his health per second during the fight.
+- **1.0.6**
+  - No chests, shrines or printers on the map. Items come only from enemy drops and the new tower shop.
+  - **Tower shop:** within 30 m of the control tower, press **V**, pick a colour with **1-6** and buy with **F**. A Command cube drops next to you, and you pick any item of that colour from it.
+    - White $100, Blue (lunar) $300, Green $450, Gold (boss) $650, Red $1000, Pink (void) $850.
+    - Prices are in the config.
+  - **Hurricane:** starts at 2.5M health and gains +1M for every 5 minutes of the run. His health is fixed once the fight starts, and he regenerates 1% of his health per second during the fight.
 - **1.0.5**
   - Control tower: a fixed 35,000 health that no longer grows with level, and it heals 3% per second.
   - The Hurricane's health stops growing once the fight starts.

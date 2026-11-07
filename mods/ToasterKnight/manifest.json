@@ -1,6 +1,6 @@
 {
   "name": "ToasterKnight",
-  "version_number": "1.0.1",
+  "version_number": "1.0.2",
   "website_url": "",
   "description": "The Toaster Knight: a grumpy chrome toaster with a butter knife and a waffle shield. Golden Brown (heat up, catch fire), Toast Barrage (two slices per pop), Butter Knife (lunge stab, slows), Pop-Up (launch 18 m, toast rains down), Bagel Setting (a giant bagel lands and cooks everything around him).",
   "dependencies": [
