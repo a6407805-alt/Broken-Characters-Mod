@@ -32,7 +32,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.7.5";
+        public const string PluginVersion = "0.7.6";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -297,6 +297,7 @@ namespace Surveyor
             Transform dm = dcm ? dcm.transform : DisplayPrefab.transform;
             dm.gameObject.AddComponent<SvrLook>();
             dm.gameObject.AddComponent<SvrCustomModel>();
+            AddSkin(dm);           // the select screen applies the display's own skins: give it ours, not Commando's
         }
 
         // The loadout screen wants a skin entry; Commando's own would show Commando's names, so she gets one entry
@@ -314,20 +315,43 @@ namespace Surveyor
                     if (skins != null && skins.Length > 0) baseSkin = skins[0];
                 }
                 if (!baseSkin) return;
-                // one skin per real EVA suit (the suit is repainted from its palette; see SvrModel.SkinRoles)
+                // one skin per real EVA suit. Built fresh (NOT copies of Commando's skins: other mods in the pack change
+                // those, and a copy then swaps in their meshes). The suit is repainted from its palette (SvrModel.SkinRoles).
                 SkinDef[] mine = new SkinDef[SvrModel.SkinKeys.Length];
                 for (int i = 0; i < mine.Length; i++)
                 {
-                    SkinDef skin = Object.Instantiate(baseSkin);
+                    SkinDef skin = ScriptableObject.CreateInstance<SkinDef>();
                     ((ScriptableObject)skin).name = "skinBCSurveyor" + SvrModel.SkinKeys[i];
                     SetMember(skin, "nameToken", T + "SKIN_" + SvrModel.SkinKeys[i]);
+                    SetMember(skin, "rootObject", model.gameObject);
                     Sprite icon = SvrIcons.Get("skin_" + SvrModel.SkinKeys[i].ToLowerInvariant(), SvrIcons.Get("skin", null));
                     if (icon) SetMember(skin, "icon", icon);
+                    EmptyArrays(skin);
+                    try
+                    {
+                        Type pt = typeof(SkinDef).Assembly.GetType("RoR2.SkinDefParams");
+                        if (pt != null)
+                        {
+                            object prm = ScriptableObject.CreateInstance(pt);
+                            EmptyArrays(prm);
+                            SetMember(skin, "skinDefParams", prm);
+                        }
+                    }
+                    catch { }
                     mine[i] = skin;
                 }
                 sf.SetValue(old, mine);
             }
             catch (Exception e) { Log.LogWarning("Skin setup skipped: " + e.Message); }
+        }
+
+        /// <summary>Every null array field on a fresh ScriptableObject becomes an empty array (the game iterates them).</summary>
+        private static void EmptyArrays(object o)
+        {
+            if (o == null) return;
+            foreach (FieldInfo f in o.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                if (f.FieldType.IsArray && f.GetValue(o) == null)
+                    try { f.SetValue(o, Array.CreateInstance(f.FieldType.GetElementType(), 0)); } catch { }
         }
 
         public static void SetMember(object obj, string name, object value)

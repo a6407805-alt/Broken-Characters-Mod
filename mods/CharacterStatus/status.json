@@ -121,8 +121,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.7.5",
-      "note": "Active WIP (v0.7.5): Stalker turns to face its prey, fluid spine-wave gait with turn lean and eased blending, health bar/aim point on its body; Surveyor back on character select; HUD moved to the right column; Q/F key labels"
+      "version": "0.7.6",
+      "note": "Active WIP (v0.7.6): clean EVA skins of her own (copies of Commando's skins pulled in other mods' bodies on the select screen); Stalker faces its prey with fluid animation; HUD right column"
     },
     {
       "name": "MOMMY MILKERS",
