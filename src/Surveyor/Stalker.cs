@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using R2API;
 using R2API.Networking;
 using RoR2;
+using RoR2.Skills;
+using RoR2.Projectile;
 using RoR2.CharacterAI;
 using RoR2.Navigation;
 using UnityEngine;
@@ -49,8 +51,25 @@ namespace Surveyor
 
             MasterPrefab = PrefabAPI.InstantiateClone(srcMaster, "BCShimmerStalkerMaster", true);
             MasterPrefab.GetComponent<CharacterMaster>().bodyPrefab = BodyPrefab;
+            // no blinking onto players: it hunts on foot. Find whichever slot holds the Imp Overlord's blink and drop its AI.
+            HashSet<SkillSlot> blink = new HashSet<SkillSlot>();
+            try
+            {
+                SkillLocator sl = BodyPrefab.GetComponent<SkillLocator>();
+                foreach (SkillSlot slot in new[] { SkillSlot.Primary, SkillSlot.Secondary, SkillSlot.Utility, SkillSlot.Special })
+                {
+                    GenericSkill gs = sl ? sl.GetSkill(slot) : null;
+                    var fam = gs ? gs.skillFamily : null;
+                    var def = fam != null && fam.variants != null && fam.variants.Length > 0 ? fam.variants[0].skillDef : null;
+                    string st = def ? def.activationState.stateType?.Name ?? "" : "";
+                    if (st.Contains("Blink") || st.Contains("Teleport")) blink.Add(slot);
+                    SvrPlugin.Log.LogInfo("Stalker skill " + slot + ": " + st);
+                }
+            }
+            catch { }
+            if (blink.Count == 0) { blink.Add(SkillSlot.Special); blink.Add(SkillSlot.Utility); }
             foreach (AISkillDriver d in MasterPrefab.GetComponents<AISkillDriver>())
-                if (d.skillSlot == SkillSlot.Special) Object.DestroyImmediate(d);          // no teleporting: it walks you down
+                if (blink.Contains(d.skillSlot)) Object.DestroyImmediate(d);
             MasterPrefab.AddComponent<SvrStalkerHunter>();
 
             ContentAddition.AddBody(BodyPrefab);
@@ -187,6 +206,43 @@ namespace Surveyor
         private BaseAI _ai;
         private float _next, _nextCatchUp, _nextPounce, _nextShriek, _pounceAt, _shriekHitAt, _pounceWindEnd, _shriekAt;
         private Vector3 _pounceSpot;
+        private float _spitAt, _nextSpit;
+        private static GameObject _spitPrefab;
+        private static bool _spitTried;
+
+        private void Spit(CharacterBody me, CharacterBody prey)
+        {
+            if (!_spitTried)
+            {
+                _spitTried = true;
+                foreach (string p in new[] { "Prefabs/Projectiles/GravekeeperTrackingFireball", "Prefabs/Projectiles/LunarWispTrackingBomb", "Prefabs/Projectiles/ImpVoidspikeProjectile", "Prefabs/Projectiles/MagmaOrbProjectile" })
+                {
+                    try { _spitPrefab = LegacyResourcesAPI.Load<GameObject>(p); } catch { }
+                    if (_spitPrefab) break;
+                }
+                SvrPlugin.Log.LogInfo("Stalker spit projectile: " + (_spitPrefab ? _spitPrefab.name : "none"));
+            }
+            if (!_spitPrefab || !ProjectileManager.instance) return;
+            SvrStalkerRig rig = me.GetComponent<SvrStalkerRig>();
+            Vector3 from = rig && rig.Head ? rig.Head.position : me.corePosition + Vector3.up * 2f;
+            Vector3 aim = (prey.corePosition - from).normalized;
+            for (int i = -1; i <= 1; i++)
+            {
+                Vector3 dir = Quaternion.AngleAxis(i * 14f, Vector3.up) * aim;
+                ProjectileManager.instance.FireProjectile(new FireProjectileInfo
+                {
+                    projectilePrefab = _spitPrefab,
+                    position = from + dir * 1.5f,
+                    rotation = Util.QuaternionSafeLookRotation(dir + Vector3.up * 0.15f),
+                    owner = me.gameObject,
+                    damage = me.damage * 1.2f,
+                    force = 300f,
+                    crit = false,
+                    speedOverride = 22f
+                });
+            }
+            Util.PlaySound("Play_gravekeeper_attack2_shoot", me.gameObject);
+        }
         private bool _raged, _pouncing;
         private CharacterBody _prey;
 
@@ -231,6 +287,20 @@ namespace Surveyor
             Vector3 to = prey.footPosition - me.footPosition;
             float flat = new Vector2(to.x, to.z).magnitude;
 
+            // spit: rears its head back (0.7 s, the maw glows), then hurls three slow tracking orbs you can outrun or shoot
+            if (_spitAt <= 0f && _pounceWindEnd <= 0f && _shriekAt <= 0f && now >= _nextSpit && flat > 14f && flat < 70f)
+            {
+                _nextSpit = now + (_raged ? Random.Range(5f, 7f) : Random.Range(7f, 10f));
+                _spitAt = now + 0.7f;
+                SvrStalkerEventMessage.Broadcast(me.gameObject, 6);
+            }
+            if (_spitAt > 0f && now >= _spitAt)
+            {
+                _spitAt = 0f;
+                Spit(me, prey);
+                SvrStalkerEventMessage.Broadcast(me.gameObject, 7);
+            }
+
             // shriek: rears back for 0.9 s (purple ring = how far it reaches), then screams
             if (now >= _nextShriek && flat < 35f && _pounceWindEnd <= 0f)
             {
@@ -264,10 +334,11 @@ namespace Surveyor
             }
 
             // pounce: coils for 0.95 s while a red ring marks the spot it will land on (dodge it!), then leaps there
-            if (_pounceWindEnd <= 0f && _shriekAt <= 0f && now >= _nextPounce && motor && motor.isGrounded && flat > 10f && flat < 45f)
+            if (_pounceWindEnd <= 0f && _shriekAt <= 0f && _spitAt <= 0f && now >= _nextPounce && motor && motor.isGrounded && flat > 18f && flat < 45f)
             {
-                _nextPounce = now + (_raged ? Random.Range(6f, 9f) : Random.Range(10f, 14f));
-                _pounceSpot = prey.footPosition;
+                _nextPounce = now + (_raged ? Random.Range(10f, 14f) : Random.Range(16f, 22f));
+                Vector3 back = new Vector3(to.x, 0f, to.z).normalized;
+                _pounceSpot = prey.footPosition - back * 6f;
                 _pounceWindEnd = now + 0.95f;
                 SvrStalkerEventMessage.Broadcast(me.gameObject, 4, _pounceSpot, 11f);
             }
@@ -319,10 +390,10 @@ namespace Surveyor
             _prey = t;
             if (t) { try { Retarget(t); } catch { } }      // separate method: if the game blocks a setter, only this call fails
             // left far behind? it reappears behind its prey, out of sight (at most every 25 s)
-            if (t && Time.time >= _nextCatchUp && (me.corePosition - t.corePosition).sqrMagnitude > 95f * 95f)
+            if (t && Time.time >= _nextCatchUp && (me.corePosition - t.corePosition).sqrMagnitude > 160f * 160f)
             {
-                _nextCatchUp = Time.time + 25f;
-                Vector3 back = t.footPosition - t.gameObject.transform.forward * 30f;
+                _nextCatchUp = Time.time + 75f;
+                Vector3 back = t.footPosition - t.gameObject.transform.forward * 60f;
                 NodeGraph ng = SceneInfo.instance ? SceneInfo.instance.groundNodes : null;
                 if (ng)
                 {

@@ -18,7 +18,7 @@ namespace Surveyor
     /// </summary>
     public class SvrStalkerRig : MonoBehaviour
     {
-        public enum Act { None, Slam, Throw, PounceWindup, Pounce, Land, ShriekWindup, Shriek, Spawn, Death }
+        public enum Act { None, Slam, Throw, PounceWindup, Pounce, Land, ShriekWindup, Shriek, SpitWindup, Spit, Spawn, Death }
 
         private CharacterBody _body;
         private Transform _root;
@@ -34,6 +34,33 @@ namespace Surveyor
         private Vector3 _twitch, _twitchTarget;
         private float _nextTwitch, _nextStateScan;
         private bool _built;
+
+        // ---- spring ("jiggle") bones: the tail whips and the mane swings after the body
+        private class Spring { public string Name; public Transform Bone; public Vector3 Tail, Tip, Vel; public float Stiff, Damp, Gravity; public bool Init; }
+        private readonly List<Spring> _springs = new List<Spring>();
+
+        private void TickSprings(float dt, float sway)
+        {
+            dt = Mathf.Min(dt, 0.05f);
+            foreach (Spring sp in _springs)
+            {
+                if (!sp.Bone) continue;
+                // the animated pose: a gentle sway for the tail, rest for the tatters
+                sp.Bone.localRotation = sp.Name.StartsWith("tail") ? Quaternion.Euler(-4f, sway, 0f) : Quaternion.identity;
+                Vector3 root = sp.Bone.position;
+                Vector3 want = sp.Bone.TransformPoint(sp.Tail);
+                float len = (want - root).magnitude;
+                if (!sp.Init || len < 1e-4f) { sp.Tip = want; sp.Vel = Vector3.zero; sp.Init = true; continue; }
+                sp.Vel += (want - sp.Tip) * sp.Stiff * dt;
+                sp.Vel += Vector3.down * sp.Gravity * _s * dt;
+                sp.Vel *= Mathf.Exp(-sp.Damp * dt);
+                sp.Tip += sp.Vel * dt;
+                Vector3 d = sp.Tip - root;
+                if (d.sqrMagnitude < 1e-8f) d = want - root;
+                sp.Tip = root + d.normalized * len;
+                sp.Bone.rotation = Quaternion.FromToRotation(want - root, sp.Tip - root) * sp.Bone.rotation;
+            }
+        }
         private EntityStateMachine[] _esms;
 
         private static readonly string[] Order =
@@ -73,7 +100,7 @@ namespace Surveyor
             foreach (Renderer r in originals)
                 if (r is SkinnedMeshRenderer smr && smr.sharedMesh) { if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds); }
             float h = any ? Mathf.Clamp(b.size.y, 4f, 8f) : 6.5f;      // the Imp Overlord's body only (effects made it ~25 m tall)
-            _s = h / ourHeight * SvrPlugin.StalkerScale.Value;
+            _s = h * 0.8f / ourHeight * SvrPlugin.StalkerScale.Value;
 
             int layer = model.gameObject.layer;
             Transform holder = model.parent ? model.parent : gameObject.transform;
@@ -99,6 +126,30 @@ namespace Surveyor
                 _rest[n] = t.localPosition;
             }
             Head = _j["head"];
+
+            // extra bones from the file: the tail chain and the mane tatters. They get spring physics.
+            List<string> extra = new List<string>();
+            foreach (string n in bones.Keys)
+                if (n != "root" && n != "head@jaw" && !_j.ContainsKey(n)) extra.Add(n);
+            extra.Sort((x, y) => string.CompareOrdinal(x.Length + x, y.Length + y));
+            foreach (string n in extra)
+            {
+                Vector3 hp = bones[n][0];
+                string pn;
+                if (n.StartsWith("tail")) { int i = 0; int.TryParse(n.Substring(4), out i); pn = i == 0 ? "hips" : "tail" + (i - 1); if (!_j.ContainsKey(pn)) pn = "hips"; }
+                else pn = hp.z > 0.55f ? "chest" : (hp.z > -0.25f ? "spine" : "hips");
+                Transform t = new GameObject("StalkerBone_" + n) { layer = layer }.transform;
+                t.SetParent(_j[pn], false);
+                t.localPosition = hp - head[pn];
+                _j[n] = t;
+                head[n] = hp;
+                bool tail = n.StartsWith("tail");
+                _springs.Add(new Spring
+                {
+                    Name = n, Bone = t, Tail = bones[n][1] - hp,
+                    Stiff = tail ? 55f : 22f, Damp = tail ? 7f : 4.5f, Gravity = tail ? 2f : 9f
+                });
+            }
 
             foreach (var kv in meshes)
             {
@@ -156,23 +207,21 @@ namespace Surveyor
             // (bone, from, to, radius) in our model's units
             var caps = new List<(string bone, Vector3 a, Vector3 b, float r, bool main, bool weak)>();
             void Bone(string n, float r, bool main = false) { if (bones.TryGetValue(n, out var bb)) caps.Add((n, bb[0], NextHead(n, bones, bb[1]), r, main, false)); }
-            Bone("hips", 0.24f);
-            Bone("spine", 0.2f);
-            Bone("chest", 0.34f, true);
-            Bone("neck", 0.12f);
+            Bone("hips", 0.3f);
+            Bone("spine", 0.26f);
+            Bone("chest", 0.42f, true);
+            Bone("neck", 0.16f);
             if (bones.TryGetValue("head", out var hb))
-            {
-                Vector3 hc0 = new Vector3(0f, hb[0].y + 0.1f, hb[0].z + 0.22f);
-                caps.Add(("head", hc0 - new Vector3(0f, 0.02f, 0.3f), hc0 + new Vector3(0f, -0.05f, 0.34f), 0.17f, false, true));   // weak point
-            }
+                caps.Add(("head", hb[0] + new Vector3(0f, 0.04f, 0.05f), hb[1] + new Vector3(0f, 0.02f, 0.1f), 0.2f, false, true));   // weak point
             foreach (string sd in new[] { ".R", ".L" })
             {
-                Bone("upper_arm" + sd, 0.11f);
-                Bone("forearm" + sd, 0.09f);
-                if (bones.TryGetValue("hand" + sd, out var hd)) caps.Add(("hand" + sd, hd[0], hd[0] + (hd[1] - hd[0]).normalized * 0.7f, 0.12f, false, false));
-                Bone("thigh" + sd, 0.14f);
+                Bone("upper_arm" + sd, 0.13f);
+                Bone("forearm" + sd, 0.1f);
+                Bone("thigh" + sd, 0.18f);
                 Bone("shin" + sd, 0.1f);
             }
+            if (bones.ContainsKey("tail0")) Bone("tail0", 0.12f);
+            if (bones.ContainsKey("tail1")) Bone("tail1", 0.1f);
 
             List<HurtBox> made = new List<HurtBox>();
             HurtBox main = null;
@@ -289,6 +338,15 @@ namespace Surveyor
                     Util.PlaySound("Play_imp_overlord_idle_VO", gameObject);
                     SvrGroundRing.Show(_body.footPosition, radius, 0.9f, new Color(0.7f, 0.2f, 1f));
                     break;
+                case 6:   // spit wind-up: head rears back, maw glows
+                    Trigger(Act.SpitWindup, 0.7f);
+                    _jawTarget = 70f;
+                    Util.PlaySound("Play_gravekeeper_attack2_charge", gameObject);
+                    break;
+                case 7:   // spit
+                    _act = Act.Spit; _actT = 0f; _actDur = 0.6f;
+                    _jawTarget = 85f;
+                    break;
                 case 3:   // shriek
                     _act = Act.Shriek; _actT = 0f; _actDur = 1.6f;
                     _jawTarget = 90f;
@@ -345,11 +403,11 @@ namespace Surveyor
         // ---------------------------------------------------------------- animation (every client)
 
         // the all-fours stance, posed and checked in Blender: hands and hind feet both on the ground
-        private static readonly Vector3 HipsQ = new Vector3(55f, 0f, 0f), SpineQ = new Vector3(6f, 0f, 0f), ChestQ = new Vector3(4f, 0f, 0f);
-        private static readonly Vector3 NeckQ = new Vector3(-48f, 0f, 0f), HeadQ = new Vector3(-22f, 0f, 0f);
-        private static readonly Vector3 ThighRQ = new Vector3(-65f, 0f, 8f), ThighLQ = new Vector3(-65f, 0f, -8f), ShinQ = new Vector3(30f, 0f, 0f), FootQ = new Vector3(-15f, 0f, 0f);
-        private static readonly Vector3 UpperArmRQ = new Vector3(-100f, 0f, 18f), UpperArmLQ = new Vector3(-100f, 0f, -18f), ForearmQ = new Vector3(22f, 0f, 0f);
-        private const float DropQ = -0.22f;
+        private static readonly Vector3 HipsQ = Vector3.zero, SpineQ = Vector3.zero, ChestQ = Vector3.zero;
+        private static readonly Vector3 NeckQ = Vector3.zero, HeadQ = Vector3.zero;
+        private static readonly Vector3 ThighRQ = Vector3.zero, ThighLQ = Vector3.zero, ShinQ = Vector3.zero, FootQ = Vector3.zero;
+        private static readonly Vector3 UpperArmRQ = Vector3.zero, UpperArmLQ = Vector3.zero, ForearmQ = Vector3.zero;
+        private const float DropQ = 0f;
 
         private readonly Dictionary<string, Quaternion> _cur = new Dictionary<string, Quaternion>();
         private readonly Dictionary<string, Quaternion> _tgt = new Dictionary<string, Quaternion>();
@@ -381,7 +439,7 @@ namespace Surveyor
             bool rage = _body.healthComponent && _body.healthComponent.combinedHealthFraction < 0.5f;
 
             float moveK = Mathf.Clamp01(speed / 7f);
-            float stride = 2.6f * _s;
+            float stride = 1.9f * _s;
             _phase += speed * dt / Mathf.Max(0.5f, stride) * Mathf.PI;
             float ph = _phase, sn = Mathf.Sin(ph), cs = Mathf.Cos(ph);
             float stepPhase = Mathf.Floor(ph / Mathf.PI);
@@ -411,21 +469,27 @@ namespace Surveyor
 
             float idle = 1f - moveK;
             float breathe = Mathf.Sin(_t * (rage ? 2.4f : 1.4f));
-            float gait = 20f * moveK * (rage ? 1.15f : 1f);
+            float gait = 26f * moveK * (rage ? 1.15f : 1f);
 
-            // ---- base: the prowl (diagonal gait: right hand with left foot)
-            Vector3 hips = HipsQ + new Vector3(breathe * 1.5f * idle, sn * 5f * moveK, sn * 4f * moveK);
-            Vector3 spine = SpineQ + new Vector3(breathe * 2f * idle, -sn * 5f * moveK, 0f);
-            Vector3 chest = ChestQ + new Vector3(breathe * 2.5f * idle, sn * 6f * moveK, -sn * 3f * moveK);
-            Vector3 neck = NeckQ + new Vector3(lookPitch * 0.4f, lookYaw * 0.45f, 0f);
-            Vector3 headR = HeadQ + new Vector3(lookPitch * 0.6f, lookYaw * 0.55f, 0f) + _twitch;
-            Vector3 thR = ThighRQ + new Vector3(-sn * gait, 0f, 0f), thL = ThighLQ + new Vector3(sn * gait, 0f, 0f);
-            Vector3 shR = ShinQ + new Vector3(Mathf.Max(0f, cs) * 30f * moveK, 0f, 0f), shL = ShinQ + new Vector3(Mathf.Max(0f, -cs) * 30f * moveK, 0f, 0f);
-            Vector3 ftR = FootQ - new Vector3(Mathf.Max(0f, cs) * 15f * moveK, 0f, 0f), ftL = FootQ - new Vector3(Mathf.Max(0f, -cs) * 15f * moveK, 0f, 0f);
-            Vector3 uaR = UpperArmRQ + new Vector3(sn * gait, 0f, Mathf.Sin(_t * 0.6f) * 2f * idle), uaL = UpperArmLQ + new Vector3(-sn * gait, 0f, -Mathf.Sin(_t * 0.6f + 1f) * 2f * idle);
-            Vector3 faR = ForearmQ + new Vector3(Mathf.Max(0f, -cs) * 28f * moveK, 0f, 0f), faL = ForearmQ + new Vector3(Mathf.Max(0f, cs) * 28f * moveK, 0f, 0f);
-            Vector3 hR = new Vector3(Mathf.Sin(_t * 0.9f) * 8f * idle, 0f, 0f), hL = new Vector3(Mathf.Sin(_t * 0.9f + 2f) * 8f * idle, 0f, 0f);
-            float drop = DropQ - Mathf.Abs(cs) * 0.05f * moveK;
+            // ---- base: a dog's trot. Diagonal pairs move together (front-right with hind-left); each leg swings
+            // forward with its lower joints folded (lift), plants, and pushes back straight.
+            float pa = ph, pb = ph + Mathf.PI;                      // pair A: FR + HL, pair B: FL + HR
+            float swA = -Mathf.Sin(pa) * gait, swB = -Mathf.Sin(pb) * gait;
+            float liftA = Mathf.Max(0f, Mathf.Cos(pa)) * moveK, liftB = Mathf.Max(0f, Mathf.Cos(pb)) * moveK;
+            Vector3 hips = new Vector3(breathe * 1.2f * idle + Mathf.Sin(ph * 2f) * 1.5f * moveK, Mathf.Sin(ph) * 3f * moveK, Mathf.Sin(ph) * 3f * moveK);
+            Vector3 spine = new Vector3(breathe * 1.5f * idle, -Mathf.Sin(ph) * 3f * moveK, 0f);
+            Vector3 chest = new Vector3(breathe * 2.5f * idle - Mathf.Sin(ph * 2f) * 1.5f * moveK, Mathf.Sin(ph) * 3f * moveK, -Mathf.Sin(ph) * 2f * moveK);
+            Vector3 neck = new Vector3(lookPitch * 0.45f + Mathf.Sin(ph * 2f) * 3f * moveK, lookYaw * 0.45f, 0f);
+            Vector3 headR = new Vector3(lookPitch * 0.55f - Mathf.Sin(ph * 2f) * 3f * moveK, lookYaw * 0.55f, 0f) + _twitch;
+            // front legs (pair A = right, pair B = left)
+            Vector3 uaR = new Vector3(swA, 0f, 0f), uaL = new Vector3(swB, 0f, 0f);
+            Vector3 faR = new Vector3(55f * liftA, 0f, 0f), faL = new Vector3(55f * liftB, 0f, 0f);
+            Vector3 hR = new Vector3(45f * liftA + Mathf.Sin(_t * 0.9f) * 4f * idle, 0f, 0f), hL = new Vector3(45f * liftB + Mathf.Sin(_t * 0.9f + 2f) * 4f * idle, 0f, 0f);
+            // hind legs (pair A = left, pair B = right)
+            Vector3 thL = new Vector3(swA * 0.9f - 10f * liftA, 0f, 0f), thR = new Vector3(swB * 0.9f - 10f * liftB, 0f, 0f);
+            Vector3 shL = new Vector3(-30f * liftA, 0f, 0f), shR = new Vector3(-30f * liftB, 0f, 0f);
+            Vector3 ftL = new Vector3(45f * liftA, 0f, 0f), ftR = new Vector3(45f * liftB, 0f, 0f);
+            float drop = DropQ - Mathf.Abs(Mathf.Cos(ph * 2f)) * 0.04f * moveK;
 
             // fluid body: a slow S-wave runs from the hips up through the neck as it walks, it leans into turns,
             // and the head holds steady against the sway (like a predator locked on)
@@ -511,6 +575,25 @@ namespace Surveyor
                     shR += new Vector3(25f * k, 0f, 0f); shL += new Vector3(25f * k, 0f, 0f);
                     break;
                 }
+                case Act.SpitWindup:
+                {
+                    // plants the front legs, draws the head back and up, maw open
+                    float k = Smooth(0f, 1f, u);
+                    neck += new Vector3(-30f * k, 0f, 0f);
+                    headR += new Vector3(-25f * k, 0f, 0f);
+                    chest += new Vector3(-6f * k, 0f, 0f);
+                    uaR += new Vector3(-12f * k, 0f, 6f * k); uaL += new Vector3(-12f * k, 0f, -6f * k);
+                    break;
+                }
+                case Act.Spit:
+                {
+                    // whips the head forward
+                    float k = 1f - Smooth(0.15f, 1f, u);
+                    neck += new Vector3(25f * k, 0f, 0f);
+                    headR += new Vector3(20f * k, 0f, 0f);
+                    chest += new Vector3(6f * k, 0f, 0f);
+                    break;
+                }
                 case Act.ShriekWindup:
                 {
                     // rears back onto its haunches, head drawn in, ribs swelling
@@ -593,6 +676,7 @@ namespace Surveyor
             Set("upper_arm.L", uaL, a); Set("forearm.L", faL, a); Set("hand.L", hL, a);
             Set("thigh.R", thR, a); Set("shin.R", shR, a); Set("foot.R", ftR, a);
             Set("thigh.L", thL, a); Set("shin.L", shL, a); Set("foot.L", ftL, a);
+            TickSprings(dt, Mathf.Sin(_t * 1.1f) * 6f * idle + Mathf.Sin(ph) * 8f * moveK - _lean * 0.8f);
         }
 
         private bool _slamShook;
