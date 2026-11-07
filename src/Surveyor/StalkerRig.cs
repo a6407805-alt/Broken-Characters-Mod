@@ -71,8 +71,8 @@ namespace Surveyor
             Bounds b = new Bounds(model.position, Vector3.zero);
             bool any = false;
             foreach (Renderer r in originals)
-                if (r is SkinnedMeshRenderer || r is MeshRenderer) { if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds); }
-            float h = any ? Mathf.Clamp(b.size.y, 2f, 20f) : 6f;
+                if (r is SkinnedMeshRenderer smr && smr.sharedMesh) { if (!any) { b = r.bounds; any = true; } else b.Encapsulate(r.bounds); }
+            float h = any ? Mathf.Clamp(b.size.y, 4f, 8f) : 6.5f;      // the Imp Overlord's body only (effects made it ~25 m tall)
             _s = h / ourHeight * SvrPlugin.StalkerScale.Value;
 
             int layer = model.gameObject.layer;
