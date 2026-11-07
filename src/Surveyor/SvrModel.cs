@@ -667,27 +667,37 @@ namespace Surveyor
             return false;
         }
 
+        private static bool _loggedSmr;
+
         private static void BuildBindPose(Transform model)
         {
             Bind.Clear();
-            // the body mesh is the skinned mesh with the most bones (item displays and props have a handful); it alone
-            // decides the rest pose, other meshes only fill bones it does not have
-            List<SkinnedMeshRenderer> smrs = new List<SkinnedMeshRenderer>();
+            // the body's own skinned meshes in hierarchy order (the order the suit was tuned against), then item
+            // displays only for bones nobody else covers (late in a run they used to win and the suit flew off)
+            List<SkinnedMeshRenderer> own = new List<SkinnedMeshRenderer>(), items = new List<SkinnedMeshRenderer>();
             foreach (SkinnedMeshRenderer smr in model.GetComponentsInChildren<SkinnedMeshRenderer>(true))
-                if (smr && smr.sharedMesh && smr.bones != null && smr.sharedMesh.bindposes != null && !smr.name.StartsWith("SvrPart_")) smrs.Add(smr);
-            smrs.Sort((x, y) => (IsItemDisplay(x.transform, model) ? 1 : 0).CompareTo(IsItemDisplay(y.transform, model) ? 1 : 0) != 0
-                ? (IsItemDisplay(x.transform, model) ? 1 : 0).CompareTo(IsItemDisplay(y.transform, model) ? 1 : 0)
-                : y.bones.Length.CompareTo(x.bones.Length));
-            foreach (SkinnedMeshRenderer smr in smrs)
             {
-                Matrix4x4[] bp = smr.sharedMesh.bindposes;
-                Transform[] bones = smr.bones;
-                Matrix4x4 rootM = smr.transform.localToWorldMatrix;
-                for (int i = 0; i < bones.Length && i < bp.Length; i++)
-                    if (bones[i] && !Bind.ContainsKey(bones[i])) Bind[bones[i]] = rootM * bp[i].inverse;
+                if (!smr || !smr.sharedMesh || smr.bones == null || smr.sharedMesh.bindposes == null || smr.name.StartsWith("SvrPart_")) continue;
+                (IsItemDisplay(smr.transform, model) ? items : own).Add(smr);
             }
+            if (!_loggedSmr)
+            {
+                _loggedSmr = true;
+                StringBuilder sb = new StringBuilder("Surveyor skinned meshes: ");
+                foreach (SkinnedMeshRenderer smr in own) sb.Append(smr.name).Append('(').Append(smr.bones.Length).Append(") ");
+                SvrPlugin.Log.LogInfo(sb.ToString());
+            }
+            foreach (List<SkinnedMeshRenderer> list in new[] { own, items })
+                foreach (SkinnedMeshRenderer smr in list)
+                {
+                    Matrix4x4[] bp = smr.sharedMesh.bindposes;
+                    Transform[] bones = smr.bones;
+                    Matrix4x4 rootM = smr.transform.localToWorldMatrix;
+                    for (int i = 0; i < bones.Length && i < bp.Length; i++)
+                        if (bones[i] && !Bind.ContainsKey(bones[i])) Bind[bones[i]] = rootM * bp[i].inverse;
+                }
             if (Bind.Count == 0) SvrPlugin.Log.LogWarning("Surveyor model: no bind pose found, using the current pose.");
-            else SvrPlugin.Log.LogInfo($"Surveyor model: bind pose for {Bind.Count} bones (body mesh {(smrs.Count > 0 ? smrs[0].name : "-")}).");
+            else SvrPlugin.Log.LogInfo($"Surveyor model: bind pose for {Bind.Count} bones.");
         }
 
         private static Matrix4x4 BM(Transform t) => Bind.TryGetValue(t, out Matrix4x4 m) ? m : t.localToWorldMatrix;

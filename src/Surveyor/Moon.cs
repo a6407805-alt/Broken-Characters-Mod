@@ -61,7 +61,6 @@ namespace Surveyor
             try { characterMotor.Motor.ForceUnground(); } catch { }
             characterMotor.velocity = dir * SvrPlugin.LeapForward.Value + Vector3.up * SvrPlugin.LeapUp.Value;
             AddRecoil(1.5f, 2.5f, -0.5f, 0.5f);                   // the camera snaps back with the kick
-            if (characterBody) characterBody.isSprinting = true;
         }
 
         public override void FixedUpdate()
@@ -247,7 +246,12 @@ namespace Surveyor
                     dir = -up;
                 }
                 float flick = 0.8f + 0.4f * Mathf.PerlinNoise(Time.time * 22f, i * 3.1f);
-                float len = (i < 2 ? 0.95f : 0.6f) * _thrust * flick * s;
+                // fade out flames right in front of the camera (looking up, the camera sits behind her back)
+                float camK = 1f;
+                Camera cam = Camera.main;
+                if (cam) camK = Mathf.Clamp01((Vector3.Distance(cam.transform.position, at) - 1.2f * s) / (2f * s));
+                if (camK < 0.05f) { o.gameObject.SetActive(false); c.gameObject.SetActive(false); continue; }
+                float len = (i < 2 ? 0.95f : 0.6f) * Mathf.Min(1f, _thrust) * flick * s * camK;
                 float rad = (i < 2 ? 0.075f : 0.06f) * s * (0.7f + 0.3f * _thrust);
                 o.gameObject.SetActive(true);
                 c.gameObject.SetActive(true);

@@ -4846,9 +4846,10 @@ namespace Surveyor
             _label.wordWrap = false;
             // right-hand column: under the objective / jukebox boxes, above the radar
             float row = 23f * scale;
-            float panelW = 270f * scale;
+            float panelW = 240f * scale;
             float panelH = row * 4f + 6f * scale;
-            float sx = Screen.width - 60f * scale - panelW, sy = Screen.height - 440f * scale - panelH;
+            float radarCx = Screen.width - 70f * scale - 110f * scale;           // same centre as the radar (Lidar.Map.cs)
+            float sx = radarCx - panelW * 0.5f, sy = Screen.height - 200f * scale - 220f * scale - 34f * scale - panelH;
             _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(13f * scale));
             GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.72f);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy - 6f * scale, panelW + 16f * scale, panelH + 12f * scale), white);

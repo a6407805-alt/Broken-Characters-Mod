@@ -32,7 +32,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.7.7";
+        public const string PluginVersion = "0.7.8";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -170,9 +170,9 @@ namespace Surveyor
             StalkerOnlyWithSurveyor = Config.Bind("13. Shimmer Stalker", "OnlyWithSurveyor_v1", true, "Only when someone in the run plays the Surveyor.");
             StalkerDelayMin = Config.Bind("13. Shimmer Stalker", "DelayMin_v1", 150f, "Seconds into a stage, earliest arrival.");
             StalkerDelayMax = Config.Bind("13. Shimmer Stalker", "DelayMax_v1", 240f, "Seconds into a stage, latest arrival.");
-            StalkerHealthMult = Config.Bind("13. Shimmer Stalker", "HealthMult_v2", 12f, "Health x Imp Overlord. A raid boss: it takes the whole team.");
+            StalkerHealthMult = Config.Bind("13. Shimmer Stalker", "HealthMult_v3", 25f, "Health x Imp Overlord. A raid boss: it takes the whole team.");
             StalkerPerPlayer = Config.Bind("13. Shimmer Stalker", "HealthPerExtraPlayer_v1", 2f, "Extra health per extra player (2 = +200% each).");
-            StalkerArmor = Config.Bind("13. Shimmer Stalker", "Armor_v1", 40f, "Extra armor (40 = takes about 30% less damage).");
+            StalkerArmor = Config.Bind("13. Shimmer Stalker", "Armor_v2", 70f, "Extra armor (70 = takes about 40% less damage).");
             StalkerScale = Config.Bind("13. Shimmer Stalker", "Size_v2", 1.35f, "Size x Imp Overlord.");
             StalkerDarkness = Config.Bind("13. Shimmer Stalker", "LightsLeft_v1", 0.35f, "How much stage light is left while it lives (1 = no dimming).");
             ScanNextKey = Config.Bind("8. Peek and Overdrive", "ScanModeKey_v2", "Q", "Tap to cycle scan modes: TOPOGRAPHY -> THERMAL -> SALVAGE -> STRUCTURAL. (E stays free for the game's Interact key.)");
