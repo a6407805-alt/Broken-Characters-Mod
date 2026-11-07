@@ -31,7 +31,7 @@ namespace Jukebox
     {
         public const string PluginGUID = "com.brokencharacters.jukebox";
         public const string PluginName = "Jukebox";
-        public const string PluginVersion = "1.1.3";
+        public const string PluginVersion = "1.1.4";
 
         public static ManualLogSource Log;
         public static JukeboxPlugin Instance;
@@ -186,10 +186,20 @@ namespace Jukebox
 
                 KeyCode downK = VolumeDownKey.Value;
                 KeyCode upK = VolumeUpKey.Value;
-                bool downPressed = Input.GetKeyDown(downK);
-                bool upPressed = Input.GetKeyDown(upK);
-                bool downHeld = Input.GetKey(downK);
-                bool upHeld = Input.GetKey(upK);
+                // the Surveyor uses 1/2/3 for her LiDAR views: the number keys don't touch the volume while you play her
+                bool surveyor = false;
+                try
+                {
+                    var lu = RoR2.LocalUserManager.GetFirstLocalUser();
+                    surveyor = lu != null && lu.cachedBody && lu.cachedBody.name.StartsWith("BCSurveyorBody");
+                }
+                catch { }
+                bool blockDown = surveyor && downK >= KeyCode.Alpha0 && downK <= KeyCode.Alpha9;
+                bool blockUp = surveyor && upK >= KeyCode.Alpha0 && upK <= KeyCode.Alpha9;
+                bool downPressed = !blockDown && Input.GetKeyDown(downK);
+                bool upPressed = !blockUp && Input.GetKeyDown(upK);
+                bool downHeld = !blockDown && Input.GetKey(downK);
+                bool upHeld = !blockUp && Input.GetKey(upK);
 
                 // Simultaneous 1 + 2 press toggles between Max Garage-Rock and Low Tactical Combat preset
                 if ((downPressed && upHeld) || (upPressed && downHeld))

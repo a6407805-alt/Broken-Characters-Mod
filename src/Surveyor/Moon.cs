@@ -32,32 +32,54 @@ namespace Surveyor
         }
     }
 
-    /// <summary>Shift: a thruster leap. Up and in the move direction; with moon gravity it is a long, slow arc.</summary>
+    /// <summary>
+    /// Shift: Thruster Boost. Every thruster fires at once: a sudden hard shove where you are moving (or looking), held
+    /// for a split second so it really kicks, then the speed bleeds off. Works in the air.
+    /// </summary>
     public class SvrMoonLeapState : BaseSkillState
     {
+        private const float PushTime = 0.22f;
+        private Vector3 _dir;
+
         public override void OnEnter()
         {
             base.OnEnter();
-            SvrThrusters.Burst(gameObject, 1f);                   // runs on every client: everyone sees the burn
+            SvrThrusters.Burst(gameObject, 1.4f);                 // runs on every client: everyone sees the burn
+            Util.PlaySound("Play_MULT_shift_start", gameObject);
+            Util.PlaySound("Play_loader_shift_release", gameObject);
             Util.PlaySound("Play_commando_shift", gameObject);
             if (!isAuthority || !characterMotor) return;
+            Vector3 aim = GetAimRay().direction;
             Vector3 dir = inputBank ? inputBank.moveVector : Vector3.zero;
-            if (dir.sqrMagnitude < 0.01f)
-            {
-                Vector3 f = GetAimRay().direction;
-                f.y = 0f;
-                dir = f.sqrMagnitude > 0.01f ? f : transform.forward;
-            }
             dir.y = 0f;
+            if (dir.sqrMagnitude < 0.01f) { dir = aim; dir.y = 0f; }
+            if (dir.sqrMagnitude < 0.01f) dir = transform.forward;
             dir.Normalize();
+            // looking up or down while boosting tilts the burst a little
+            dir = (dir + Vector3.up * Mathf.Clamp(aim.y, -0.35f, 0.5f)).normalized;
+            _dir = dir;
             try { characterMotor.Motor.ForceUnground(); } catch { }
             characterMotor.velocity = dir * SvrPlugin.LeapForward.Value + Vector3.up * SvrPlugin.LeapUp.Value;
+            AddRecoil(1.5f, 2.5f, -0.5f, 0.5f);                   // the camera snaps back with the kick
+            if (characterBody) characterBody.isSprinting = true;
         }
 
         public override void FixedUpdate()
         {
             base.FixedUpdate();
-            if (fixedAge >= 0.3f && isAuthority) outer.SetNextStateToMain();
+            if (!isAuthority) return;
+            if (fixedAge < PushTime && characterMotor)
+            {
+                // keep the thrust on for a moment so air drag and ground friction can't eat the kick
+                Vector3 v = characterMotor.velocity;
+                Vector3 want = _dir * SvrPlugin.LeapForward.Value;
+                Vector3 flat = Vector3.ProjectOnPlane(v, Vector3.up);
+                Vector3 wantFlat = Vector3.ProjectOnPlane(want, Vector3.up);
+                if (Vector3.Dot(flat, wantFlat.normalized) < wantFlat.magnitude)
+                    flat = Vector3.MoveTowards(flat, wantFlat, 200f * Time.fixedDeltaTime);
+                characterMotor.velocity = new Vector3(flat.x, Mathf.Max(v.y, want.y + SvrPlugin.LeapUp.Value * 0.5f), flat.z);
+            }
+            if (fixedAge >= 0.3f) outer.SetNextStateToMain();
         }
 
         public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.PrioritySkill; }

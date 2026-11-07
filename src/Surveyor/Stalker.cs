@@ -42,6 +42,7 @@ namespace Surveyor
             b.baseMaxHealth *= hp;
             b.levelMaxHealth *= hp;
             b.baseMoveSpeed *= 1.15f;
+            b.baseArmor += SvrPlugin.StalkerArmor.Value;
             b.isChampion = true;
             BodyPrefab.AddComponent<SvrStalkerFx>();
 
@@ -104,7 +105,7 @@ namespace Surveyor
                 {
                     cm.inventory.GiveItem(RoR2Content.Items.UseAmbientLevel);
                     int extra = Mathf.Max(0, players.Count - 1);
-                    if (extra > 0) cm.inventory.GiveItem(RoR2Content.Items.BoostHp, 10 * extra);   // +100% HP per extra player
+                    if (extra > 0) cm.inventory.GiveItem(RoR2Content.Items.BoostHp, Mathf.RoundToInt(10f * SvrPlugin.StalkerPerPlayer.Value * extra));
                 }
                 Chat.SendBroadcastChat(new Chat.SimpleChatMessage { baseToken = "<color=#b14bff>The lights are failing. Something tall is hunting whoever strays from the group...</color>" });
             }
@@ -247,7 +248,9 @@ namespace Surveyor
         private Vector3 _baseScale;
         private Transform[] _eyes = new Transform[2];
         private Light _eyeLight;
-        private bool _looked, _raged;
+        private bool _looked, _raged, _custom;
+        private Transform _jaw;
+        private float _jawOpen, _jawTarget, _nextSnap, _nextGrowl;
         private float _rageK, _dim;
         private GUIStyle _style;
 
@@ -270,6 +273,7 @@ namespace Surveyor
 
         private void Shriek()
         {
+            _jawTarget = 70f;
             LocalUser lu = LocalUserManager.GetFirstLocalUser();
             GameObject at = lu != null && lu.cachedBody ? lu.cachedBody.gameObject : gameObject;
             Util.PlaySound("Play_imp_overlord_spawn", at);       // heard right next to you, wherever it is
@@ -281,10 +285,12 @@ namespace Surveyor
             _model = SvrPlugin.Model(gameObject);
             if (!_model) return;
             _looked = true;
+            try { _custom = SvrStalkerModel.Apply(_model, out _jaw); }
+            catch (System.Exception e) { SvrPlugin.Log.LogError("Stalker model: " + e); _custom = false; }
             _model.localScale *= SvrPlugin.StalkerScale.Value;
             _baseScale = _model.localScale;
             CharacterModel cm = _model.GetComponent<CharacterModel>();
-            if (cm && cm.baseRendererInfos != null)
+            if (!_custom && cm && cm.baseRendererInfos != null)
             {
                 for (int i = 0; i < cm.baseRendererInfos.Length; i++)
                 {
@@ -312,7 +318,7 @@ namespace Surveyor
                 if (eyeMat.HasProperty("_EmTex")) eyeMat.SetTexture("_EmTex", Texture2D.whiteTexture);
                 if (eyeMat.HasProperty("_EmPower")) eyeMat.SetFloat("_EmPower", 14f);
             }
-            for (int i = 0; i < 2; i++)
+            for (int i = 0; i < 2 && !_custom; i++)          // the Blender model has its own six eyes
             {
                 GameObject e = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 e.name = "StalkerEye" + i;
@@ -345,7 +351,30 @@ namespace Surveyor
             }
             _rageK = Mathf.MoveTowards(_rageK, _raged ? 1f : 0f, dt * 1.5f);
             // crawler phase: drops low and long, like it is running on all fours
-            _model.localScale = Vector3.Scale(_baseScale, new Vector3(1f + 0.12f * _rageK, 1f - 0.3f * _rageK, 1f + 0.25f * _rageK));
+            _model.localScale = Vector3.Scale(_baseScale, new Vector3(1f + 0.1f * _rageK, 1f - 0.22f * _rageK, 1f + 0.2f * _rageK));
+
+            // the jaw: hangs open, snaps, gapes wide when it screams (and chatters once it is enraged)
+            if (_jaw)
+            {
+                float now = Time.time;
+                if (now >= _nextSnap)
+                {
+                    _nextSnap = now + Random.Range(_raged ? 0.6f : 2f, _raged ? 1.6f : 5f);
+                    _jawTarget = Random.Range(10f, _raged ? 45f : 30f);
+                }
+                _jawTarget = Mathf.MoveTowards(_jawTarget, 0f, dt * 25f);
+                _jawOpen = Mathf.Lerp(_jawOpen, _jawTarget, 1f - Mathf.Exp(-14f * dt));
+                float chatter = _raged ? Mathf.Sin(now * 38f) * 4f : 0f;
+                _jaw.localRotation = Quaternion.Euler(_jawOpen + chatter, 0f, 0f);
+            }
+            // a growl now and then when it is near you
+            LocalUser lu0 = LocalUserManager.GetFirstLocalUser();
+            if (lu0 != null && lu0.cachedBody && Time.time >= _nextGrowl && (lu0.cachedBody.corePosition - _body.corePosition).sqrMagnitude < 70f * 70f)
+            {
+                _nextGrowl = Time.time + Random.Range(9f, 18f);
+                Util.PlaySound("Play_imp_overlord_attack1_throw", gameObject);
+                _jawTarget = 55f;
+            }
 
             float s = Mathf.Abs(_model.lossyScale.x);
             Vector3 hp = _head ? _head.position : _model.position + _model.up * 3f * s;
@@ -406,7 +435,7 @@ namespace Surveyor
             float scale = Screen.height / 1080f;
             Texture2D white = Texture2D.whiteTexture;
             Color old = GUI.color;
-            if (_style == null) _style = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
+            if (_style == null) _style = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, clipping = TextClipping.Overflow, wordWrap = false };
 
             // dread: heartbeat vignette + static when it is close to you
             LocalUser lu = LocalUserManager.GetFirstLocalUser();
@@ -452,7 +481,7 @@ namespace Surveyor
             GUI.Label(new Rect(x, y - 30f * scale, w, 26f * scale), "THE SHIMMER STALKER", _style);
             _style.fontSize = Mathf.Max(9, Mathf.RoundToInt(12f * scale));
             GUI.color = new Color(0.8f, 0.7f, 0.9f, 0.9f);
-            GUI.Label(new Rect(x, y + h + 3f * scale, w, 18f * scale), _raged ? "IT DROPS TO ALL FOURS — STAY TOGETHER" : "IT HUNTS WHOEVER STRAYS — STAY TOGETHER", _style);
+            GUI.Label(new Rect(x, y + h + 3f * scale, w, 18f * scale), _raged ? "ENRAGED — IT DROPS TO ALL FOURS. STAY TOGETHER" : "RAID BOSS — IT HUNTS WHOEVER STRAYS. KILL IT AS A TEAM", _style);
             GUI.color = old;
         }
     }

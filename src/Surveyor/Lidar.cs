@@ -1586,6 +1586,27 @@ namespace Surveyor
         public static int MinigunMode = 0; // 0 = IRIDIUM AP, 1 = CRYO COLD, 2 = INCENDIARY, 3 = PLASMA SHOCK
         public static int VacuumMode = 0;  // 0 = POLTERGUST, 1 = SINGULARITY, 2 = CRYO-EXHAUST, 3 = REPULSOR
         private float _miniModeFlash = -10f;
+        /// <summary>The R swap calls this: shows the ammo banner.</summary>
+        public void FlashAmmo() { _miniModeFlash = Time.time; }
+
+        private GUIStyle _bannerStyle;
+        private void Banner(string title, string sub, Color c, float t, float scale, float y)
+        {
+            if (_bannerStyle == null) _bannerStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, clipping = TextClipping.Overflow, wordWrap = false };
+            float a = Mathf.Clamp01(t / 0.12f) * Mathf.Clamp01((1.6f - t) / 0.4f);
+            float w = 640f * scale, h = 66f * scale;
+            float x = (Screen.width - w) * 0.5f;
+            GUI.color = new Color(0.02f, 0.04f, 0.07f, 0.8f * a);
+            GUI.DrawTexture(new Rect(x, y, w, h), Texture2D.whiteTexture);
+            GUI.color = new Color(c.r, c.g, c.b, a);
+            GUI.DrawTexture(new Rect(x, y, w, 2f * scale), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(x, y + h - 2f * scale, w, 2f * scale), Texture2D.whiteTexture);
+            _bannerStyle.fontSize = Mathf.Max(14, Mathf.RoundToInt(26f * scale));
+            GUI.Label(new Rect(x, y + 4f * scale, w, 34f * scale), title, _bannerStyle);
+            _bannerStyle.fontSize = Mathf.Max(10, Mathf.RoundToInt(14f * scale));
+            GUI.color = new Color(0.9f, 0.95f, 1f, 0.9f * a);
+            GUI.Label(new Rect(x, y + 38f * scale, w, 24f * scale), sub, _bannerStyle);
+        }
         private float _vacModeFlash = -10f;
 
         public static readonly string[] MinigunModeNames = { "IRIDIUM AP", "CRYO COLD", "INCENDIARY", "PLASMA SHOCK" };
@@ -3068,8 +3089,8 @@ namespace Surveyor
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
-            // v0.7.0 simple kit: one ammo, no vacuum modes, no caches, no Q/V/H/B keys. F toggles LiDAR mode.
-            MinigunMode = 0;
+            // v0.7.1 kit: F toggles LiDAR mode, 1/2/3 pick the LiDAR view (each fires a pulse across the map), R swaps ammo.
+            ViewKeys();
             KeyCode peek;
             if (TryKey(SvrPlugin.PeekKey.Value, out peek) && Input.GetKeyDown(peek))
             {
@@ -3084,7 +3105,7 @@ namespace Surveyor
             float prevRestored = _demon.LastRestoredUntil;
             // the old client-only Shimmer Demon is retired: the Shimmer Stalker is a real shared enemy (Stalker.cs)
             // new features never get to stop the scanner: an error here is logged once and skipped
-            try { BlackHoleTick(dt); MiscLidarFx(dt); }
+            try { BlackHoleTick(dt); MiscLidarFx(dt); ViewTick(dt); }
             catch (Exception ex) { if (!_loggedFeatureError) { _loggedFeatureError = true; SvrPlugin.Log.LogError("Black Hole / blink fx: " + ex); } }
             if (_demon.LastRestoredUntil > prevRestored)
             {
@@ -4807,27 +4828,48 @@ namespace Surveyor
             int fs = Mathf.RoundToInt(15f * scale);
             _label.fontSize = Mathf.Max(10, fs);
 
-            // Tactical LiDAR telemetry positioned cleanly at Center-Left (safely below RoR2 money & objectives, above health/chat)
+            // v0.7.1 panel (left, under the money): LiDAR state, the view keys, the ammo. Rows have room so text never squashes.
+            _label.clipping = TextClipping.Overflow;
+            _label.wordWrap = false;
             float sx = 20f * scale, sy = 240f * scale;
-            float panelW = 460f * scale;
-            float panelH = 48f * scale;
-
-            // Semi-transparent tactical dark glass backdrop & sleek accented corner borders (100% readable over any stage)
+            float row = 28f * scale;
+            float panelW = 520f * scale;
+            float panelH = row * 3f + 6f * scale;
             GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.72f);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy - 6f * scale, panelW + 16f * scale, panelH + 12f * scale), white);
             GUI.color = new Color(0.2f, 0.85f, 1f, 0.45f);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy - 6f * scale, 3f * scale, panelH + 12f * scale), white);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy - 6f * scale, 24f * scale, 1.5f * scale), white);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy + panelH + 6f * scale, 24f * scale, 1.5f * scale), white);
-
-            // v0.7.0 compact panel: LiDAR state + the kit
             {
                 float ry = sy + 2f * scale;
                 GUI.color = Peeking ? new Color(0.4f, 1f, 0.7f, 0.95f) : new Color(0.3f, 0.95f, 1f, 0.95f);
-                GUI.Label(new Rect(sx, ry, panelW, 20f * scale), Peeking ? "LIDAR: OFF — VISOR OPEN   [F] LIDAR ON" : "LIDAR: ON   [F] VISOR OPEN", _label);
-                GUI.color = new Color(0.8f, 0.9f, 1f, 0.85f);
-                GUI.Label(new Rect(sx, ry + 22f * scale, panelW, 20f * scale), "M2 BLACK HOLE · SHIFT MOON LEAP · R LIDAR PULSE", _label);
+                GUI.Label(new Rect(sx, ry, panelW, row), Peeking ? "LIDAR: OFF — VISOR OPEN   [F] LIDAR ON" : "LIDAR: ON   [F] VISOR OPEN", _label);
+                // view keys, the active one lit in its colour
+                float vx = sx;
+                for (int v = 1; v <= 3; v++)
+                {
+                    string t = "[" + v + "] " + ViewNames[v] + "   ";
+                    GUI.color = View == v ? ViewColors[v] : new Color(0.65f, 0.75f, 0.85f, 0.75f);
+                    Vector2 sz = _label.CalcSize(new GUIContent(t));
+                    GUI.Label(new Rect(vx, ry + row, sz.x + 4f, row), t, _label);
+                    vx += sz.x;
+                }
+                int am = SvrAmmo.Current;
+                GUI.color = SvrAmmo.Colors[am];
+                GUI.Label(new Rect(sx, ry + row * 2f, panelW, row), "[R] AMMO: " + SvrAmmo.Names[am] + "  ·  " + SvrAmmo.Descs[am], _label);
             }
+
+            // ammo swap / view banner (centre, lower third)
+            float flash = Time.time - _miniModeFlash;
+            if (flash < 1.6f)
+            {
+                int am = SvrAmmo.Current;
+                Banner(SvrAmmo.Names[am] + " ROUNDS", SvrAmmo.Descs[am], SvrAmmo.Colors[am], flash, scale, Screen.height * 0.7f);
+            }
+            float vflash = Time.time - _viewFlash;
+            if (flash >= 1.6f && vflash < 1.6f && View > 0)
+                Banner("LIDAR VIEW: " + ViewNames[View], ViewDescs[View], ViewColors[View], vflash, scale, Screen.height * 0.7f);
 
             // Top-Center Shimmer Demon Boss & Containment Health Bar (compact 360 width, no overlap)
             if (_demon.Active)
@@ -4890,7 +4932,7 @@ namespace Surveyor
                 float w = 210f * scale, h = 10f * scale;
                 float bx = Screen.width * 0.5f - w * 0.5f, by = Screen.height * 0.64f;
                 GUI.color = new Color(0.02f, 0.04f, 0.06f, 0.72f);
-                GUI.DrawTexture(new Rect(bx - 4f * scale, by - 4f * scale, w + 8f * scale, h + 28f * scale), white);
+                GUI.DrawTexture(new Rect(bx - 4f * scale, by - 4f * scale, w + 8f * scale, h + 38f * scale), white);
 
                 const int segs = 12;
                 float segGap = 2.5f * scale;
@@ -4910,12 +4952,14 @@ namespace Surveyor
                 }
 
                 // Thin thermal load bar right below the segmented spool gauge
-                GUI.color = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) ? new Color(0.35f, 0.95f, 1f, 0.9f) : new Color(1f, 0.38f, 0.12f, 0.9f);
+                GUI.color = sp.Overheated ? new Color(1f, 0.2f, 0.1f, 0.95f) : SvrAmmo.Colors[SvrAmmo.Current];
                 GUI.DrawTexture(new Rect(bx, by + h + 2f * scale, w * Mathf.Clamp01(sp.Heat), 2.5f * scale), white);
 
                 string spoolTag = sp.Overheated ? "THERMAL OVERLOAD!" : (sp.AnchorLeft > 0f ? "SPOOL · ANCHORED" : (SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) ? "SPOOL · CRYO-COOLED" : "SPOOL · HEAT " + Mathf.RoundToInt(sp.Heat * 100f) + "%"));
+                if (sp.Overheated) spoolTag = "OVERHEATED — VENTING " + Mathf.RoundToInt(sp.Heat * 100f) + "%";
+                else if (sp.AnchorLeft <= 0f) spoolTag = SvrAmmo.Names[SvrAmmo.Current] + " · HEAT " + Mathf.RoundToInt(sp.Heat * 100f) + "%";
                 GUI.color = sp.Overheated ? new Color(1f, 0.35f, 0.25f, 0.98f) : new Color(0.82f, 1f, 0.75f, 0.92f);
-                GUI.Label(new Rect(bx, by + h + 4f * scale, w + 40f * scale, 20f * scale), spoolTag, _label);
+                GUI.Label(new Rect(bx, by + h + 6f * scale, w + 80f * scale, 26f * scale), spoolTag, _label);
             }
 
             // Ground item crosshair hover inspection tooltip

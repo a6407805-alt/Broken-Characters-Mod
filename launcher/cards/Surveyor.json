@@ -6,8 +6,8 @@
       "added": "2026-10-24T10:06:00-04:00",
       "accent": "#7AD33A",
       "status": "active",
-      "version": "0.7.0",
-      "note": "Active WIP (v0.7.0): simplified kit (minigun, Black Hole, Moon Leap with thrusters, LiDAR Pulse), moon gravity, LiDAR objective markers + radar map, Shimmer Stalker night-stalker raid boss everyone fights",
+      "version": "0.7.1",
+      "note": "Active WIP (v0.7.1): LiDAR views 1/2/3 (monsters/items/objectives map pulses), radar bottom-right with labels, R ammo swap (Lead/Inferno/Frost/Rad), Thruster Boost, charged straight-line Black Hole, Blender-modelled Shimmer Stalker raid boss",
       "image": "Assets/Roster/Surveyor.png"
     }
   ]

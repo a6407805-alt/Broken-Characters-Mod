@@ -29,15 +29,21 @@ namespace Surveyor
             Prefab = PrefabAPI.InstantiateClone(src, "BCSurveyorBlackHole", true);
             float life = SvrPlugin.BlackHoleSeconds.Value;
 
+            // straight line, steady speed, no slowing down: it drags everything along its path
+            float speed = SvrPlugin.BlackHoleSpeed.Value;
             ProjectileSimple ps = Prefab.GetComponent<ProjectileSimple>();
             if (ps)
             {
-                Set(ps, "desiredForwardSpeed", 34f);
-                Set(ps, "velocity", 34f);
+                Set(ps, "desiredForwardSpeed", speed);
+                Set(ps, "velocity", speed);
                 Set(ps, "lifetime", life + 0.3f);
-                Set(ps, "enableVelocityOverLifetime", true);
-                Set(ps, "velocityOverLifetime", new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(0.12f, 0.3f), new Keyframe(0.25f, 0f), new Keyframe(1f, 0f)));
+                Set(ps, "enableVelocityOverLifetime", false);
+                Set(ps, "updateAfterFiring", true);
             }
+            Rigidbody rb = Prefab.GetComponent<Rigidbody>();
+            if (rb) { rb.useGravity = false; rb.drag = 0f; }
+            foreach (Collider c in Prefab.GetComponentsInChildren<Collider>(true))
+                if (c && !c.isTrigger) c.isTrigger = true;     // flies through enemies instead of bumping to a stop
             RadialForce rf = Prefab.GetComponent<RadialForce>();
             if (rf)
             {
@@ -96,29 +102,93 @@ namespace Surveyor
         private void OnDisable() { Live.Remove(transform); }
     }
 
-    /// <summary>M2: fire the Black Hole.</summary>
+    /// <summary>M2: charge the Black Hole (a dark orb grows in the gun), then fire it.</summary>
     public class SvrBlackHoleState : BaseSkillState
     {
+        private float _charge;
+        private bool _fired;
+        private GameObject _orb;
+        private Light _light;
+        private static Material _orbMat;
+
         public override void OnEnter()
         {
             base.OnEnter();
+            _charge = SvrPlugin.BlackHoleCharge.Value / Mathf.Max(0.5f, attackSpeedStat);
+            Util.PlaySound("Play_voidman_m2_chargeUp", gameObject);
+            Util.PlaySound("Play_mage_m2_charge", gameObject);
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
-            Util.PlaySound("Play_voidman_shift_pop", gameObject);
-            if (!isAuthority) return;
+            if (isAuthority) StartAimMode(GetAimRay(), 2f, false);
+            try { MakeOrb(); } catch { }
+        }
+
+        private void MakeOrb()
+        {
+            if (!_orbMat)
+            {
+                Shader hg = Shader.Find("Hopoo Games/Deferred/Standard");
+                if (!hg) return;
+                _orbMat = new Material(hg) { name = "SvrBlackHoleCharge" };
+                _orbMat.SetColor("_Color", new Color(0.02f, 0f, 0.05f));
+                if (_orbMat.HasProperty("_EmColor")) _orbMat.SetColor("_EmColor", new Color(0.55f, 0.15f, 1f));
+                if (_orbMat.HasProperty("_EmTex")) _orbMat.SetTexture("_EmTex", Texture2D.whiteTexture);
+                if (_orbMat.HasProperty("_EmPower")) _orbMat.SetFloat("_EmPower", 0.6f);
+            }
+            _orb = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            _orb.name = "SvrBlackHoleCharge";
+            Object.Destroy(_orb.GetComponent<Collider>());
+            _orb.GetComponent<Renderer>().sharedMaterial = _orbMat;
+            _orb.transform.localScale = Vector3.zero;
+            GameObject lg = new GameObject("SvrBlackHoleChargeLight");
+            lg.transform.SetParent(_orb.transform, false);
+            _light = lg.AddComponent<Light>();
+            _light.type = LightType.Point;
+            _light.color = new Color(0.6f, 0.2f, 1f);
+            _light.range = 6f;
+        }
+
+        public override void Update()
+        {
+            base.Update();
+            if (!_orb) return;
             Ray aim = GetAimRay();
-            StartAimMode(aim, 2f, false);
-            AddRecoil(-2f, -3f, -0.6f, 0.6f);
+            float k = Mathf.Clamp01(age / Mathf.Max(0.05f, _charge));
+            _orb.transform.position = aim.origin + aim.direction * 1.6f + Vector3.down * 0.15f;
+            float wob = 1f + 0.12f * Mathf.Sin(age * 40f);
+            _orb.transform.localScale = Vector3.one * (0.55f * k * wob);
+            if (_light) _light.intensity = 4f * k;
+        }
+
+        public override void FixedUpdate()
+        {
+            base.FixedUpdate();
+            if (!_fired && fixedAge >= _charge)
+            {
+                _fired = true;
+                if (_orb) { Object.Destroy(_orb); _orb = null; }
+                Util.PlaySound("Play_voidman_shift_pop", gameObject);
+                Util.PlaySound("Play_voidman_m2_shoot", gameObject);
+                if (isAuthority) Fire();
+            }
+            if (_fired && fixedAge >= _charge + 0.25f && isAuthority) outer.SetNextStateToMain();
+        }
+
+        private void Fire()
+        {
+            Ray aim = GetAimRay();
+            AddRecoil(-3f, -4f, -0.8f, 0.8f);
             if (SvrBlackHole.Prefab && ProjectileManager.instance)
             {
                 ProjectileManager.instance.FireProjectile(new FireProjectileInfo
                 {
                     projectilePrefab = SvrBlackHole.Prefab,
-                    position = aim.origin + aim.direction * 1.5f,
+                    position = aim.origin + aim.direction * 1.6f,
                     rotation = Util.QuaternionSafeLookRotation(aim.direction),
                     owner = gameObject,
                     damage = damageStat * SvrPlugin.BlackHoleDamage.Value,
                     force = 0f,
                     crit = RollCrit(),
+                    speedOverride = SvrPlugin.BlackHoleSpeed.Value,
                     damageTypeOverride = DamageType.Stun1s
                 });
             }
@@ -129,12 +199,12 @@ namespace Surveyor
             }
         }
 
-        public override void FixedUpdate()
+        public override void OnExit()
         {
-            base.FixedUpdate();
-            if (fixedAge >= 0.35f && isAuthority) outer.SetNextStateToMain();
+            if (_orb) Object.Destroy(_orb);
+            base.OnExit();
         }
 
-        public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.PrioritySkill; }
+        public override InterruptPriority GetMinimumInterruptPriority() { return _fired ? InterruptPriority.Any : InterruptPriority.PrioritySkill; }
     }
 }

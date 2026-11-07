@@ -84,7 +84,7 @@ namespace Surveyor
             LocalUser lu = LocalUserManager.GetFirstLocalUser();
             Camera cam = lu != null && lu.cameraRigController ? lu.cameraRigController.sceneCam : null;
             if (!cam) return;
-            if (_style == null) _style = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
+            if (_style == null) _style = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, clipping = TextClipping.Overflow, wordWrap = false };
             float scale = Screen.height / 1080f;
             Texture2D white = Texture2D.whiteTexture;
             float now = Time.time;
