@@ -121,8 +121,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.7.6",
-      "note": "Active WIP (v0.7.6): clean EVA skins of her own (copies of Commando's skins pulled in other mods' bodies on the select screen); Stalker faces its prey with fluid animation; HUD right column"
+      "version": "0.7.7",
+      "note": "Active WIP (v0.7.7): Stalker rebuilt in Blender as a real four-legged hound (dog trot, spring-physics tail and mane), no more blinking onto players, pounce lands short, new telegraphed ranged spit; thruster flames fixed (sky + screen smear)"
     },
     {
       "name": "MOMMY MILKERS",

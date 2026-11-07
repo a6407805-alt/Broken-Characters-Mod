@@ -161,15 +161,18 @@ namespace Surveyor
             return g.transform;
         }
 
+        /// <summary>
+        /// Flame material: a plain unlit, see-through colour (forward pass). The old deferred material with a very high
+        /// glow drew wrong over the sky and blew out the bloom, which smeared across the screen and the HUD.
+        /// </summary>
         private static Material Glow(Color c, float power)
         {
-            Shader hg = Shader.Find("Hopoo Games/Deferred/Standard");
-            Material m = hg ? new Material(hg) : null;
-            if (!m) return null;
-            m.SetColor("_Color", c);
-            if (m.HasProperty("_EmColor")) m.SetColor("_EmColor", c);
-            if (m.HasProperty("_EmTex")) m.SetTexture("_EmTex", Texture2D.whiteTexture);
-            if (m.HasProperty("_EmPower")) m.SetFloat("_EmPower", power);
+            Shader sh = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color");
+            if (!sh) return null;
+            Material m = new Material(sh) { name = "SvrThrusterFlame" };
+            float a = power > 8f ? 0.9f : 0.55f;
+            m.color = new Color(Mathf.Clamp01(c.r), Mathf.Clamp01(c.g), Mathf.Clamp01(c.b), a);
+            m.renderQueue = 3100;
             return m;
         }
 
@@ -256,7 +259,7 @@ namespace Surveyor
             if (_light)
             {
                 _light.transform.position = _chest ? _chest.position - fwd * (0.45f * s) - up * (0.5f * s) : transform.position;
-                _light.intensity = on ? 2.5f * _thrust * (0.85f + 0.3f * Random.value) : 0f;
+                _light.intensity = on ? 1.6f * _thrust * (0.9f + 0.1f * Mathf.PerlinNoise(Time.time * 15f, 3.3f)) : 0f;
             }
         }
     }
