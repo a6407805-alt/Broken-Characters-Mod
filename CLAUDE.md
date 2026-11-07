@@ -63,8 +63,8 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
   3. Only switch a character to `"green"` when the owner explicitly states it is finished.
 - **Current Status & Active Work Log**:
   - **Actively Working (`active`)**:
-    - **The Surveyor** (`v0.7.0`): simplified kit (M1 minigun, M2 Black Hole projectile, Shift Moon Leap + thrusters, R LiDAR Pulse team reveal), moon gravity, LiDAR objective markers + radar; Shimmer Stalker = real networked night-stalker boss (Imp Overlord clone, `Stalker.cs`); old client-only demon retired.
-    - **Jukebox** (`v1.1.3`, utility mod): RoR2-styled HUD panel under objective box, keys 1/2 volume boost, Vote to Skip (`0`).
+    - **The Surveyor** (`v0.7.1`): M1 minigun with R ammo swap (Lead fast/cool, Inferno burn/overheats, Frost stacking slow -> ice lock, Rad spreading sickness; buffs in `Ammo.cs`, hits sent to host via R2API.Networking), M2 charged straight-line Black Hole, Shift Thruster Boost, LiDAR views 1/2/3 with map-wide pulses, radar bottom-right with labels; Shimmer Stalker raid boss uses the Blender model `stalker_model.bin.gz` (`Model/blender_stalker.py`, loader `StalkerModel.cs`).
+    - **Jukebox** (`v1.1.4`, utility mod): RoR2-styled HUD panel under objective box, keys 1/2 volume boost (ignored while playing the Surveyor, who uses 1/2/3), Vote to Skip (`0`).
   - **Complete (`green` — owner confirmed done)**: Billy Bigsuits (`v1.0.2`), Brother (`v1.0.2`), Clay Rebel (`v1.0.1`), Reaper (`v1.0.0`).
   - **In Progress (`yellow` — `>= 0.3.0`, not yet declared done)**: CarMax Specialist (`v1.0.0`), Audi Technician (`v1.0.1`), Wilbur (`v1.0.0`), Ashwing Drake (`v1.8.4`), Nidus (`v1.0.9`), Phantom Assassin (`v1.0.3`), Infested General (`v1.1.11`), Gravitos (`v1.2.0`), Emberwarden (`v1.0.0`), The Duelist (`v1.0.0`).
 

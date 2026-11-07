@@ -7,6 +7,7 @@ using BepInEx.Logging;
 using EntityStates;
 using R2API;
 using R2API.ContentManagement;
+using R2API.Networking;
 using RoR2;
 using RoR2.Skills;
 using UnityEngine;
@@ -22,6 +23,7 @@ namespace Surveyor
     /// the Demon is local to her own client (nothing to sync, nobody else can see it).
     /// </summary>
     [BepInDependency(RecalculateStatsAPI.PluginGUID)]
+    [BepInDependency(NetworkingAPI.PluginGUID)]
     [BepInDependency(PrefabAPI.PluginGUID)]
     [BepInDependency(LanguageAPI.PluginGUID)]
     [BepInDependency(R2APIContentManager.PluginGUID)]
@@ -30,7 +32,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.7.0";
+        public const string PluginVersion = "0.7.1";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -53,6 +55,7 @@ namespace Surveyor
         public static ConfigEntry<bool> HeavyMotion;
         public static ConfigEntry<float> BlackHoleCooldown, BlackHoleSeconds, BlackHoleRadius, BlackHoleDamage, BlackHoleTickDamage, XrayRange;
         public static ConfigEntry<float> MoonGravity, MoonMaxFall, LeapUp, LeapForward, LeapCooldown, PulseRevealRange, PulseRevealSeconds;
+        public static ConfigEntry<float> BlackHoleSpeed, BlackHoleCharge, StalkerArmor, StalkerPerPlayer;
         public static ConfigEntry<bool> StalkerEnabled, StalkerOnlyWithSurveyor;
         public static ConfigEntry<float> StalkerDelayMin, StalkerDelayMax, StalkerHealthMult, StalkerScale, StalkerDarkness;
         public static ConfigEntry<bool> DemonEnabled;
@@ -74,6 +77,7 @@ namespace Surveyor
             RegisterLanguage();
             CreateBody();
             SvrBlackHole.Create();
+            SvrAmmo.Create();
             CreateSkills();
             RegisterSurvivor();
             SvrStalker.Create();
@@ -148,24 +152,28 @@ namespace Surveyor
             HeavyMotion = Config.Bind("9. Model", "HeavyMotion_v1", true, "Heavy-gunner body language: both hands on the gun, gun lag, lean, sway, recoil.");
             HeavyStepShake = Config.Bind("9. Model", "StepShake_v1", 1f, "Camera thud on each heavy step and landing (0 = off).");
             BlackHoleCooldown = Config.Bind("10. Black Hole", "Cooldown_v1", 10f, "Seconds between Black Hole orbs (M2 in BLACK HOLE mode).");
-            BlackHoleSeconds = Config.Bind("10. Black Hole", "Seconds_v1", 4f, "How long the anchored singularity pulls before it implodes.");
+            BlackHoleSeconds = Config.Bind("10. Black Hole", "Seconds_v2", 4.5f, "How long the black hole flies (pulling everything along its path) before it implodes.");
+            BlackHoleSpeed = Config.Bind("10. Black Hole", "Speed_v2", 14f, "Metres per second. It flies in a straight line at this steady speed.");
+            BlackHoleCharge = Config.Bind("10. Black Hole", "ChargeSeconds_v2", 0.6f, "Wind-up before it fires.");
             BlackHoleRadius = Config.Bind("10. Black Hole", "Radius_v1", 16f, "Metres. Enemies and projectiles inside are pulled to the centre.");
             BlackHoleDamage = Config.Bind("10. Black Hole", "ImplosionDamage_v1", 8f, "Implosion damage (8 = 800%), with a stun.");
             BlackHoleTickDamage = Config.Bind("10. Black Hole", "TickDamage_v1", 0.4f, "Damage every half second near the event horizon (0.4 = 40%).");
             XrayRange = Config.Bind("5. LiDAR", "ChestXrayRange_v1", 14f, "Metres. Closer than this, chests show a wireframe box, a tier nameplate and what is inside.");
             MoonGravity = Config.Bind("11. Moon", "Gravity_v1", 0.4f, "Gravity while airborne (1 = normal, 0.4 = moon). No fall damage.");
             MoonMaxFall = Config.Bind("11. Moon", "MaxFallSpeed_v1", 22f, "Fastest she can fall (m/s).");
-            LeapUp = Config.Bind("11. Moon", "LeapUp_v1", 16f, "Moon Leap (Shift): upward thrust.");
-            LeapForward = Config.Bind("11. Moon", "LeapForward_v1", 14f, "Moon Leap (Shift): forward thrust.");
-            LeapCooldown = Config.Bind("11. Moon", "LeapCooldown_v1", 5f, "Moon Leap cooldown (seconds).");
+            LeapUp = Config.Bind("11. Moon", "BoostUp_v2", 6f, "Thruster Boost (Shift): upward kick (m/s).");
+            LeapForward = Config.Bind("11. Moon", "BoostSpeed_v2", 40f, "Thruster Boost (Shift): burst speed (m/s). It bleeds off over about a second.");
+            LeapCooldown = Config.Bind("11. Moon", "BoostCooldown_v2", 4f, "Thruster Boost cooldown (seconds).");
             PulseRevealRange = Config.Bind("12. LiDAR Pulse", "RevealRange_v1", 80f, "R: enemies this close are marked for the whole team (the Shimmer Stalker at any range).");
             PulseRevealSeconds = Config.Bind("12. LiDAR Pulse", "RevealSeconds_v1", 8f, "R: how long the marks last.");
             StalkerEnabled = Config.Bind("13. Shimmer Stalker", "Enabled_v1", true, "Night-stalker event (host's setting decides).");
             StalkerOnlyWithSurveyor = Config.Bind("13. Shimmer Stalker", "OnlyWithSurveyor_v1", true, "Only when someone in the run plays the Surveyor.");
             StalkerDelayMin = Config.Bind("13. Shimmer Stalker", "DelayMin_v1", 150f, "Seconds into a stage, earliest arrival.");
             StalkerDelayMax = Config.Bind("13. Shimmer Stalker", "DelayMax_v1", 240f, "Seconds into a stage, latest arrival.");
-            StalkerHealthMult = Config.Bind("13. Shimmer Stalker", "HealthMult_v1", 2.5f, "Health x Imp Overlord (plus +100% per extra player).");
-            StalkerScale = Config.Bind("13. Shimmer Stalker", "Size_v1", 1.25f, "Size x Imp Overlord.");
+            StalkerHealthMult = Config.Bind("13. Shimmer Stalker", "HealthMult_v2", 12f, "Health x Imp Overlord. A raid boss: it takes the whole team.");
+            StalkerPerPlayer = Config.Bind("13. Shimmer Stalker", "HealthPerExtraPlayer_v1", 2f, "Extra health per extra player (2 = +200% each).");
+            StalkerArmor = Config.Bind("13. Shimmer Stalker", "Armor_v1", 40f, "Extra armor (40 = takes about 30% less damage).");
+            StalkerScale = Config.Bind("13. Shimmer Stalker", "Size_v2", 1.35f, "Size x Imp Overlord.");
             StalkerDarkness = Config.Bind("13. Shimmer Stalker", "LightsLeft_v1", 0.35f, "How much stage light is left while it lives (1 = no dimming).");
             ScanNextKey = Config.Bind("8. Peek and Overdrive", "ScanModeKey_v2", "Q", "Tap to cycle scan modes: TOPOGRAPHY -> THERMAL -> SALVAGE -> STRUCTURAL. (E stays free for the game's Interact key.)");
             PeekKey = Config.Bind("8. Peek and Overdrive", "PeekKey_v1", "F", "Peek (visor off) on its own key, whatever skill is in the utility slot.");
@@ -213,27 +221,29 @@ namespace Surveyor
             LanguageAPI.Add(T + "SUBTITLE", "Blind Engineer");
             LanguageAPI.Add(T + "DESCRIPTION",
                 "The Surveyor is a blind, heavily armored engineer in a white, orange and blue EVA rig. The world is black: she sees what her LiDAR scanner paints, and she moves like she is on the moon.<color=#CCD3E0>\r\n\r\n" +
-                "< ! > Press F to switch LiDAR off and look at the real world (blurry), press F again to switch it back on.\r\n\r\n" +
-                "< ! > The LiDAR marks chests, the teleporter, shrines and printers through walls, with a radar map on the left.\r\n\r\n" +
-                "< ! > A few minutes into each stage the lights fail and the Shimmer Stalker comes for whoever strays. Stay together and kill it as a team for red items.</color>");
+                "< ! > Press F to switch LiDAR off and look at the real world, F again to switch it back on.\r\n\r\n" +
+                "< ! > LiDAR views: 1 = every monster on the map, 2 = every item, 3 = objectives. Each fires a coloured pulse across the whole stage.\r\n\r\n" +
+                "< ! > R swaps ammo: LEAD (fast, cool), INFERNO (huge damage, overheats), FROST (stacks into ice), RAD (a sickness that spreads).\r\n\r\n" +
+                "< ! > A few minutes into each stage the lights fail and the Shimmer Stalker comes for whoever strays. It takes the whole team to kill.</color>");
             LanguageAPI.Add(T + "OUTRO", "..and so she left, still hearing the scanner ping.");
             LanguageAPI.Add(T + "FAIL", "..and so she vanished, and the dots went dark.");
             LanguageAPI.Add(T + "SKIN_DEFAULT", "Survey Plate");
 
             LanguageAPI.Add(T + "PASSIVE_NAME", "LiDAR Vision / Moon Walker");
             LanguageAPI.Add(T + "PASSIVE_DESC",
-                "The screen is dark: an always-on scanner paints the world as a <style=cIsUtility>point cloud</style>, marks <style=cIsUtility>chests and objectives through walls</style> and fills a <style=cIsUtility>radar map</style>. Press <style=cIsUtility>F</style> to see the real world. " +
+                "The screen is dark: an always-on scanner paints the world as a <style=cIsUtility>point cloud</style> with a <style=cIsUtility>radar</style> above your skills. " +
+                "Press <style=cIsUtility>1 / 2 / 3</style> to pulse the whole map for <style=cIsDamage>monsters</style>, <style=cIsUtility>items</style> or <style=cIsUtility>objectives</style>. F shows the real world. " +
                 "<style=cIsUtility>Low gravity</style>: high, slow jumps and <style=cIsUtility>no fall damage</style>.");
             LanguageAPI.Add(T + "PRIMARY_NAME", "Rotary Survey Minigun");
-            LanguageAPI.Add(T + "PRIMARY_DESC", "Hold to <style=cIsUtility>spool up</style> and fire a stream of armor-piercing rounds. The longer you hold, the faster it fires.");
+            LanguageAPI.Add(T + "PRIMARY_DESC", "Hold to <style=cIsUtility>spool up</style> and fire a stream of rounds. The longer you hold, the faster it fires. Fire too long and it <style=cIsHealth>overheats</style> (how fast depends on the ammo).");
             LanguageAPI.Add(T + "BLACKHOLE_NAME", "Black Hole");
-            LanguageAPI.Add(T + "BLACKHOLE_DESC", "Fire a singularity that drifts to a stop and <style=cIsUtility>pulls every enemy in</style> for " + BlackHoleSeconds.Value.ToString("0") +
+            LanguageAPI.Add(T + "BLACKHOLE_DESC", "Charge, then fire a singularity that flies straight ahead at a steady speed, <style=cIsUtility>sucking in every enemy along its path</style> for " + BlackHoleSeconds.Value.ToString("0.#") +
                 "s, then <style=cIsDamage>implodes for " + (BlackHoleDamage.Value * 100f).ToString("0") + "% damage</style> and <style=cIsUtility>stuns</style>.");
-            LanguageAPI.Add(T + "MOONLEAP_NAME", "Moon Leap");
-            LanguageAPI.Add(T + "MOONLEAP_DESC", "Fire your <style=cIsUtility>backpack and boot thrusters</style> and leap high and far. Moon gravity carries you in a long, slow arc.");
-            LanguageAPI.Add(T + "LIDARPULSE_NAME", "LiDAR Pulse");
-            LanguageAPI.Add(T + "LIDARPULSE_DESC", "A 360-degree pulse: <style=cIsDamage>" + (PulseDamage.Value * 100f).ToString("0") + "% damage</style> and a <style=cIsUtility>stun</style> close by, floods the LiDAR, and <style=cIsUtility>marks every enemy within " +
-                PulseRevealRange.Value.ToString("0") + "m for the whole team</style> through walls. Always finds the Shimmer Stalker.");
+            LanguageAPI.Add(T + "MOONLEAP_NAME", "Thruster Boost");
+            LanguageAPI.Add(T + "MOONLEAP_DESC", "Slam every <style=cIsUtility>backpack and boot thruster</style> at once: a sudden <style=cIsUtility>burst of speed</style> where you are moving (or looking). Works in the air.");
+            LanguageAPI.Add(T + "AMMOSWAP_NAME", "Ammo Swap");
+            LanguageAPI.Add(T + "AMMOSWAP_DESC", "Swap the minigun ammo. <style=cIsUtility>LEAD</style>: fires faster and longer. <style=cIsDamage>INFERNO</style>: huge fire damage, overheats fast. " +
+                "<style=cIsUtility>FROST</style>: every hit slows more until ice <style=cIsUtility>locks them in place</style>. <style=cIsHealing>RAD</style>: a sickness that <style=cIsDamage>jumps from enemy to enemy</style>.");
         }
 
         // ---------------------------------------------------------------- body
@@ -361,6 +371,7 @@ namespace Surveyor
             ContentAddition.AddEntityState<SvrBlackHoleState>(out _);
             ContentAddition.AddEntityState<SvrMoonLeapState>(out _);
             ContentAddition.AddEntityState<SvrLidarPulseState>(out _);
+            ContentAddition.AddEntityState<SvrAmmoSwapState>(out _);
 
             SkillLocator sl = BodyPrefab.GetComponent<SkillLocator>();
             foreach (GenericSkill old in BodyPrefab.GetComponentsInChildren<GenericSkill>(true)) Object.DestroyImmediate(old);
@@ -373,12 +384,12 @@ namespace Surveyor
             SkillDef blackHole = MakeSkill("BLACKHOLE", typeof(SvrBlackHoleState), "Weapon", BlackHoleCooldown.Value, true, true, InterruptPriority.Skill, "blackhole", false);
             SkillDef leap = MakeSkill("MOONLEAP", typeof(SvrMoonLeapState), "Body", LeapCooldown.Value, true, true, InterruptPriority.PrioritySkill, "moonleap", false);
             leap.cancelSprintingOnActivation = false;
-            SkillDef pulse = MakeSkill("LIDARPULSE", typeof(SvrLidarPulseState), "Weapon", PulseCooldown.Value, true, true, InterruptPriority.Skill, "pulse", false);
+            SkillDef ammo = MakeSkill("AMMOSWAP", typeof(SvrAmmoSwapState), "Weapon", 0.4f, true, false, InterruptPriority.Any, "ammo", false);
 
             sl.primary = Slot("SurveyorPrimary", MinigunSkillDef);
             sl.secondary = Slot("SurveyorSecondary", blackHole);
             sl.utility = Slot("SurveyorUtility", leap);
-            sl.special = Slot("SurveyorSpecial", pulse);
+            sl.special = Slot("SurveyorSpecial", ammo);
         }
 
         private static GenericSkill Slot(string family, params SkillDef[] defs)

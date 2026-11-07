@@ -19,6 +19,7 @@
     <PackageReference Include="R2API.Language" Version="1.*" />
     <PackageReference Include="R2API.Prefab" Version="1.*" />
     <PackageReference Include="R2API.RecalculateStats" Version="1.6.6" />
+    <PackageReference Include="R2API.Networking" Version="1.0.4" />
   </ItemGroup>
 
 </Project>
