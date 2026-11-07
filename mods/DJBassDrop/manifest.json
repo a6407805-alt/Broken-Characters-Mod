@@ -1,6 +1,6 @@
 {
   "name": "DJBassDrop",
-  "version_number": "1.0.2",
+  "version_number": "1.0.3",
   "website_url": "",
   "description": "DJ Bass Drop: a club DJ with a floating deck. 120 BPM (hits on the beat deal double damage), Scratch (piercing sound waves), Beat Drop (leap and slam), Speaker Stack (a wall that blocks and pumps on the beat), The Drop (the whole stage freezes, then the bass drops on every enemy).",
   "dependencies": [
