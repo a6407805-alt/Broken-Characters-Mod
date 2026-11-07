@@ -76,7 +76,7 @@ namespace Surveyor
             _s = h / ourHeight * SvrPlugin.StalkerScale.Value;
 
             int layer = model.gameObject.layer;
-            Transform holder = model.parent ? model.parent : bodyGo.transform;
+            Transform holder = model.parent ? model.parent : gameObject.transform;
             _root = new GameObject("StalkerRig") { layer = layer }.transform;
             _root.SetParent(holder, false);
             _root.localRotation = Quaternion.identity;
