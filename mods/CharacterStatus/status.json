@@ -121,8 +121,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.6.9",
-      "note": "Active WIP (v0.6.9): LiDAR fixed (Black Hole code crashed the scanner every frame); v0.6.8 overhaul: Black Hole orb, chest X-ray, per-ammo tracers, elemental-shield Shimmer Demon"
+      "version": "0.7.0",
+      "note": "Active WIP (v0.7.0): simplified kit (minigun, Black Hole, Moon Leap with thrusters, LiDAR Pulse), moon gravity, LiDAR objective markers + radar map, Shimmer Stalker night-stalker raid boss everyone fights"
     },
     {
       "name": "MOMMY MILKERS",

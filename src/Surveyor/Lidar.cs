@@ -3068,151 +3068,23 @@ namespace Surveyor
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
-            if (!_techSpawned && Time.timeSinceLevelLoad > 2.5f) SpawnFieldTechCaches();
-
-            // Tapping Q sequentially rolls through the 4 modes (Bio-Scan -> Salvage -> Topography -> Peripheral Flood) with a snappy audio cue
-            KeyCode next, peek, repKey, minKey, cashKey;
-            int n0 = OdNames.Length;
-            if (TryKey(SvrPlugin.ScanNextKey.Value, out next) && Input.GetKeyDown(next))
-            {
-                OdMode = (OdMode + 1) % n0;
-                TriggerModeBurst();
-            }
-
-            // Ensure selected modes are valid unlocked modes
-            if (!SvrUpgrades.IsMinigunUnlocked(MinigunMode)) MinigunMode = 0;
-            if (!SvrUpgrades.IsVacuumUnlocked(VacuumMode)) VacuumMode = 0;
-
-            // Mouse Scroll Wheel or Middle Click: switch Minigun Ammo modes (M1) or Vacuum modes (M2) (only cycle unlocked options)
-            float scroll = Input.GetAxis("Mouse ScrollWheel");
-            bool midClick = Input.GetMouseButtonDown(2);
-            if (Mathf.Abs(scroll) > 0.02f || midClick)
-            {
-                int dir = (scroll > 0.02f || midClick) ? 1 : -1;
-                bool holdingM2 = Input.GetMouseButton(1) || (_input && _input.skill2.down);
-                bool holdingM1 = Input.GetMouseButton(0) || (_input && _input.skill1.down);
-                if (holdingM2)
-                {
-                    int cur = VacuumMode;
-                    int candMode = cur;
-                    for (int step = 0; step < 4; step++)
-                    {
-                        candMode = (candMode + dir + 4) % 4;
-                        if (SvrUpgrades.IsVacuumUnlocked(candMode))
-                        {
-                            if (candMode != cur)
-                            {
-                                VacuumMode = candMode;
-                                _vacModeFlash = Time.time;
-                                Util.PlaySound("Play_UI_menuClick", gameObject);
-                            }
-                            break;
-                        }
-                    }
-                }
-                else if (holdingM1)
-                {
-                    int cur = MinigunMode;
-                    int candMode = cur;
-                    for (int step = 0; step < 4; step++)
-                    {
-                        candMode = (candMode + dir + 4) % 4;
-                        if (SvrUpgrades.IsMinigunUnlocked(candMode))
-                        {
-                            if (candMode != cur)
-                            {
-                                MinigunMode = candMode;
-                                _miniModeFlash = Time.time;
-                                Util.PlaySound("Play_UI_menuClick", gameObject);
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Peek on its own key. Fully toggleable: pressing F lifts visor, pressing F again closes it.
+            // v0.7.0 simple kit: one ammo, no vacuum modes, no caches, no Q/V/H/B keys. F toggles LiDAR mode.
+            MinigunMode = 0;
+            KeyCode peek;
             if (TryKey(SvrPlugin.PeekKey.Value, out peek) && Input.GetKeyDown(peek))
             {
-                if (Peeking)
-                {
-                    EndPeek();
-                }
+                if (Peeking) EndPeek();
                 else
                 {
                     StartPeek();
                     Util.PlaySound("Play_huntress_m2_throw_short", gameObject);
                 }
             }
-            // Reverse-Flow Repulsor ("Blow" Function) [V]: blasts away swarms & reflects projectiles
-            if (TryKey(SvrPlugin.RepulsorKey.Value, out repKey) && Input.GetKeyDown(repKey) && Time.time >= _repulsorReadyAt)
-            {
-                FireRepulsorBlow();
-            }
-            // Redeploy Captured Spirit as 30s Friendly Spectral Hologram Guardian [H]
-            if (TryKey(SvrPlugin.MinionKey.Value, out minKey) && Input.GetKeyDown(minKey) && _demon.StoredSpirits > 0)
-            {
-                _demon.RedeployMinion(_body);
-            }
-            // Cash in Captured Spirit at the Teleporter [B]
-            if (TryKey(SvrPlugin.CashInKey.Value, out cashKey) && Input.GetKeyDown(cashKey) && _demon.StoredSpirits > 0)
-            {
-                TeleporterInteraction tp = FindObjectOfType<TeleporterInteraction>();
-                if (tp && Vector3.Distance(_body.corePosition, tp.transform.position) < 12f)
-                {
-                    _demon.CashInAtTeleporter(_body, tp.transform.position);
-                }
-            }
-
-            // Check & paint LiDAR-Exclusive Hidden Tech Caches (via their SvrLiDARScanTarget 3D wireframe hologram)
-            _nearCacheIdx = -1;
-            for (int cIdx = 0; cIdx < _techCaches.Count; cIdx++)
-            {
-                FieldTechCache fc = _techCaches[cIdx];
-                if (fc.Collected) continue;
-                float dCache = Vector3.Distance(_body.corePosition, fc.Pos);
-                if (dCache < 4.8f) _nearCacheIdx = cIdx;
-                if (fc.Target && fc.Target.IsRevealed && _peekK < 0.65f)
-                {
-                    PaintTargetWireframe(fc.Target, 8, 0.42f);
-                }
-            }
-            if (_nearCacheIdx >= 0 && Input.GetKeyDown(KeyCode.E))
-            {
-                FieldTechCache fc = _techCaches[_nearCacheIdx];
-                fc.Collected = true;
-                if (fc.Go) fc.Go.SetActive(false);
-                _techCaches[_nearCacheIdx] = fc;
-                SvrUpgrades.Unlock(fc.UpgradeId);
-                Util.PlaySound("Play_UI_shrineSuccess", gameObject);
-
-                // Auto-equip unlocked weapon/vacuum mode so the player can immediately try it out!
-                if (fc.UpgradeId == SvrUpgrades.MINI_CRYO) { MinigunMode = 1; _miniModeFlash = Time.time; }
-                else if (fc.UpgradeId == SvrUpgrades.MINI_INCENDIARY) { MinigunMode = 2; _miniModeFlash = Time.time; }
-                else if (fc.UpgradeId == SvrUpgrades.MINI_PLASMA) { MinigunMode = 3; _miniModeFlash = Time.time; }
-                else if (fc.UpgradeId == SvrUpgrades.VAC_VORTEX) { VacuumMode = 1; _vacModeFlash = Time.time; }
-                else if (fc.UpgradeId == SvrUpgrades.VAC_CRYO) { VacuumMode = 2; _vacModeFlash = Time.time; }
-                else if (fc.UpgradeId == SvrUpgrades.VAC_REPULSE) { VacuumMode = 3; _vacModeFlash = Time.time; }
-
-                _upgradeToast = "MODULE RETRIEVED: " + SvrUpgrades.Names[fc.UpgradeId] + " — " + SvrUpgrades.Descs[fc.UpgradeId];
-                _upgradeToastUntil = Time.time + 5.2f;
-
-                try
-                {
-                    Chat.AddMessage("<color=#00ffd8>[SURVEYOR FIELD-TECH]</color> Activated <color=#ffea33>" + SvrUpgrades.Names[fc.UpgradeId] + "</color>! <color=#90c0df>" + SvrUpgrades.Descs[fc.UpgradeId] + "</color>");
-                }
-                catch { }
-
-                for (int i = 0; i < 220; i++)
-                {
-                    AddDot(fc.Pos + Random.onUnitSphere * Random.Range(0.3f, 3.8f), (i & 1) == 0 ? new Color(1f, 0.86f, 0.2f, 1f) : new Color(0.25f, 1f, 0.9f, 1f), 2.5f, true);
-                }
-            }
 
             float prevRestored = _demon.LastRestoredUntil;
-            _demon.Tick(dt, _body, _input);
+            // the old client-only Shimmer Demon is retired: the Shimmer Stalker is a real shared enemy (Stalker.cs)
             // new features never get to stop the scanner: an error here is logged once and skipped
-            try { BlackHoleTick(dt); DemonBlinkFx(); }
+            try { BlackHoleTick(dt); MiscLidarFx(dt); }
             catch (Exception ex) { if (!_loggedFeatureError) { _loggedFeatureError = true; SvrPlugin.Log.LogError("Black Hole / blink fx: " + ex); } }
             if (_demon.LastRestoredUntil > prevRestored)
             {
@@ -4308,6 +4180,7 @@ namespace Surveyor
             DrawDots(cam, scale, dotAlpha);
             DrawDemon(cam, scale, dotAlpha);
             try { DrawChestXray(cam, scale); } catch (Exception ex) { if (!_loggedFeatureError) { _loggedFeatureError = true; SvrPlugin.Log.LogError("Chest X-ray: " + ex); } }
+            try { DrawMap(cam, scale); } catch (Exception ex) { if (!_loggedFeatureError) { _loggedFeatureError = true; SvrPlugin.Log.LogError("LiDAR map: " + ex); } }
             DrawPeekWash(scale);
             DrawHud(scale);
             GUI.color = old;
@@ -4937,7 +4810,7 @@ namespace Surveyor
             // Tactical LiDAR telemetry positioned cleanly at Center-Left (safely below RoR2 money & objectives, above health/chat)
             float sx = 20f * scale, sy = 240f * scale;
             float panelW = 460f * scale;
-            float panelH = (SvrUpgrades.UnlockedCount > 0 ? 144f : 120f) * scale;
+            float panelH = 48f * scale;
 
             // Semi-transparent tactical dark glass backdrop & sleek accented corner borders (100% readable over any stage)
             GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.72f);
@@ -4947,74 +4820,13 @@ namespace Surveyor
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy - 6f * scale, 24f * scale, 1.5f * scale), white);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy + panelH + 6f * scale, 24f * scale, 1.5f * scale), white);
 
-            // Row 1: Senses status strip + Containment Cell Spirit Charge counter
-            float x = sx, y = sy + 4f * scale;
-            DrawSense("SEE", SvrSenses.Sight, ref x, y, scale);
-            DrawSense("HEAR", SvrSenses.Hearing, ref x, y, scale);
-            DrawSense("TOUCH", SvrSenses.Touch, ref x, y, scale);
-            DrawSense("BAL", SvrSenses.Balance, ref x, y, scale);
-            if (_demon.StoredSpirits > 0 || _demon.MinionActive)
+            // v0.7.0 compact panel: LiDAR state + the kit
             {
-                string cellTxt = _demon.MinionActive
-                    ? "GUARDIAN (" + Mathf.CeilToInt(_demon.MinionUntil - Time.time) + "s)"
-                    : "CELL: " + _demon.StoredSpirits + "/" + _demon.MaxStoredSpirits + " [H/B]";
-                float cw = (cellTxt.Length * 7.5f + 12f) * scale;
-                GUI.color = new Color(0.02f, 0.06f, 0.08f, 0.75f);
-                GUI.DrawTexture(new Rect(x, y, cw, 22f * scale), white);
-                GUI.color = new Color(0.28f, 1f, 0.85f, 0.96f);
-                GUI.DrawTexture(new Rect(x, y, 3f * scale, 22f * scale), white);
-                GUI.Label(new Rect(x + 5f * scale, y, cw, 22f * scale), cellTxt, _label);
-            }
-
-            // Row 2: Scan mode readout (generous 10px vertical margin below senses)
-            int mIdx = OdMode % OdNames.Length;
-            float sinceSwitch = Time.time - _modeFlash;
-            bool flash = sinceSwitch < 0.75f;
-            float my = sy + 34f * scale;
-            Color accent = ModeAccent(mIdx);
-            Color modeCol = flash ? new Color(1f, 1f, 1f, 1f) : (OverdriveOn ? new Color(1f, 0.62f, 0.2f, 0.95f) : accent);
-            DrawModeIcon(new Vector2(sx + 8f * scale, my + 8f * scale), 7f * scale, mIdx, modeCol, scale, white);
-            GUI.color = modeCol;
-            GUI.Label(new Rect(sx + 22f * scale, my, panelW - 30f * scale, 18f * scale), "SCAN [Q]: " + OdNames[mIdx] + "   [R] OVERDRIVE", _label);
-
-            // Row 3: Scan mode description + 4 pips (plenty of width, never squished)
-            float dy = my + 20f * scale;
-            GUI.color = new Color(0.78f, 0.93f, 1f, 0.90f);
-            GUI.Label(new Rect(sx + 22f * scale, dy, panelW - 30f * scale, 18f * scale), OdDescs[mIdx], _label);
-            for (int i = 0; i < OdNames.Length; i++)
-            {
-                Color pc = ModeAccent(i);
-                GUI.color = i == mIdx ? new Color(pc.r, pc.g, pc.b, 0.95f) : new Color(pc.r, pc.g, pc.b, 0.22f);
-                GUI.DrawTexture(new Rect(sx + i * 14f * scale, dy + 20f * scale, 10f * scale, 3.5f * scale), white);
-            }
-
-            // Row 4: Visor Peek & Vacuum controls
-            float py = dy + 28f * scale;
-            float pr = _peekReady - Time.time;
-            string peekTxt = Peeking ? "VISOR: OPEN [F/SHIFT TO CLOSE]" : "VISOR: CLOSED [F/SHIFT TO OPEN]";
-            Color peekCol = Peeking ? new Color(0.4f, 1f, 0.7f, 0.95f) : new Color(0.9f, 0.96f, 1f, 0.95f);
-            GUI.color = peekCol;
-            GUI.Label(new Rect(sx, py, 230f * scale, 18f * scale), peekTxt, _label);
-
-            GUI.color = new Color(0.35f, 0.95f, 1f, 0.92f);
-            GUI.Label(new Rect(sx + 215f * scale, py, 180f * scale, 18f * scale), "VACUUM [M2]", _label);
-
-            // Row 5: Installed tech badges
-            if (SvrUpgrades.UnlockedCount > 0)
-            {
-                float ux = sx, uy = py + 22f * scale;
-                for (int u = 0; u < SvrUpgrades.COUNT; u++)
-                {
-                    if (!SvrUpgrades.Has(u)) continue;
-                    string uName = SvrUpgrades.ShortNames[u];
-                    float uw = (uName.Length * 7.5f + 10f) * scale;
-                    Color uCol = u < 4 ? new Color(1f, 0.84f, 0.25f, 0.95f) : new Color(0.3f, 0.96f, 1f, 0.95f);
-                    GUI.color = uCol;
-                    GUI.DrawTexture(new Rect(ux, uy, 2.5f * scale, 16f * scale), white);
-                    GUI.DrawTexture(new Rect(ux, uy + 15f * scale, uw, 1.5f * scale), white);
-                    GUI.Label(new Rect(ux + 5f * scale, uy - 2f * scale, uw, 18f * scale), uName, _label);
-                    ux += uw + 5f * scale;
-                }
+                float ry = sy + 2f * scale;
+                GUI.color = Peeking ? new Color(0.4f, 1f, 0.7f, 0.95f) : new Color(0.3f, 0.95f, 1f, 0.95f);
+                GUI.Label(new Rect(sx, ry, panelW, 20f * scale), Peeking ? "LIDAR: OFF — VISOR OPEN   [F] LIDAR ON" : "LIDAR: ON   [F] VISOR OPEN", _label);
+                GUI.color = new Color(0.8f, 0.9f, 1f, 0.85f);
+                GUI.Label(new Rect(sx, ry + 22f * scale, panelW, 20f * scale), "M2 BLACK HOLE · SHIFT MOON LEAP · R LIDAR PULSE", _label);
             }
 
             // Top-Center Shimmer Demon Boss & Containment Health Bar (compact 360 width, no overlap)
@@ -5299,149 +5111,9 @@ namespace Surveyor
                 _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
                 _label.alignment = TextAnchor.MiddleCenter;
                 GUI.color = new Color(0.4f, 1f, 0.75f, 0.95f);
-                GUI.Label(new Rect(px, pTopY, pw, ph), "VISOR OPEN [F / SHIFT TO TOGGLE]", _label);
+                GUI.Label(new Rect(px, pTopY, pw, ph), "VISOR OPEN [F]", _label);
                 _label.fontSize = prevSize;
                 _label.alignment = prevAlign;
-            }
-
-            // Bottom-Right Hotbar: Modular Minigun Ammo Modes & Vacuum Upgrades (docked comfortably above the skill bar)
-            {
-                float hotbarW = 440f * scale;
-                float hotbarX = Screen.width - hotbarW - 24f * scale;
-                float hotbarY = Screen.height - 215f * scale;
-                float hotbarH = 78f * scale;
-
-                // Tactical backdrop so chips & text are 100% readable over any background
-                GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.75f);
-                GUI.DrawTexture(new Rect(hotbarX - 6f * scale, hotbarY - 6f * scale, hotbarW + 12f * scale, hotbarH + 12f * scale), white);
-                GUI.color = new Color(0.25f, 0.85f, 1f, 0.40f);
-                GUI.DrawTexture(new Rect(hotbarX - 6f * scale, hotbarY - 6f * scale, hotbarW + 12f * scale, 1.5f * scale), white);
-
-                // 1) MINIGUN AMMO MODES (M1 + SCROLL WHEEL)
-                int mMode = MinigunMode % 4;
-                bool mFlash = (Time.time - _miniModeFlash) < 0.65f;
-                Color mActiveCol = MinigunModeColors[mMode];
-
-                float chipW = (hotbarW - 3f * 6f * scale) / 4f;
-                float chipH = 20f * scale;
-
-                // Row 1: M1 Ammo Chips (Locked options start greyed-out until retrieved via LiDAR caches)
-                string[] mShortNames = { "IRIDIUM", "CRYO", "INCENDIARY", "PLASMA" };
-                for (int i = 0; i < 4; i++)
-                {
-                    bool unlocked = SvrUpgrades.IsMinigunUnlocked(i);
-                    bool active = (i == mMode && unlocked);
-                    Color cCol = MinigunModeColors[i];
-                    float cx = hotbarX + i * (chipW + 6f * scale);
-
-                    if (unlocked)
-                    {
-                        GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, mFlash ? 0.6f : 0.32f) : new Color(0.04f, 0.06f, 0.08f, 0.7f);
-                        GUI.DrawTexture(new Rect(cx, hotbarY, chipW, chipH), white);
-
-                        GUI.color = active ? (mFlash ? Color.white : cCol) : new Color(cCol.r, cCol.g, cCol.b, 0.38f);
-                        GUI.DrawTexture(new Rect(cx, hotbarY, chipW, 1.5f * scale), white);
-                        GUI.DrawTexture(new Rect(cx, hotbarY + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
-                        GUI.DrawTexture(new Rect(cx, hotbarY, 1.5f * scale, chipH), white);
-                        GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, hotbarY, 1.5f * scale, chipH), white);
-
-                        int prevSize = _label.fontSize;
-                        _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(10.5f * scale));
-                        _label.alignment = TextAnchor.MiddleCenter;
-                        GUI.color = active ? Color.white : new Color(0.75f, 0.85f, 0.92f, 0.85f);
-                        GUI.Label(new Rect(cx, hotbarY, chipW, chipH), mShortNames[i], _label);
-                        _label.fontSize = prevSize;
-                        _label.alignment = TextAnchor.MiddleLeft;
-                    }
-                    else
-                    {
-                        // LOCKED / GREYED OUT: Dark desaturated slate backdrop, faint charcoal border, dimmed grey text
-                        GUI.color = new Color(0.015f, 0.02f, 0.025f, 0.65f);
-                        GUI.DrawTexture(new Rect(cx, hotbarY, chipW, chipH), white);
-
-                        GUI.color = new Color(0.24f, 0.27f, 0.30f, 0.30f);
-                        GUI.DrawTexture(new Rect(cx, hotbarY, chipW, 1.5f * scale), white);
-                        GUI.DrawTexture(new Rect(cx, hotbarY + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
-                        GUI.DrawTexture(new Rect(cx, hotbarY, 1.5f * scale, chipH), white);
-                        GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, hotbarY, 1.5f * scale, chipH), white);
-
-                        int prevSize = _label.fontSize;
-                        _label.fontSize = Mathf.Max(8, Mathf.RoundToInt(9.5f * scale));
-                        _label.alignment = TextAnchor.MiddleCenter;
-                        GUI.color = new Color(0.38f, 0.42f, 0.46f, 0.48f);
-                        GUI.Label(new Rect(cx, hotbarY, chipW, chipH), mShortNames[i], _label);
-                        _label.fontSize = prevSize;
-                        _label.alignment = TextAnchor.MiddleLeft;
-                    }
-                }
-
-                // Row 2: M2 Vacuum Chips (Locked options start greyed-out until retrieved via LiDAR caches)
-                float vy = hotbarY + 26f * scale;
-                int vMode = VacuumMode % 4;
-                bool vFlash = (Time.time - _vacModeFlash) < 0.65f;
-                Color vActiveCol = VacuumModeColors[vMode];
-                string[] vShortNames = { "SUCTION", "VORTEX", "CRYO", "REPULSE" };
-
-                for (int i = 0; i < 4; i++)
-                {
-                    bool unlocked = SvrUpgrades.IsVacuumUnlocked(i);
-                    bool active = (i == vMode && unlocked);
-                    Color cCol = VacuumModeColors[i];
-                    float cx = hotbarX + i * (chipW + 6f * scale);
-
-                    if (unlocked)
-                    {
-                        GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, vFlash ? 0.6f : 0.32f) : new Color(0.04f, 0.06f, 0.08f, 0.7f);
-                        GUI.DrawTexture(new Rect(cx, vy, chipW, chipH), white);
-
-                        GUI.color = active ? (vFlash ? Color.white : cCol) : new Color(cCol.r, cCol.g, cCol.b, 0.38f);
-                        GUI.DrawTexture(new Rect(cx, vy, chipW, 1.5f * scale), white);
-                        GUI.DrawTexture(new Rect(cx, vy + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
-                        GUI.DrawTexture(new Rect(cx, vy, 1.5f * scale, chipH), white);
-                        GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, vy, 1.5f * scale, chipH), white);
-
-                        int prevSize = _label.fontSize;
-                        _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(10.5f * scale));
-                        _label.alignment = TextAnchor.MiddleCenter;
-                        GUI.color = active ? Color.white : new Color(0.75f, 0.85f, 0.92f, 0.85f);
-                        GUI.Label(new Rect(cx, vy, chipW, chipH), vShortNames[i], _label);
-                        _label.fontSize = prevSize;
-                        _label.alignment = TextAnchor.MiddleLeft;
-                    }
-                    else
-                    {
-                        // LOCKED / GREYED OUT: Dark desaturated slate backdrop, faint charcoal border, dimmed grey text
-                        GUI.color = new Color(0.015f, 0.02f, 0.025f, 0.65f);
-                        GUI.DrawTexture(new Rect(cx, vy, chipW, chipH), white);
-
-                        GUI.color = new Color(0.24f, 0.27f, 0.30f, 0.30f);
-                        GUI.DrawTexture(new Rect(cx, vy, chipW, 1.5f * scale), white);
-                        GUI.DrawTexture(new Rect(cx, vy + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
-                        GUI.DrawTexture(new Rect(cx, vy, 1.5f * scale, chipH), white);
-                        GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, vy, 1.5f * scale, chipH), white);
-
-                        int prevSize = _label.fontSize;
-                        _label.fontSize = Mathf.Max(8, Mathf.RoundToInt(9.5f * scale));
-                        _label.alignment = TextAnchor.MiddleCenter;
-                        GUI.color = new Color(0.38f, 0.42f, 0.46f, 0.48f);
-                        GUI.Label(new Rect(cx, vy, chipW, chipH), vShortNames[i], _label);
-                        _label.fontSize = prevSize;
-                        _label.alignment = TextAnchor.MiddleLeft;
-                    }
-                }
-
-                // Row 3: Active Mode Detail Readout (Full name & effect)
-                float sy3 = vy + 26f * scale;
-                int descFs = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
-                int origFs = _label.fontSize;
-                _label.fontSize = descFs;
-
-                GUI.color = mActiveCol;
-                GUI.Label(new Rect(hotbarX, sy3, hotbarW * 0.5f - 4f * scale, 18f * scale), "M1: " + MinigunModeNames[mMode], _label);
-
-                GUI.color = vActiveCol;
-                GUI.Label(new Rect(hotbarX + hotbarW * 0.5f, sy3, hotbarW * 0.5f, 18f * scale), "M2: " + VacuumModeNames[vMode], _label);
-                _label.fontSize = origFs;
             }
 
             // Suit interference near the demon: subtle crimson/cyan vector glitch ticks on peripheral HUD (no solid/gray boxes).
