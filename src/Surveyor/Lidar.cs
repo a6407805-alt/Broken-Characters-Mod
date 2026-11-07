@@ -230,7 +230,7 @@ namespace Surveyor
         {
             if (Time.time < _shieldDeflectToastUntil) return;
             _shieldDeflectToastUntil = Time.time + 1.8f;
-            Util.PlaySound("Play_captain_drone_zap", PhysicalGo);
+            Util.PlaySound("Play_item_use_EMPScanner_activate", PhysicalGo);
             LastRestoredSense = "PHASE SHIELD — " + ElementName(RequiredElement) + " ROUNDS NEEDED (HOLD M1 + SCROLL)";
             LastRestoredUntil = Time.time + 2.5f;
         }
@@ -255,7 +255,7 @@ namespace Surveyor
             if (PhysicalGo) UnityEngine.Object.Destroy(PhysicalGo);
 
             StoredSpirits = Mathf.Min(MaxStoredSpirits, StoredSpirits + 1);
-            Util.PlaySound("Play_UI_shrineSuccess", null);
+            Util.PlaySound("Play_UI_shrineActivate", null);
             Util.PlaySound("Play_UI_obj_casinoChest_open", null);
 
             DropLoot();
@@ -529,7 +529,7 @@ namespace Surveyor
         {
             if (StoredSpirits <= 0 || !body) return false;
             StoredSpirits--;
-            Util.PlaySound("Play_UI_shrineSuccess", body.gameObject);
+            Util.PlaySound("Play_UI_shrineActivate", body.gameObject);
             float diff = Run.instance ? Mathf.Max(1f, Run.instance.difficultyCoefficient) : 1f;
             uint gold = (uint)Mathf.RoundToInt(125f * diff);
             if (body.master) body.master.GiveMoney(gold);
@@ -777,7 +777,7 @@ namespace Surveyor
         public void OnShieldRecharge()
         {
             RotateElement();
-            Util.PlaySound("Play_captain_drone_zap", PhysicalGo);
+            Util.PlaySound("Play_item_use_EMPScanner_activate", PhysicalGo);
             LastRestoredSense = "PHASE SHIELD RE-ATTUNED — " + ElementName(RequiredElement) + " ROUNDS NEEDED!";
             LastRestoredUntil = Time.time + 2.5f;
         }
@@ -1006,7 +1006,7 @@ namespace Surveyor
                 try { Chat.AddMessage("<color=#ff4a4a>[DEMON STRIKE] The Shimmer Demon savaged " + victim.GetUserName() + " for " + Mathf.RoundToInt(bossDmg) + " damage!</color>"); } catch { }
             }
 
-            Util.PlaySound("Play_huntress_m2_throw_short", victim.gameObject);
+            Util.PlaySound("Play_engi_R_turret_rotate_start", victim.gameObject);
 
             State = Mode.Prowl;
             _modeTimer = Random.Range(16f, 24f);
@@ -2767,7 +2767,7 @@ namespace Surveyor
             _pulseLeft = 3600;
             _pulseRange = 260f;
             _revealUntil = Mathf.Max(_revealUntil, Time.time + 10.0f);
-            Util.PlaySound("Play_commando_R_stun", gameObject);
+            Util.PlaySound("Play_captain_R_impact", gameObject);
             Util.PlaySound("Play_UI_obj_casinoChest_open", gameObject);
 
             // Refresh and ping all interactables & chests across the stage
@@ -2848,7 +2848,7 @@ namespace Surveyor
             _peekUntil = Time.time;
             _rebootStart = Time.time;
             _peekReady = Time.time + 0.35f;
-            Util.PlaySound("Play_huntress_m2_throw_short", gameObject);
+            Util.PlaySound("Play_engi_R_turret_rotate_start", gameObject);
             SvrRigPart.CloseVisor(gameObject);
         }
 
@@ -2963,7 +2963,7 @@ namespace Surveyor
         private void FireRepulsorBlow()
         {
             _repulsorReadyAt = Time.time + (SvrUpgrades.Has(SvrUpgrades.REPULSOR_BLOW) ? 4.5f : 7.5f);
-            Util.PlaySound("Play_MULT_m2_aim", gameObject);
+            Util.PlaySound("Play_engi_R_turret_rotate_start", gameObject);
             Vector3 o = _input ? _input.aimOrigin : _body.corePosition;
             Vector3 aim = _input ? _input.aimDirection : transform.forward;
 
@@ -3091,6 +3091,14 @@ namespace Surveyor
 
             // v0.7.1 kit: F toggles LiDAR mode, 1/2/3 pick the LiDAR view (each fires a pulse across the map), R swaps ammo.
             ViewKeys();
+            KeyCode qk;
+            if (TryKey(SvrPlugin.ScanNextKey.Value, out qk) && Input.GetKeyDown(qk))
+            {
+                OdMode = (OdMode + 1) & 3;
+                _modeFlash = Time.time;
+                Util.PlaySound("Play_item_use_EMPScanner_findChest", gameObject);
+                Util.PlaySound("Play_UI_menuClick", gameObject);
+            }
             KeyCode peek;
             if (TryKey(SvrPlugin.PeekKey.Value, out peek) && Input.GetKeyDown(peek))
             {
@@ -3098,7 +3106,7 @@ namespace Surveyor
                 else
                 {
                     StartPeek();
-                    Util.PlaySound("Play_huntress_m2_throw_short", gameObject);
+                    Util.PlaySound("Play_engi_R_turret_rotate_start", gameObject);
                 }
             }
 
@@ -4834,7 +4842,7 @@ namespace Surveyor
             float sx = 20f * scale, sy = 240f * scale;
             float row = 28f * scale;
             float panelW = 520f * scale;
-            float panelH = row * 3f + 6f * scale;
+            float panelH = row * 4f + 6f * scale;
             GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.72f);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy - 6f * scale, panelW + 16f * scale, panelH + 12f * scale), white);
             GUI.color = new Color(0.2f, 0.85f, 1f, 0.45f);
@@ -4844,7 +4852,10 @@ namespace Surveyor
             {
                 float ry = sy + 2f * scale;
                 GUI.color = Peeking ? new Color(0.4f, 1f, 0.7f, 0.95f) : new Color(0.3f, 0.95f, 1f, 0.95f);
-                GUI.Label(new Rect(sx, ry, panelW, row), Peeking ? "LIDAR: OFF — VISOR OPEN   [F] LIDAR ON" : "LIDAR: ON   [F] VISOR OPEN", _label);
+                GUI.Label(new Rect(sx, ry, panelW, row), Peeking ? "LIDAR OFF · VISOR OPEN" : "LIDAR ON", _label);
+                GUI.color = ModeAccent(OdMode);
+                GUI.Label(new Rect(sx, ry + row, panelW, row), "[Q] MODE: " + OdNames[OdMode & 3], _label);
+                ry += row;
                 // view keys, the active one lit in its colour
                 float vx = sx;
                 for (int v = 1; v <= 3; v++)
@@ -4867,8 +4878,11 @@ namespace Surveyor
                 int am = SvrAmmo.Current;
                 Banner(SvrAmmo.Names[am] + " ROUNDS", SvrAmmo.Descs[am], SvrAmmo.Colors[am], flash, scale, Screen.height * 0.7f);
             }
+            float qflash = Time.time - _modeFlash;
+            if (flash >= 1.6f && qflash < 1.6f)
+                Banner("LIDAR MODE: " + OdNames[OdMode & 3], OdDescs[OdMode & 3], ModeAccent(OdMode), qflash, scale, Screen.height * 0.7f);
             float vflash = Time.time - _viewFlash;
-            if (flash >= 1.6f && vflash < 1.6f && View > 0)
+            if (flash >= 1.6f && qflash >= 1.6f && vflash < 1.6f && View > 0)
                 Banner("LIDAR VIEW: " + ViewNames[View], ViewDescs[View], ViewColors[View], vflash, scale, Screen.height * 0.7f);
 
             // Top-Center Shimmer Demon Boss & Containment Health Bar (compact 360 width, no overlap)
@@ -5126,25 +5140,6 @@ namespace Surveyor
                     _label.alignment = prevAl;
                 }
             }
-            if (Peeking)
-            {
-                float pw = 240f * scale, ph = 24f * scale;
-                float px = Screen.width * 0.5f - pw * 0.5f, pTopY = Screen.height * 0.12f;
-                GUI.color = new Color(0.04f, 0.08f, 0.12f, 0.75f);
-                GUI.DrawTexture(new Rect(px - 4f * scale, pTopY - 2f * scale, pw + 8f * scale, ph + 4f * scale), white);
-                GUI.color = new Color(0.35f, 1f, 0.7f, 0.95f);
-                GUI.DrawTexture(new Rect(px, pTopY, pw, 1.5f * scale), white);
-                GUI.DrawTexture(new Rect(px, pTopY + ph, pw, 1.5f * scale), white);
-                int prevSize = _label.fontSize;
-                TextAnchor prevAlign = _label.alignment;
-                _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
-                _label.alignment = TextAnchor.MiddleCenter;
-                GUI.color = new Color(0.4f, 1f, 0.75f, 0.95f);
-                GUI.Label(new Rect(px, pTopY, pw, ph), "VISOR OPEN [F]", _label);
-                _label.fontSize = prevSize;
-                _label.alignment = prevAlign;
-            }
-
             // Suit interference near the demon: subtle crimson/cyan vector glitch ticks on peripheral HUD (no solid/gray boxes).
             float prox = _demon.Proximity(_body.corePosition);
             if (prox <= 0.1f) return;

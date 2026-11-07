@@ -115,8 +115,8 @@ namespace Surveyor
         {
             base.OnEnter();
             _charge = SvrPlugin.BlackHoleCharge.Value / Mathf.Max(0.5f, attackSpeedStat);
-            Util.PlaySound("Play_voidman_m2_chargeUp", gameObject);
-            Util.PlaySound("Play_mage_m2_charge", gameObject);
+            Util.PlaySound("Play_voidRaid_suck_start", gameObject);
+            Util.PlaySound("Play_roboBall_attack3_gravityBump_charge", gameObject);
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
             if (isAuthority) StartAimMode(GetAimRay(), 2f, false);
             try { MakeOrb(); } catch { }
@@ -166,8 +166,8 @@ namespace Surveyor
             {
                 _fired = true;
                 if (_orb) { Object.Destroy(_orb); _orb = null; }
-                Util.PlaySound("Play_voidman_shift_pop", gameObject);
-                Util.PlaySound("Play_voidman_m2_shoot", gameObject);
+                Util.PlaySound("Play_voidRaid_m1_shoot", gameObject);
+                Util.PlaySound("Play_item_use_blackhole_start", gameObject);
                 if (isAuthority) Fire();
             }
             if (_fired && fixedAge >= _charge + 0.25f && isAuthority) outer.SetNextStateToMain();

@@ -32,7 +32,7 @@ namespace Surveyor
     {
         public const string PluginGUID = "com.brokencharacters.surveyor";
         public const string PluginName = "The Surveyor";
-        public const string PluginVersion = "0.7.1";
+        public const string PluginVersion = "0.7.2";
         public const string T = "BC_SURVEYOR_";
 
         public static ManualLogSource Log;
@@ -227,12 +227,12 @@ namespace Surveyor
                 "< ! > A few minutes into each stage the lights fail and the Shimmer Stalker comes for whoever strays. It takes the whole team to kill.</color>");
             LanguageAPI.Add(T + "OUTRO", "..and so she left, still hearing the scanner ping.");
             LanguageAPI.Add(T + "FAIL", "..and so she vanished, and the dots went dark.");
-            LanguageAPI.Add(T + "SKIN_DEFAULT", "Survey Plate");
+            for (int i = 0; i < SvrModel.SkinKeys.Length; i++) LanguageAPI.Add(T + "SKIN_" + SvrModel.SkinKeys[i], SvrModel.SkinNames[i]);
 
             LanguageAPI.Add(T + "PASSIVE_NAME", "LiDAR Vision / Moon Walker");
             LanguageAPI.Add(T + "PASSIVE_DESC",
                 "The screen is dark: an always-on scanner paints the world as a <style=cIsUtility>point cloud</style> with a <style=cIsUtility>radar</style> above your skills. " +
-                "Press <style=cIsUtility>1 / 2 / 3</style> to pulse the whole map for <style=cIsDamage>monsters</style>, <style=cIsUtility>items</style> or <style=cIsUtility>objectives</style>. F shows the real world. " +
+                "<style=cIsUtility>Q</style> cycles LiDAR modes. Press <style=cIsUtility>1 / 2 / 3</style> to pulse the whole map for <style=cIsDamage>monsters</style>, <style=cIsUtility>items</style> or <style=cIsUtility>objectives</style>. F shows the real world. " +
                 "<style=cIsUtility>Low gravity</style>: high, slow jumps and <style=cIsUtility>no fall damage</style>.");
             LanguageAPI.Add(T + "PRIMARY_NAME", "Rotary Survey Minigun");
             LanguageAPI.Add(T + "PRIMARY_DESC", "Hold to <style=cIsUtility>spool up</style> and fire a stream of rounds. The longer you hold, the faster it fires. Fire too long and it <style=cIsHealth>overheats</style> (how fast depends on the ammo).");
@@ -242,8 +242,9 @@ namespace Surveyor
             LanguageAPI.Add(T + "MOONLEAP_NAME", "Thruster Boost");
             LanguageAPI.Add(T + "MOONLEAP_DESC", "Slam every <style=cIsUtility>backpack and boot thruster</style> at once: a sudden <style=cIsUtility>burst of speed</style> where you are moving (or looking). Works in the air.");
             LanguageAPI.Add(T + "AMMOSWAP_NAME", "Ammo Swap");
-            LanguageAPI.Add(T + "AMMOSWAP_DESC", "Swap the minigun ammo. <style=cIsUtility>LEAD</style>: fires faster and longer. <style=cIsDamage>INFERNO</style>: huge fire damage, overheats fast. " +
-                "<style=cIsUtility>FROST</style>: every hit slows more until ice <style=cIsUtility>locks them in place</style>. <style=cIsHealing>RAD</style>: a sickness that <style=cIsDamage>jumps from enemy to enemy</style>.");
+            LanguageAPI.Add(T + "AMMOSWAP_DESC", "Swap the minigun ammo. <style=cIsUtility>LEAD</style>: fires <style=cIsDamage>4x faster</style> and barely heats. The heavy rounds hit far harder and carry an effect: " +
+                "<style=cIsDamage>INFERNO</style> burns (overheats fast), <style=cIsUtility>FROST</style> stacks a slow until <style=cIsUtility>ice locks them in place</style>, " +
+                "<style=cIsHealing>RAD</style> stacks radiation that slows and weakens, then <style=cIsDamage>melts down</style>, stunning the whole crowd and spreading.");
         }
 
         // ---------------------------------------------------------------- body
@@ -285,6 +286,7 @@ namespace Surveyor
             BodyPrefab.AddComponent<SvrLidar>();
             BodyPrefab.AddComponent<SvrMoonGravity>();
             BodyPrefab.AddComponent<SvrThrusters>();
+            BodyPrefab.AddComponent<SvrFSlot>();
             Transform model = Model(BodyPrefab);
             if (model) { model.gameObject.AddComponent<SvrLook>(); model.gameObject.AddComponent<SvrCustomModel>(); AddSkin(model); }
             ContentAddition.AddBody(BodyPrefab);
@@ -312,12 +314,18 @@ namespace Surveyor
                     if (skins != null && skins.Length > 0) baseSkin = skins[0];
                 }
                 if (!baseSkin) return;
-                SkinDef skin = Object.Instantiate(baseSkin);
-                ((ScriptableObject)skin).name = "skinBCSurveyorDefault";
-                SetMember(skin, "nameToken", T + "SKIN_DEFAULT");
-                Sprite icon = SvrIcons.Get("skin", null);
-                if (icon) SetMember(skin, "icon", icon);
-                sf.SetValue(old, new SkinDef[] { skin });
+                // one skin per real EVA suit (the suit is repainted from its palette; see SvrModel.SkinRoles)
+                SkinDef[] mine = new SkinDef[SvrModel.SkinKeys.Length];
+                for (int i = 0; i < mine.Length; i++)
+                {
+                    SkinDef skin = Object.Instantiate(baseSkin);
+                    ((ScriptableObject)skin).name = "skinBCSurveyor" + SvrModel.SkinKeys[i];
+                    SetMember(skin, "nameToken", T + "SKIN_" + SvrModel.SkinKeys[i]);
+                    Sprite icon = SvrIcons.Get("skin_" + SvrModel.SkinKeys[i].ToLowerInvariant(), SvrIcons.Get("skin", null));
+                    if (icon) SetMember(skin, "icon", icon);
+                    mine[i] = skin;
+                }
+                sf.SetValue(old, mine);
             }
             catch (Exception e) { Log.LogWarning("Skin setup skipped: " + e.Message); }
         }

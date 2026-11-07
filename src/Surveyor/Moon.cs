@@ -45,9 +45,9 @@ namespace Surveyor
         {
             base.OnEnter();
             SvrThrusters.Burst(gameObject, 1.4f);                 // runs on every client: everyone sees the burn
-            Util.PlaySound("Play_MULT_shift_start", gameObject);
-            Util.PlaySound("Play_loader_shift_release", gameObject);
-            Util.PlaySound("Play_commando_shift", gameObject);
+            Util.PlaySound("Play_moonBrother_dash", gameObject);
+            Util.PlaySound("Play_item_use_fireballDash_start", gameObject);
+            Util.PlaySound("Play_env_geyser_launch", gameObject);
             if (!isAuthority || !characterMotor) return;
             Vector3 aim = GetAimRay().direction;
             Vector3 dir = inputBank ? inputBank.moveVector : Vector3.zero;

@@ -21,10 +21,10 @@ namespace Surveyor
         public static readonly string[] Names = { "LEAD", "INFERNO", "FROST", "RAD" };
         public static readonly string[] Descs =
         {
-            "FAST FIRE · BARELY HEATS · SHOOT ALL DAY",
-            "HUGE FIRE DAMAGE · BURNS · OVERHEATS FAST",
-            "SLOWS MORE EVERY HIT · FREEZES THEM IN ICE",
-            "SICKNESS THAT JUMPS FROM ENEMY TO ENEMY"
+            "4X FIRE RATE · BARELY HEATS · SHOOT ALL DAY",
+            "HEAVY FIRE ROUNDS · BURNS · OVERHEATS FAST",
+            "HEAVY ICE ROUNDS · SLOW STACKS INTO AN ICE LOCK",
+            "STACKS RADIATION · MELTDOWN STUNS THE CROWD"
         };
         public static readonly Color[] Colors =
         {
@@ -33,9 +33,9 @@ namespace Surveyor
             new Color(0.5f, 0.9f, 1f, 1f),
             new Color(0.55f, 1f, 0.25f, 1f)
         };
-        public static readonly float[] RateMult = { 1.3f, 0.9f, 1f, 0.95f };
-        public static readonly float[] DamageMult = { 1f, 1.9f, 0.85f, 0.8f };
-        public static readonly float[] HeatPerSecond = { 0.05f, 0.38f, 0.1f, 0.12f };
+        public static readonly float[] RateMult = { 1.6f, 0.4f, 0.4f, 0.4f };          // LEAD fires 4x as fast as the rest
+        public static readonly float[] DamageMult = { 1f, 4.5f, 3.5f, 3.2f };          // the rest hit hard AND carry their effect
+        public static readonly float[] HeatPerSecond = { 0.05f, 0.3f, 0.08f, 0.08f };
         public static readonly float[] RangeMult = { 1.25f, 0.9f, 1f, 1f };
 
         public static int Current => SvrLidar.MinigunMode & 3;
@@ -43,7 +43,7 @@ namespace Surveyor
         public static BuffDef FrostBuff, FrostLockBuff, RadBuff;
         private static GameObject _iceBurst;
 
-        public const int FrostMaxStacks = 40, FrostLockStacks = 30, RadMaxStacks = 10;
+        public const int FrostMaxStacks = 40, FrostLockStacks = 20, RadMaxStacks = 12, RadMeltdown = 12;
 
         public static void Create()
         {
@@ -90,6 +90,13 @@ namespace Surveyor
                 a.moveSpeedReductionMultAdd += f * 0.07f;          // more ice, slower
                 a.attackSpeedMultAdd -= Mathf.Min(0.6f, f * 0.015f);
             }
+            int r = b.GetBuffCount(RadBuff);
+            if (r > 0)
+            {
+                a.moveSpeedReductionMultAdd += r * 0.05f;          // radiation sickness: sluggish
+                a.armorAdd -= r * 4f;                                // and soft
+                a.damageMultAdd -= Mathf.Min(0.4f, r * 0.03f);       // and weak
+            }
             if (b.HasBuff(FrostLockBuff))
             {
                 a.moveSpeedRootCount += 1;                          // locked in ice
@@ -125,14 +132,14 @@ namespace Surveyor
                     break;
                 case Frost:
                     int stacks = v.GetBuffCount(FrostBuff);
-                    if (stacks < FrostMaxStacks) v.AddTimedBuff(FrostBuff, 4f);
-                    stacks++;
+                    for (int i = 0; i < 2 && stacks < FrostMaxStacks; i++, stacks++) v.AddTimedBuff(FrostBuff, 4f);
                     bool locked = v.HasBuff(FrostLockBuff);
-                    if (!locked && (stacks >= FrostLockStacks || Random.value < stacks * 0.012f))
+                    if (!locked && (stacks >= FrostLockStacks || Random.value < stacks * 0.02f))
                         Lock(v, 1.6f + stacks * 0.05f);
                     break;
                 case Rad:
-                    Infect(hc, attacker, bulletDamage * 0.3f, 2, 0, 6f);
+                    Infect(hc, attacker, bulletDamage * 0.15f, 2, 0, 6f);
+                    if (v.GetBuffCount(RadBuff) >= RadMeltdown) Meltdown(v, attacker, bulletDamage);
                     break;
             }
         }
@@ -150,7 +157,63 @@ namespace Surveyor
             {
                 try { EffectManager.SpawnEffect(_iceBurst, new EffectData { origin = v.corePosition, scale = Mathf.Max(1.5f, v.radius * 2f) }, true); } catch { }
             }
-            Util.PlaySound("Play_mage_shift_wall_build", v.gameObject);
+            Util.PlaySound("Play_item_proc_iceRingSpear", v.gameObject);
+        }
+
+        // ---------------------------------------------------------------- meltdown: full RAD stacks burst, stun the crowd
+
+        private static readonly Dictionary<CharacterBody, float> _meltCd = new Dictionary<CharacterBody, float>();
+        private static GameObject _meltFx;
+        private static bool _meltFxTried;
+
+        private static void Meltdown(CharacterBody v, GameObject attacker, float bulletDamage)
+        {
+            float now = Time.fixedTime;
+            if (_meltCd.TryGetValue(v, out float until) && now < until) return;
+            _meltCd[v] = now + 3f;
+            Vector3 at = v.corePosition;
+            float radius = 11f + v.radius;
+            TeamIndex team = v.teamComponent ? v.teamComponent.teamIndex : TeamIndex.Monster;
+            var all = CharacterBody.readOnlyInstancesList;
+            for (int i = 0; i < all.Count; i++)
+            {
+                CharacterBody b = all[i];
+                if (!b || !b.healthComponent || !b.healthComponent.alive || !b.teamComponent || b.teamComponent.teamIndex != team) continue;
+                if ((b.corePosition - at).sqrMagnitude > radius * radius) continue;
+                try
+                {
+                    SetStateOnHurt ss = b.GetComponent<SetStateOnHurt>();
+                    if (ss && ss.canBeStunned) ss.SetStun(2f);
+                }
+                catch { }
+                b.AddTimedBuff(RoR2Content.Buffs.Weak, 4f);
+                Infect(b.healthComponent, attacker, bulletDamage * 0.15f, 4, 1, 5f);
+            }
+            try
+            {
+                new BlastAttack
+                {
+                    attacker = attacker, inflictor = attacker, teamIndex = attacker ? TeamComponent.GetObjectTeam(attacker) : TeamIndex.Player,
+                    baseDamage = bulletDamage * 3f, baseForce = 600f, position = at, radius = radius,
+                    falloffModel = BlastAttack.FalloffModel.None, procCoefficient = 0.5f, damageColorIndex = DamageColorIndex.Poison,
+                    damageType = DamageType.Stun1s
+                }.Fire();
+            }
+            catch { }
+            // knock the stacks back down so it can build again
+            int extra = v.GetBuffCount(RadBuff) - 4;
+            for (int i = 0; i < extra; i++) v.RemoveOldestTimedBuff(RadBuff);
+            if (!_meltFxTried)
+            {
+                _meltFxTried = true;
+                foreach (string p in new[] { "Prefabs/Effects/ImpactEffects/CrocoDiseaseImpactEffect", "Prefabs/Effects/PoisonNovaProc", "Prefabs/Effects/ImpactEffects/AcidPuddleImpact", "Prefabs/Effects/OmniEffect/OmniExplosionVFXQuick" })
+                {
+                    try { _meltFx = LegacyResourcesAPI.Load<GameObject>(p); } catch { }
+                    if (_meltFx) break;
+                }
+            }
+            if (_meltFx) { try { EffectManager.SpawnEffect(_meltFx, new EffectData { origin = at, scale = radius, color = new Color32(120, 255, 60, 255) }, true); } catch { } }
+            Util.PlaySound("Play_item_void_bleedOnHit_explo", v.gameObject);
         }
 
         // ---------------------------------------------------------------- radiation (server)
@@ -286,8 +349,8 @@ namespace Surveyor
         public override void OnEnter()
         {
             base.OnEnter();
-            Util.PlaySound("Play_MULT_R_variant_activate", gameObject);
-            Util.PlaySound("Play_bandit2_R_load", gameObject);
+            Util.PlaySound("Play_UI_obj_casinoChest_swap", gameObject);
+            Util.PlaySound("Play_item_proc_equipMag", gameObject);
             if (isAuthority)
             {
                 SvrLidar.MinigunMode = (SvrLidar.MinigunMode + 1) & 3;

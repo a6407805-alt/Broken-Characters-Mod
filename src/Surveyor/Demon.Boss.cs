@@ -81,7 +81,7 @@ namespace Surveyor
             _masteredMask |= 1 << RequiredElement;
             VulnerableTimer = 7f;
             _blinkWind = 0f;
-            Util.PlaySound("Play_item_proc_shieldBreak", PhysicalGo);
+            Util.PlaySound("Play_item_proc_personal_shield_end", PhysicalGo);
             LastRestoredSense = ElementName(RequiredElement) + " SHIELD CRACKED — ALL PLAYERS ATTACK NOW!";
             LastRestoredUntil = Time.time + 3.8f;
             try { Chat.AddMessage("<color=#ffdd33>[BOSS EXPOSED]</color> <color=#ff3b30>The Shimmer Demon's " + ElementName(RequiredElement) + " shield shattered!</color> <color=#90e0ef>Everyone attack!</color>"); }
@@ -154,7 +154,7 @@ namespace Surveyor
             State = Mode.Stalk;
             _modeTimer = Random.Range(6f, 10f);
             if (PhysicalGo) PhysicalGo.transform.position = Pos + Vector3.up * 1.0f;
-            Util.PlaySound("Play_voidman_shift_pop", PhysicalGo);
+            Util.PlaySound("Play_voidRaid_m1_shoot", PhysicalGo);
             LastRestoredSense = "DEMON BLINKED — LiDAR TRACKING NEW POSITION";
             LastRestoredUntil = Time.time + 1.8f;
         }
