@@ -453,13 +453,7 @@ lathe("DU_Collar", [(0.095, 1.49), (0.108, 1.57), (0.135, 1.66), (0.175, 1.74), 
       seg=32, gap_deg=115, sy=0.84, mats=[M["coat"], M["lining"]], bone="chest", solid=0.012)
 lathe("DU_CollarRim", [(0.195, 1.77), (0.198, 1.776)], seg=32, gap_deg=115, sy=0.84, mats=[M["gold"]],
       bone="chest", solid=0.01, sub=0)
-USEKH = [(0.085, 1.52), (0.12, 1.5), (0.16, 1.475), (0.2, 1.45), (0.235, 1.425), (0.265, 1.4), (0.285, 1.385)]
-usekh_cols = [M["gold"], M["coat"], M["turq"], M["lining"], M["gold"], M["turq"]]
-lathe("DU_Usekh", USEKH, seg=48, sy=0.78, mats=usekh_cols + [M["gold"]], row_mat=lambda j: j, bone="chest", solid=0.012, sub=1)
-for i in range(36):
-    a = 2 * math.pi * i / 36
-    prim("sphere", f"DU_UsekhBead_{i}", (math.cos(a) * 0.29, math.sin(a) * 0.29 * 0.78, 1.372),
-         (0.018, 0.018, 0.03), m="gold" if i % 2 else "lining", bone="chest", u=8, v=6)
+# (usekh collar + bead fringe removed: in game it read as a hat brim stuck in the body)
 # layered shoulder plates
 for side, sgn in (("R", -1), ("L", 1)):
     b = f"upper_arm.{side}"

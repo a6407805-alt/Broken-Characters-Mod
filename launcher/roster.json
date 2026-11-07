@@ -109,7 +109,9 @@
       "tagline": "It's time to duel!",
       "added": "2026-10-19T21:16:26-04:00",
       "accent": "#E0B030",
-      "status": "yellow",
+      "status": "active",
+      "version": "1.1.1",
+      "note": "Removed the collar that clipped like a hat; no deck-out loss in duels",
       "image": "Assets/Roster/Duelist.png"
     },
     {

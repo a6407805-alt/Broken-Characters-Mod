@@ -23,7 +23,7 @@ namespace DuelistMod
     {
         public const string PluginGUID = "com.ahren.duelist";
         public const string PluginName = "Duelist";
-        public const string PluginVersion = "1.1.0";
+        public const string PluginVersion = "1.1.1";
         public const string TokenPrefix = "AHREN_DUELIST_";
 
         public static ManualLogSource Log;
@@ -410,7 +410,7 @@ namespace DuelistMod
             MaxRounds = cfg.Bind("Duel", "MaxRounds_v3", 0, "Turn limit before the duel dimension collapses (0 = no limit: duel until someone's LP hits zero or a deck runs out).");
             Bounties = cfg.Bind("Victory", "MonsterBounties", true, "Every enemy monster you defeat in a duel pays a bounty: gold and a chance at items, by its Level and rarity (Common, Rare, Super Rare, Ultra Rare, Secret Rare). Items drop at your feet when the duel ends.");
             BountyGold = cfg.Bind("Victory", "BountyGoldMult", 1f, "Multiplier for bounty gold.");
-            DeckOut = cfg.Bind("Duel", "DeckOut", true, "Yu-Gi-Oh! deck-out: if you have to draw and your deck is empty, you lose. The enemy too: at its Draw Phase with no monsters left to draw, it loses.");
+            DeckOut = cfg.Bind("Duel", "DeckOut", true, "Enemy deck-out: at its Draw Phase with no monsters left to draw, the enemy loses. You can never deck out (you can end the duel any time).");
             StartingHand = cfg.Bind("Duel", "StartingHand", 5, "Cards drawn when the duel begins.");
             DrawPerTurn = cfg.Bind("Duel", "DrawPerTurn", 2, "Cards drawn at the start of each later turn.");
             MaxHandSize = cfg.Bind("Duel", "MaxHandSize", 8, "Hand size limit.");

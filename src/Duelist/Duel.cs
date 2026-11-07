@@ -3123,17 +3123,8 @@ namespace DuelistMod
             {
                 if (DrawPile.Count == 0)
                 {
-                    if (DuelConfig.DeckOut.Value)
-                    {
-                        // Yu-Gi-Oh! rules: you must draw and you can't: you lose.
-                        if (canDeckOut)
-                        {
-                            AddLog("<color=#ff6666>You have to draw, but your deck is empty. DECKED OUT!</color>");
-                            ShowBanner("DECKED OUT!");
-                            SetResult(Outcome.Defeat, "You had no cards left to draw: decked out!");
-                        }
-                        return;
-                    }
+                    // No deck-out loss for you: you can end the duel any time. An empty deck just
+                    // reshuffles the graveyard (or you skip the draw).
                     if (Graveyard.Count == 0) return;
                     DrawPile.AddRange(Graveyard);
                     Graveyard.Clear();
