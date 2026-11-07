@@ -32,8 +32,9 @@ namespace Surveyor
             bool peek = _lidar.Peeking;
             if (_f.Icon) _f.Icon.color = peek ? new Color(0.55f, 0.6f, 0.65f, 1f) : new Color(0.55f, 0.95f, 1f, 1f);
             if (_q != null && _q.Icon) _q.Icon.color = Color.Lerp(Color.white, SvrLidar.ModeColorOf(SvrLidar.OdMode), 0.6f);
-            SetText(_f.Key, "F");
-            if (_q != null) SetText(_q.Key, "Q");
+            // the copied key label can't draw our letters (it is a glyph box): blank it, OnGUI writes Q and F
+            SetText(_f.Key, "");
+            if (_q != null) SetText(_q.Key, "");
         }
 
         private void Make()
@@ -97,6 +98,39 @@ namespace Surveyor
             if (lg) clone.transform.SetSiblingIndex(Mathf.Max(0, m1.transform.GetSiblingIndex()));
             clone.SetActive(true);
             return s;
+        }
+
+        private GUIStyle _keyStyle;
+        private readonly Vector3[] _corners = new Vector3[4];
+
+        private void OnGUI()
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            DrawKey(_f, "F");
+            DrawKey(_q, "Q");
+        }
+
+        private void DrawKey(Slot s, string key)
+        {
+            if (s == null || !s.Go || !s.Go.activeInHierarchy) return;
+            RectTransform rt = s.Go.transform as RectTransform;
+            if (!rt) return;
+            Canvas c = rt.GetComponentInParent<Canvas>();
+            Camera cam = c && c.renderMode != RenderMode.ScreenSpaceOverlay ? c.worldCamera : null;
+            rt.GetWorldCorners(_corners);
+            Vector2 a = RectTransformUtility.WorldToScreenPoint(cam, _corners[0]);   // bottom-left
+            Vector2 b = RectTransformUtility.WorldToScreenPoint(cam, _corners[2]);   // top-right
+            float w = b.x - a.x, h = b.y - a.y;
+            if (w <= 2f) return;
+            if (_keyStyle == null) _keyStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.UpperCenter, fontStyle = FontStyle.Bold, clipping = TextClipping.Overflow };
+            _keyStyle.fontSize = Mathf.Max(12, Mathf.RoundToInt(h * 0.36f));
+            Rect r = new Rect(a.x - 10f, Screen.height - a.y + h * 0.04f, w + 20f, h * 0.5f);
+            Color old = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, 0.8f);
+            GUI.Label(new Rect(r.x + 2f, r.y + 2f, r.width, r.height), key, _keyStyle);
+            GUI.color = Color.white;
+            GUI.Label(r, key, _keyStyle);
+            GUI.color = old;
         }
 
         private static string GetText(Component c)

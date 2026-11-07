@@ -1568,6 +1568,7 @@ namespace Surveyor
         // Each mode offers a distinct purpose: Bio-Scan reveals monsters through walls in a needle beam,
         // Salvage reveals chests/loot through walls, Topography maps terrain paths, and Peripheral gives wide close-range footing.
         public static readonly string[] OdNames = { "BIO-SCAN (THREAT RADAR)", "SALVAGE SPECTROMETER", "TOPOGRAPHY RECON", "WIDE PERIPHERAL FLOOD" };
+        public static readonly string[] OdShort = { "BIO-SCAN", "SALVAGE", "TOPOGRAPHY", "WIDE FLOOD" };
         public static readonly string[] OdDescs =
         {
             "NARROW 10° · REACH 180M · REVEALS MONSTERS & DEMON THROUGH WALLS",
@@ -4843,10 +4844,12 @@ namespace Surveyor
             // v0.7.1 panel (left, under the money): LiDAR state, the view keys, the ammo. Rows have room so text never squashes.
             _label.clipping = TextClipping.Overflow;
             _label.wordWrap = false;
-            float row = 26f * scale;
-            float panelW = 470f * scale;
+            // right-hand column: under the objective / jukebox boxes, above the radar
+            float row = 23f * scale;
+            float panelW = 270f * scale;
             float panelH = row * 4f + 6f * scale;
-            float sx = Screen.width - 285f * scale - panelW, sy = Screen.height - 140f * scale - panelH;
+            float sx = Screen.width - 60f * scale - panelW, sy = Screen.height - 440f * scale - panelH;
+            _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(13f * scale));
             GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.72f);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy - 6f * scale, panelW + 16f * scale, panelH + 12f * scale), white);
             GUI.color = new Color(0.2f, 0.85f, 1f, 0.45f);
@@ -4856,15 +4859,15 @@ namespace Surveyor
             {
                 float ry = sy + 2f * scale;
                 GUI.color = Peeking ? new Color(0.4f, 1f, 0.7f, 0.95f) : new Color(0.3f, 0.95f, 1f, 0.95f);
-                GUI.Label(new Rect(sx, ry, panelW, row), Peeking ? "[F] LIDAR OFF · NORMAL VIEW" : "[F] LIDAR ON", _label);
+                GUI.Label(new Rect(sx, ry, panelW, row), Peeking ? "[F] LIDAR OFF" : "[F] LIDAR ON", _label);
                 GUI.color = ModeAccent(OdMode);
-                GUI.Label(new Rect(sx, ry + row, panelW, row), "[Q] MODE: " + OdNames[OdMode & 3], _label);
+                GUI.Label(new Rect(sx, ry + row, panelW, row), "[Q] " + OdShort[OdMode & 3], _label);
                 ry += row;
                 // view keys, the active one lit in its colour
                 float vx = sx;
                 for (int v = 1; v <= 3; v++)
                 {
-                    string t = "[" + v + "] " + ViewNames[v] + "   ";
+                    string t = "[" + v + "] " + (v == 1 ? "MOBS" : v == 2 ? "ITEMS" : "OBJ") + "  ";
                     GUI.color = View == v ? ViewColors[v] : new Color(0.65f, 0.75f, 0.85f, 0.75f);
                     Vector2 sz = _label.CalcSize(new GUIContent(t));
                     GUI.Label(new Rect(vx, ry + row, sz.x + 4f, row), t, _label);
