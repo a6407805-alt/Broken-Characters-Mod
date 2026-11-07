@@ -30,7 +30,7 @@ namespace Surveyor
             _bhVel = aim.direction * 42f;
             _bhUntil = Time.time + 1.1f;                       // flight time before it anchors on its own (~45 m)
             _bhReadyAt = Time.time + SvrPlugin.BlackHoleCooldown.Value;
-            Util.PlaySound("Play_MULT_m2_aim", owner.gameObject);
+            Util.PlaySound("Play_engi_R_turret_rotate_start", owner.gameObject);
             return true;
         }
 
@@ -108,7 +108,7 @@ namespace Surveyor
             _bhAnchored = true;
             _bhUntil = Time.time + SvrPlugin.BlackHoleSeconds.Value;
             _bhTick = 0.25f;
-            Util.PlaySound("Play_voidman_shift_pop", _body.gameObject);
+            Util.PlaySound("Play_voidRaid_m1_shoot", _body.gameObject);
         }
 
         private void ImplodeBlackHole()
@@ -122,7 +122,7 @@ namespace Surveyor
                 if (fx) EffectManager.SpawnEffect(fx, new EffectData { origin = _bhPos, scale = r }, true);
             }
             catch { }
-            Util.PlaySound("Play_item_proc_shieldBreak", _body.gameObject);
+            Util.PlaySound("Play_item_proc_personal_shield_end", _body.gameObject);
             for (int i = 0; i < 420; i++)
                 AddDot(_bhPos + Random.onUnitSphere * Random.Range(0.5f, r), new Color(0.75f, 0.45f, 1f, 1f), 1.4f, true);
             if (_demon != null && _demon.Active && (_demon.Pos - _bhPos).magnitude < r) _demon.Knock(_bhPos, 0f, 2f);

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using R2API;
+using R2API.Networking;
 using RoR2;
 using RoR2.CharacterAI;
 using RoR2.Navigation;
@@ -55,6 +56,7 @@ namespace Surveyor
             ContentAddition.AddBody(BodyPrefab);
             ContentAddition.AddMaster(MasterPrefab);
 
+            NetworkingAPI.RegisterMessageType<SvrStalkerEventMessage>();
             RoR2Application.onFixedUpdate += DirectorTick;
             Stage.onServerStageBegin += OnStage;
             GlobalEventManager.onCharacterDeathGlobal += OnDeath;
@@ -183,13 +185,89 @@ namespace Surveyor
     {
         private CharacterMaster _master;
         private BaseAI _ai;
-        private float _next, _nextCatchUp;
-        private bool _raged;
+        private float _next, _nextCatchUp, _nextPounce, _nextShriek, _pounceAt, _shriekHitAt;
+        private bool _raged, _pouncing;
+        private CharacterBody _prey;
 
         private void Awake()
         {
             _master = GetComponent<CharacterMaster>();
             _ai = GetComponent<BaseAI>();
+        }
+
+        private bool _loggedAttack;
+
+        // pounce: a huge leap onto its prey that smashes everyone where it lands; shriek: a scream that hurts and cripples
+        private void Attacks(CharacterBody me)
+        {
+            float now = Time.time;
+            CharacterMotor motor = me.characterMotor;
+            if (_nextPounce <= 0f) { _nextPounce = now + Random.Range(8f, 12f); _nextShriek = now + Random.Range(10f, 16f); }
+
+            if (_pouncing)
+            {
+                if (now - _pounceAt > 0.35f && (!motor || motor.isGrounded || now - _pounceAt > 2.5f))
+                {
+                    _pouncing = false;
+                    new BlastAttack
+                    {
+                        attacker = me.gameObject, inflictor = me.gameObject, teamIndex = TeamIndex.Monster,
+                        baseDamage = me.damage * 5f, baseForce = 3000f, bonusForce = Vector3.up * 1500f,
+                        position = me.footPosition, radius = 11f, falloffModel = BlastAttack.FalloffModel.Linear,
+                        procCoefficient = 1f, damageType = DamageType.Generic
+                    }.Fire();
+                    GameObject fx = null;
+                    try { fx = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/ImpactEffects/PodGroundImpact"); } catch { }
+                    if (!fx) { try { fx = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/OmniEffect/OmniExplosionVFX"); } catch { } }
+                    if (fx) { try { EffectManager.SpawnEffect(fx, new EffectData { origin = me.footPosition, scale = 11f }, true); } catch { } }
+                    SvrStalkerEventMessage.Broadcast(me.gameObject, 2);
+                }
+                return;
+            }
+
+            CharacterBody prey = _prey;
+            if (!prey || !prey.healthComponent || !prey.healthComponent.alive) return;
+            Vector3 to = prey.footPosition - me.footPosition;
+            float flat = new Vector2(to.x, to.z).magnitude;
+
+            if (now >= _nextShriek && flat < 35f)
+            {
+                _nextShriek = now + Random.Range(16f, 24f);
+                _shriekHitAt = now + 0.45f;
+                SvrStalkerEventMessage.Broadcast(me.gameObject, 3);
+            }
+            if (_shriekHitAt > 0f && now >= _shriekHitAt)
+            {
+                _shriekHitAt = 0f;
+                foreach (CharacterBody p in SvrStalker.AlivePlayers())
+                {
+                    if ((p.corePosition - me.corePosition).sqrMagnitude > 35f * 35f) continue;
+                    p.AddTimedBuff(RoR2Content.Buffs.Cripple, 4f);
+                    try
+                    {
+                        p.healthComponent.TakeDamage(new DamageInfo
+                        {
+                            attacker = me.gameObject, inflictor = me.gameObject, damage = me.damage * 1.5f,
+                            position = p.corePosition, procCoefficient = 0f, damageType = DamageType.NonLethal, damageColorIndex = DamageColorIndex.Default
+                        });
+                    }
+                    catch { }
+                }
+            }
+
+            if (now >= _nextPounce && motor && motor.isGrounded && flat > 10f && flat < 45f)
+            {
+                _nextPounce = now + (_raged ? Random.Range(5f, 8f) : Random.Range(10f, 14f));
+                const float T = 0.95f;
+                float g = Mathf.Abs(Physics.gravity.y);
+                Vector3 v = new Vector3(to.x, 0f, to.z) / T;
+                v.y = to.y / T + 0.5f * g * T;
+                try { motor.Motor.ForceUnground(); } catch { }
+                motor.velocity = v;
+                _pouncing = true;
+                _pounceAt = now;
+                SvrStalkerEventMessage.Broadcast(me.gameObject, 1);
+            }
         }
 
         private void Retarget(CharacterBody t)
@@ -203,10 +281,12 @@ namespace Surveyor
 
         private void FixedUpdate()
         {
-            if (!NetworkServer.active || !_master || Time.time < _next) return;
-            _next = Time.time + 2f;
+            if (!NetworkServer.active || !_master) return;
             CharacterBody me = _master.GetBody();
             if (!me || !me.healthComponent || !me.healthComponent.alive) return;
+            try { Attacks(me); } catch (System.Exception e) { if (!_loggedAttack) { _loggedAttack = true; SvrPlugin.Log.LogError("Stalker attacks: " + e); } }
+            if (Time.time < _next) return;
+            _next = Time.time + 2f;
 
             // crawler phase: much faster once it is below half health
             if (!_raged && me.healthComponent.combinedHealthFraction < 0.5f && _master.inventory)
@@ -219,12 +299,13 @@ namespace Surveyor
             List<CharacterBody> players = SvrStalker.AlivePlayers();
             if (players.Count == 0) return;
             CharacterBody t = SvrStalker.MostIsolated(players);
+            _prey = t;
             if (t) { try { Retarget(t); } catch { } }      // separate method: if the game blocks a setter, only this call fails
             // left far behind? it reappears behind its prey, out of sight (at most every 25 s)
             if (t && Time.time >= _nextCatchUp && (me.corePosition - t.corePosition).sqrMagnitude > 95f * 95f)
             {
                 _nextCatchUp = Time.time + 25f;
-                Vector3 back = t.footPosition - t.transform.forward * 30f;
+                Vector3 back = t.footPosition - t.gameObject.transform.forward * 30f;
                 NodeGraph ng = SceneInfo.instance ? SceneInfo.instance.groundNodes : null;
                 if (ng)
                 {
@@ -249,7 +330,7 @@ namespace Surveyor
         private Transform[] _eyes = new Transform[2];
         private Light _eyeLight;
         private bool _looked, _raged, _custom;
-        private Transform _jaw;
+        private SvrStalkerRig _rig;
         private float _jawOpen, _jawTarget, _nextSnap, _nextGrowl;
         private float _rageK, _dim;
         private GUIStyle _style;
@@ -273,7 +354,6 @@ namespace Surveyor
 
         private void Shriek()
         {
-            _jawTarget = 70f;
             LocalUser lu = LocalUserManager.GetFirstLocalUser();
             GameObject at = lu != null && lu.cachedBody ? lu.cachedBody.gameObject : gameObject;
             Util.PlaySound("Play_imp_overlord_spawn", at);       // heard right next to you, wherever it is
@@ -285,9 +365,10 @@ namespace Surveyor
             _model = SvrPlugin.Model(gameObject);
             if (!_model) return;
             _looked = true;
-            try { _custom = SvrStalkerModel.Apply(_model, out _jaw); }
-            catch (System.Exception e) { SvrPlugin.Log.LogError("Stalker model: " + e); _custom = false; }
-            _model.localScale *= SvrPlugin.StalkerScale.Value;
+            try { _rig = SvrStalkerRig.Build(gameObject, _model); }
+            catch (System.Exception e) { SvrPlugin.Log.LogError("Stalker model: " + e); _rig = null; }
+            _custom = _rig != null;
+            if (!_custom) _model.localScale *= SvrPlugin.StalkerScale.Value;     // the rig sizes itself
             _baseScale = _model.localScale;
             CharacterModel cm = _model.GetComponent<CharacterModel>();
             if (!_custom && cm && cm.baseRendererInfos != null)
@@ -305,7 +386,7 @@ namespace Surveyor
                 }
             }
             ChildLocator cl = _model.GetComponent<ChildLocator>();
-            _head = cl ? cl.FindChild("Head") : null;
+            _head = _rig ? _rig.Head : (cl ? cl.FindChild("Head") : null);
             if (!_head)
                 foreach (Transform t in _model.GetComponentsInChildren<Transform>(true))
                     if (t.name.ToLowerInvariant().Contains("head")) { _head = t; break; }
@@ -350,34 +431,20 @@ namespace Surveyor
                 Util.PlaySound("Play_imp_overlord_attack1_throw", gameObject);
             }
             _rageK = Mathf.MoveTowards(_rageK, _raged ? 1f : 0f, dt * 1.5f);
-            // crawler phase: drops low and long, like it is running on all fours
-            _model.localScale = Vector3.Scale(_baseScale, new Vector3(1f + 0.1f * _rageK, 1f - 0.22f * _rageK, 1f + 0.2f * _rageK));
+            // crawler phase: the rig drops to all fours (only the old fallback body squashes)
+            if (!_custom) _model.localScale = Vector3.Scale(_baseScale, new Vector3(1f + 0.1f * _rageK, 1f - 0.22f * _rageK, 1f + 0.2f * _rageK));
 
-            // the jaw: hangs open, snaps, gapes wide when it screams (and chatters once it is enraged)
-            if (_jaw)
-            {
-                float now = Time.time;
-                if (now >= _nextSnap)
-                {
-                    _nextSnap = now + Random.Range(_raged ? 0.6f : 2f, _raged ? 1.6f : 5f);
-                    _jawTarget = Random.Range(10f, _raged ? 45f : 30f);
-                }
-                _jawTarget = Mathf.MoveTowards(_jawTarget, 0f, dt * 25f);
-                _jawOpen = Mathf.Lerp(_jawOpen, _jawTarget, 1f - Mathf.Exp(-14f * dt));
-                float chatter = _raged ? Mathf.Sin(now * 38f) * 4f : 0f;
-                _jaw.localRotation = Quaternion.Euler(_jawOpen + chatter, 0f, 0f);
-            }
             // a growl now and then when it is near you
             LocalUser lu0 = LocalUserManager.GetFirstLocalUser();
             if (lu0 != null && lu0.cachedBody && Time.time >= _nextGrowl && (lu0.cachedBody.corePosition - _body.corePosition).sqrMagnitude < 70f * 70f)
             {
                 _nextGrowl = Time.time + Random.Range(9f, 18f);
-                Util.PlaySound("Play_imp_overlord_attack1_throw", gameObject);
-                _jawTarget = 55f;
+                Util.PlaySound("Play_imp_overlord_idle_VO", gameObject);
             }
 
             float s = Mathf.Abs(_model.lossyScale.x);
-            Vector3 hp = _head ? _head.position : _model.position + _model.up * 3f * s;
+            if (_rig) s = 1f;
+            Vector3 hp = _head ? _head.position + (_rig ? _head.forward * 0.6f * _model.lossyScale.x : Vector3.zero) : _model.position + _model.up * 3f * s;
             for (int i = 0; i < 2; i++)
             {
                 if (!_eyes[i]) continue;
@@ -468,20 +535,6 @@ namespace Surveyor
                 }
             }
 
-            // boss bar
-            float w = 520f * scale, h = 12f * scale;
-            float x = (Screen.width - w) * 0.5f, y = Screen.height * 0.13f;
-            float frac = Mathf.Clamp01(_body.healthComponent.combinedHealthFraction);
-            GUI.color = new Color(0f, 0f, 0f, 0.7f);
-            GUI.DrawTexture(new Rect(x - 3f * scale, y - 3f * scale, w + 6f * scale, h + 6f * scale), white);
-            GUI.color = _raged ? new Color(0.9f, 0.1f, 0.2f, 0.95f) : new Color(0.55f, 0.12f, 0.75f, 0.95f);
-            GUI.DrawTexture(new Rect(x, y, w * frac, h), white);
-            _style.fontSize = Mathf.Max(11, Mathf.RoundToInt(18f * scale));
-            GUI.color = new Color(0.92f, 0.82f, 1f, 1f);
-            GUI.Label(new Rect(x, y - 30f * scale, w, 26f * scale), "THE SHIMMER STALKER", _style);
-            _style.fontSize = Mathf.Max(9, Mathf.RoundToInt(12f * scale));
-            GUI.color = new Color(0.8f, 0.7f, 0.9f, 0.9f);
-            GUI.Label(new Rect(x, y + h + 3f * scale, w, 18f * scale), _raged ? "ENRAGED — IT DROPS TO ALL FOURS. STAY TOGETHER" : "RAID BOSS — IT HUNTS WHOEVER STRAYS. KILL IT AS A TEAM", _style);
             GUI.color = old;
         }
     }

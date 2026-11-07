@@ -17,7 +17,7 @@ namespace Surveyor
             base.OnEnter();
             Vector3 at = characterBody ? characterBody.corePosition : transform.position;
             SvrTeamReveal.Pulse(at, SvrPlugin.PulseRevealRange.Value, SvrPlugin.PulseRevealSeconds.Value);
-            Util.PlaySound("Play_captain_drone_zap", gameObject);
+            Util.PlaySound("Play_item_use_EMPScanner_activate", gameObject);
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
             if (!isAuthority) return;
 

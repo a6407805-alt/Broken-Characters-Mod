@@ -183,6 +183,7 @@ namespace Surveyor
             base.OnEnter();
             _spool = GetComponent<SvrSpool>();
             _lidar = GetComponent<SvrLidar>();
+            Util.PlaySound("Play_clayBruiser_attack1_windUp", gameObject);
             try { _tracer = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/Tracers/TracerCommandoDefault"); } catch { _tracer = null; }
             try { _hit = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/ImpactEffects/HitsparkCommando"); } catch { _hit = null; }
             LoadModeFx();
@@ -245,6 +246,13 @@ namespace Surveyor
             Shoot(aim, anchored, ammo);
         }
 
+        public override void OnExit()
+        {
+            Util.PlaySound("Stop_clayBruiser_attack1_shootLoop", gameObject);
+            Util.PlaySound("Play_clayBruiser_attack1_windDown", gameObject);
+            base.OnExit();
+        }
+
         // what other players hear: the gun firing at a steady clip while the state runs on their side
         private float _remoteTimer;
 
@@ -255,17 +263,21 @@ namespace Surveyor
             _remoteTimer -= Time.deltaTime;
             if (_remoteTimer > 0f) return;
             _remoteTimer = 1f / 11f;
-            Util.PlaySound("Play_MULT_m1_smg_shoot", gameObject);
+            if (!_loopOn) { _loopOn = true; Util.PlaySound("Play_clayBruiser_attack1_shootLoop", gameObject); }
+            Util.PlaySound("Play_clayBruiser_attack1_shoot_bullet", gameObject);
         }
 
         // each ammo has its own voice on top of the heavy base rattle
+        // sound design: a heavy minigun body (Clay Templar's rotary cannon: wind up, firing loop, a round per shot, wind down)
+        // with a voice per ammo on top. Every one of these lives in the game's Global sound bank, so it always plays.
         private static readonly string[][] AmmoSounds =
         {
-            new[] { "Play_commando_M1", null, "Play_bandit2_m1_rifle" },                         // LEAD: hard, dry, fast
-            new[] { "Play_mage_m1_shoot", "Play_bandit2_m1_rifle", "Play_item_proc_igniteOnKill" }, // INFERNO: whoosh + boom
-            new[] { "Play_railgunner_m1_fire", null, "Play_mage_m2_iceSpear_shoot" },             // FROST: sharp crystal crack
-            new[] { "Play_voidman_m1_shoot", null, "Play_croco_m1_swing" }                      // RAD: wet, eerie hiss
+            new[] { "Play_commando_M1", null, null },                                                              // LEAD: dry, fast rattle
+            new[] { "Play_lemurian_fireball_shoot", "Play_fireballsOnHit_shoot", null }, // INFERNO: roaring fire
+            new[] { "Play_lunar_wisp_attack1_shoot_bullet", "Play_item_proc_iceRingSpear", null },                   // FROST: crystal crack
+            new[] { "Play_voidBarnacle_m1_shoot", "Play_affix_void_bug_infect", null }                              // RAD: wet, sick hiss
         };
+        private bool _loopOn;
 
         private void Shoot(Ray aim, bool anchored, int ammo)
         {
@@ -277,11 +289,12 @@ namespace Surveyor
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
 
             // sound: the base rattle every round, the ammo's own layer every 2nd / 3rd round
-            Util.PlaySound("Play_MULT_m1_smg_shoot", gameObject);
+            Util.PlaySound("Play_clayBruiser_attack1_shoot_bullet", gameObject);
             string[] snd = AmmoSounds[ammo];
-            if (_shotCounter % 2 == 0 && snd[0] != null) Util.PlaySound(snd[0], gameObject);
-            if (_shotCounter % 3 == 0 && snd[1] != null) Util.PlaySound(snd[1], gameObject);
-            if (_shotCounter % 7 == 0 && snd[2] != null) Util.PlaySound(snd[2], gameObject);
+            if (!_loopOn) { _loopOn = true; Util.PlaySound("Play_clayBruiser_attack1_shootLoop", gameObject); }
+            bool heavy = ammo != SvrAmmo.Lead;          // heavy rounds are 4x slower, so every one gets its full voice
+            if ((heavy || _shotCounter % 3 == 0) && snd[0] != null) Util.PlaySound(snd[0], gameObject);
+            if (heavy && _shotCounter % 2 == 0 && snd[1] != null) Util.PlaySound(snd[1], gameObject);
 
             characterBody.AddSpreadBloom(hasGyro ? 0.05f : 0.09f);
             float rk = (anchored ? 0.45f : 1f) * (hasGyro ? 0.5f : 1f) * (ammo == SvrAmmo.Inferno ? 1.4f : 1f);
@@ -360,7 +373,7 @@ namespace Surveyor
                 return;
             }
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
-            Util.PlaySound("Play_MULT_m2_aim", gameObject);         // one soft servo hum to start, then throttled (below)
+            Util.PlaySound("Play_engi_R_turret_rotate_start", gameObject);         // one soft servo hum to start, then throttled (below)
             _soundTimer = 1.6f;
         }
 
@@ -386,7 +399,7 @@ namespace Surveyor
             if (_soundTimer <= 0f)
             {
                 _soundTimer = 1.6f;
-                Util.PlaySound("Play_MULT_m2_aim", gameObject);
+                Util.PlaySound("Play_engi_R_turret_rotate_start", gameObject);
             }
 
             if (isAuthority)
@@ -499,7 +512,7 @@ namespace Surveyor
             flat.y = 0f;
             if (move.sqrMagnitude > 0.01f) _dir = move.normalized;
             else _dir = flat.sqrMagnitude < 0.01f ? transform.forward : flat.normalized;
-            Util.PlaySound("Play_commando_shift", gameObject);
+            Util.PlaySound("Play_env_geyser_launch", gameObject);
         }
 
         public override void FixedUpdate()
@@ -606,7 +619,7 @@ namespace Surveyor
                 else
                 {
                     lidar.StartPeek();
-                    Util.PlaySound("Play_huntress_m2_throw_short", gameObject);
+                    Util.PlaySound("Play_engi_R_turret_rotate_start", gameObject);
                 }
             }
         }

@@ -54,8 +54,8 @@ namespace Surveyor
             _waveAt = _body.footPosition;
             _revealed.Clear();
             RefreshMap();
-            Util.PlaySound(pick == 1 ? "Play_huntress_R_snipe_shoot" : pick == 2 ? "Play_item_proc_crit_cooldown" : "Play_teleporter_activate", gameObject);
-            Util.PlaySound("Play_captain_drone_zap", gameObject);
+            Util.PlaySound(pick == 1 ? "Play_huntress_R_snipe_shoot" : pick == 2 ? "Play_item_proc_crit_cooldown" : "Play_item_use_EMPScanner_findChest", gameObject);
+            Util.PlaySound("Play_item_use_EMPScanner_activate", gameObject);
         }
 
         /// <summary>The pulse: a ring of coloured LiDAR dots rolls out across the whole stage; whatever it passes lights up.</summary>

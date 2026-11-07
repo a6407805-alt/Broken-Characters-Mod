@@ -203,7 +203,7 @@ namespace Surveyor
             Renderer[] originals = model.GetComponentsInChildren<Renderer>(true);
 
             Material baseMat = StandardMaterial(model);
-            Material mat = MakeMaterial(baseMat);
+            Material mat = MaterialForSkin(baseMat, SkinOf(model));
             if (!mat) { SvrPlugin.Log.LogWarning("Surveyor model: no Hopoo shader found, keeping the Commando model."); return; }
 
             // map our bones onto the game skeleton
@@ -465,7 +465,93 @@ namespace Surveyor
             mr.shadowCastingMode = shadows;
         }
 
-        private static Material MakeMaterial(Material baseMat) => PaletteMaterial(baseMat, _tex, _emTex);
+        private static Material MakeMaterial(Material baseMat) => MaterialForSkin(baseMat, 0);
+
+        // ---------------------------------------------------------------- EVA mission skins (palette swaps)
+
+        public static readonly string[] SkinKeys = { "DEFAULT", "APOLLO", "ACES", "STARLINER", "ORLAN", "FEITIAN", "DRAGON" };
+        public static readonly string[] SkinNames = { "Survey Plate", "Apollo A7L", "Shuttle ACES \"Pumpkin\"", "Starliner Blue", "Orlan-MKS", "Feitian", "Dragon Flight Suit" };
+        // the suit's roles, by their colour in the file: fabric, white plates, blue trim, orange trim, grey, orange glow, dark
+        private static readonly Color[] RoleRef =
+        {
+            new Color(0.844f, 0.854f, 0.864f), new Color(0.942f, 0.942f, 0.932f), new Color(0.061f, 0.284f, 0.666f),
+            new Color(1f, 0.452f, 0.018f), new Color(0.626f, 0.646f, 0.676f), new Color(1f, 0.555f, 0.073f), new Color(0.084f, 0.096f, 0.119f)
+        };
+        // per skin, per role (null = keep)
+        private static readonly Color?[][] SkinRoles =
+        {
+            new Color?[] { null, null, null, null, null, null, null },
+            // Apollo A7L: white beta cloth, blue fittings, red commander stripes
+            new Color?[] { new Color(0.93f, 0.92f, 0.87f), new Color(0.97f, 0.96f, 0.92f), new Color(0.16f, 0.32f, 0.72f), new Color(0.82f, 0.12f, 0.1f), new Color(0.74f, 0.74f, 0.72f), new Color(1f, 0.35f, 0.25f), null },
+            // Shuttle ACES: the orange launch-and-entry "pumpkin" suit, NASA blue patches, silver fittings
+            new Color?[] { new Color(1f, 0.45f, 0.08f), new Color(0.98f, 0.52f, 0.13f), new Color(0.76f, 0.78f, 0.82f), new Color(0.14f, 0.28f, 0.62f), new Color(0.5f, 0.5f, 0.53f), new Color(1f, 0.7f, 0.3f), null },
+            // Boeing Starliner: blue suit, light grey trim, navy fittings
+            new Color?[] { new Color(0.14f, 0.27f, 0.56f), new Color(0.2f, 0.36f, 0.68f), new Color(0.07f, 0.12f, 0.28f), new Color(0.86f, 0.88f, 0.93f), new Color(0.55f, 0.6f, 0.68f), new Color(0.5f, 0.75f, 1f), null },
+            // Orlan-MKS: Russian EVA suit, white with red and blue stripes
+            new Color?[] { new Color(0.92f, 0.92f, 0.9f), new Color(0.96f, 0.96f, 0.95f), new Color(0.12f, 0.28f, 0.78f), new Color(0.86f, 0.13f, 0.13f), new Color(0.62f, 0.64f, 0.66f), new Color(1f, 0.3f, 0.25f), null },
+            // Feitian: Chinese EVA suit, white with red and gold
+            new Color?[] { new Color(0.94f, 0.94f, 0.92f), new Color(0.97f, 0.97f, 0.95f), new Color(0.95f, 0.76f, 0.22f), new Color(0.82f, 0.1f, 0.08f), new Color(0.66f, 0.66f, 0.64f), new Color(1f, 0.8f, 0.3f), null },
+            // SpaceX Dragon: white with black panels
+            new Color?[] { new Color(0.95f, 0.95f, 0.95f), new Color(0.98f, 0.98f, 0.98f), new Color(0.12f, 0.12f, 0.14f), new Color(0.07f, 0.07f, 0.08f), new Color(0.2f, 0.2f, 0.22f), new Color(0.85f, 0.9f, 1f), new Color(0.04f, 0.04f, 0.05f) },
+        };
+        private static readonly Dictionary<int, Material> _skinMats = new Dictionary<int, Material>();
+
+        public static Material MaterialForSkin(Material baseMat, int skin)
+        {
+            skin = Mathf.Clamp(skin, 0, SkinRoles.Length - 1);
+            if (_skinMats.TryGetValue(skin, out Material have) && have) return have;
+            if (skin == 0) { Material m0 = PaletteMaterial(baseMat, _tex, _emTex); _skinMats[0] = m0; return m0; }
+            int n = Mathf.Max(1, _palColor.Length);
+            Texture2D tex = new Texture2D(n, 1, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, name = "SvrPalette" + skin };
+            Texture2D em = new Texture2D(n, 1, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, name = "SvrPaletteEm" + skin };
+            for (int i = 0; i < _palColor.Length; i++)
+            {
+                Color c = _palColor[i];
+                int role = -1;
+                float best = 0.004f;
+                for (int r = 0; r < RoleRef.Length; r++)
+                {
+                    float d = (c.r - RoleRef[r].r) * (c.r - RoleRef[r].r) + (c.g - RoleRef[r].g) * (c.g - RoleRef[r].g) + (c.b - RoleRef[r].b) * (c.b - RoleRef[r].b);
+                    if (d < best) { best = d; role = r; }
+                }
+                if (role >= 0 && SkinRoles[skin][role].HasValue) { Color nc = SkinRoles[skin][role].Value; c = new Color(nc.r, nc.g, nc.b, 1f); }
+                tex.SetPixel(i, 0, c);
+                em.SetPixel(i, 0, _palEmit[i] > 0f ? c : c * 0.48f);
+            }
+            tex.Apply(false, true);
+            em.Apply(false, true);
+            Material m = PaletteMaterial(baseMat, tex, em);
+            _skinMats[skin] = m;
+            return m;
+        }
+
+        /// <summary>Which mission suit this model wears (the loadout skin).</summary>
+        public static int SkinOf(Transform model)
+        {
+            try
+            {
+                ModelSkinController msc = model ? model.GetComponent<ModelSkinController>() : null;
+                if (msc) return msc.currentSkinIndex;
+                CharacterBody b = model ? model.GetComponentInParent<CharacterBody>() : null;
+                if (b) return (int)b.skinIndex;
+            }
+            catch { }
+            return 0;
+        }
+
+        /// <summary>Repaint the suit after a skin change (character select).</summary>
+        public static void Repaint(Transform model, int skin)
+        {
+            Material m = MaterialForSkin(_standard, skin);
+            if (!m) return;
+            foreach (MeshRenderer mr in model.GetComponentsInChildren<MeshRenderer>(true))
+                if (mr && mr.name.StartsWith("SvrPart_")) mr.sharedMaterial = m;
+            CharacterModel cm = model.GetComponent<CharacterModel>();
+            if (cm && cm.baseRendererInfos != null)
+                for (int i = 0; i < cm.baseRendererInfos.Length; i++)
+                    if (cm.baseRendererInfos[i].renderer && cm.baseRendererInfos[i].renderer.name.StartsWith("SvrPart_"))
+                        cm.baseRendererInfos[i].defaultMaterial = m;
+        }
 
         /// <summary>Hopoo's character shader painted from a palette texture (colours + glow), cel-shaded.</summary>
         public static Material PaletteMaterial(Material baseMat, Texture2D tex, Texture2D emTex)
@@ -635,10 +721,15 @@ namespace Surveyor
         }
 
         // Watchdog: if the suit is ever missing, collapsed or left behind (stage teleport, respawn), rebuild it.
+        private int _skin = -1;
+
         private void LateUpdate()
         {
             if (!_applied || Time.time < _nextCheck || !SvrPlugin.UseCustomModel.Value) return;
-            _nextCheck = Time.time + 0.5f;
+            _nextCheck = Time.time + 0.25f;
+            int sk = SvrModel.SkinOf(transform);
+            if (_skin < 0) _skin = sk;
+            else if (sk != _skin) { _skin = sk; try { SvrModel.Repaint(transform, sk); } catch { } }
             if (_rebuilds >= 6 || !SkeletonReady()) return;
             bool bad = false;
             int parts = 0;
