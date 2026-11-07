@@ -1,0 +1,16 @@
+{
+  "name": "Hivelancer",
+  "version_number": "1.0.2",
+  "website_url": "",
+  "description": "Hivelancer: a Petrichor V wasp sentinel (lore survivor, Beedrill-inspired original design). Venom and Marks, Twineedle, Pin Missile, Drill Dive, Swarm Call / Fell Stinger, hover, and a Pokemon-style battle HUD. Personal use.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2121",
+    "RiskofThunder-RoR2BepInExPack-1.41.0",
+    "RiskofThunder-R2API_Core-5.3.0",
+    "RiskofThunder-R2API_ContentManagement-1.0.11",
+    "RiskofThunder-R2API_Prefab-1.1.1",
+    "RiskofThunder-R2API_Language-1.1.0",
+    "RiskofThunder-R2API_Items-1.0.8",
+    "RiskofThunder-R2API_RecalculateStats-1.6.6"
+  ]
+}
