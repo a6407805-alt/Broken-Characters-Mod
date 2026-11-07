@@ -129,8 +129,12 @@ namespace Surveyor
             }
             if (!_chest) return false;
             if (!_cone) _cone = MakeCone(14);
-            if (!_outerMat) _outerMat = Glow(new Color(0.25f, 0.6f, 1f), 6f);
-            if (!_innerMat) _innerMat = Glow(new Color(0.85f, 0.95f, 1f), 10f);
+            if (!_matTried)
+            {
+                _matTried = true;          // once: never retry (and never throw) every frame
+                _outerMat = Glow(new Color(0.25f, 0.6f, 1f), 2f);
+                _innerMat = Glow(new Color(0.85f, 0.95f, 1f), 2.5f);
+            }
             for (int i = 0; i < 4; i++)
             {
                 _outer[i] = Flame("SvrThrusterPlume" + i, _outerMat);
@@ -161,17 +165,27 @@ namespace Surveyor
         }
 
         /// <summary>
-        /// Flame material: a plain unlit, see-through colour (forward pass). The old deferred material with a very high
-        /// glow drew wrong over the sky and blew out the bloom, which smeared across the screen and the HUD.
+        /// Flame material: the game's own character shader with a modest glow (colours kept at or below 1). Built once;
+        /// the flames fade out near the camera, which is what used to smear across the screen when looking up.
         /// </summary>
+        private static bool _matTried;
         private static Material Glow(Color c, float power)
         {
-            Shader sh = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color");
-            if (!sh) return null;
-            Material m = new Material(sh) { name = "SvrThrusterFlame" };
-            float a = power > 8f ? 0.9f : 0.55f;
-            m.color = new Color(Mathf.Clamp01(c.r), Mathf.Clamp01(c.g), Mathf.Clamp01(c.b), a);
-            m.renderQueue = 3100;
+            Material m = null;
+            try
+            {
+                Shader hg = Shader.Find("Hopoo Games/Deferred/Standard");
+                if (hg)
+                {
+                    m = new Material(hg) { name = "SvrThrusterFlame" };
+                    Color cc = new Color(Mathf.Clamp01(c.r), Mathf.Clamp01(c.g), Mathf.Clamp01(c.b), 1f);
+                    m.SetColor("_Color", cc);
+                    if (m.HasProperty("_EmColor")) m.SetColor("_EmColor", cc);
+                    if (m.HasProperty("_EmTex")) m.SetTexture("_EmTex", Texture2D.whiteTexture);
+                    if (m.HasProperty("_EmPower")) m.SetFloat("_EmPower", Mathf.Min(power, 2.5f));
+                }
+            }
+            catch { m = null; }
             return m;
         }
 
