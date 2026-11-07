@@ -129,6 +129,13 @@ namespace Surveyor
             }
             catch { }
 
+            try
+            {
+                FieldInfo cf = typeof(CharacterBody).GetField("coreTransform", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (cf != null) cf.SetValue(_body, _j["chest"]);
+            }
+            catch { }
+            _yaw = holder.eulerAngles.y;
             try { BuildHurtBoxes(model, bones, head); }
             catch (System.Exception e) { SvrPlugin.Log.LogWarning("Stalker hitboxes kept the Imp Overlord's: " + e.Message); }
 
@@ -345,6 +352,8 @@ namespace Surveyor
         private const float DropQ = -0.22f;
 
         private readonly Dictionary<string, Quaternion> _cur = new Dictionary<string, Quaternion>();
+        private readonly Dictionary<string, Quaternion> _tgt = new Dictionary<string, Quaternion>();
+        private float _yaw, _yawVel, _lean, _yawSpeed;
         private float _drop = DropQ;
 
         private void LateUpdate()
@@ -402,7 +411,7 @@ namespace Surveyor
 
             float idle = 1f - moveK;
             float breathe = Mathf.Sin(_t * (rage ? 2.4f : 1.4f));
-            float gait = 22f * moveK * (rage ? 1.15f : 1f);
+            float gait = 20f * moveK * (rage ? 1.15f : 1f);
 
             // ---- base: the prowl (diagonal gait: right hand with left foot)
             Vector3 hips = HipsQ + new Vector3(breathe * 1.5f * idle, sn * 5f * moveK, sn * 4f * moveK);
@@ -417,6 +426,20 @@ namespace Surveyor
             Vector3 faR = ForearmQ + new Vector3(Mathf.Max(0f, -cs) * 28f * moveK, 0f, 0f), faL = ForearmQ + new Vector3(Mathf.Max(0f, cs) * 28f * moveK, 0f, 0f);
             Vector3 hR = new Vector3(Mathf.Sin(_t * 0.9f) * 8f * idle, 0f, 0f), hL = new Vector3(Mathf.Sin(_t * 0.9f + 2f) * 8f * idle, 0f, 0f);
             float drop = DropQ - Mathf.Abs(cs) * 0.05f * moveK;
+
+            // fluid body: a slow S-wave runs from the hips up through the neck as it walks, it leans into turns,
+            // and the head holds steady against the sway (like a predator locked on)
+            float wave = 7f * moveK + 2f * idle;
+            hips.y += Mathf.Sin(ph) * wave * 0.6f;
+            spine.y += Mathf.Sin(ph - 0.7f) * wave;
+            chest.y += Mathf.Sin(ph - 1.4f) * wave;
+            neck.y += Mathf.Sin(ph - 2.1f) * wave * 0.6f;
+            headR.y -= Mathf.Sin(ph - 1.4f) * wave * 0.8f;
+            float leanTarget = Mathf.Clamp(-_yawVel * 0.12f, -16f, 16f);
+            _lean = Mathf.Lerp(_lean, leanTarget, 1f - Mathf.Exp(-4f * dt));
+            hips.z += _lean;
+            chest.z += _lean * 0.5f;
+            neck.z -= _lean * 0.6f;
 
             // ---- actions over the base: wind-up (readable), strike (fast), recover (smooth)
             float u = Mathf.Clamp01(_actT / Mathf.Max(0.01f, _actDur));
@@ -542,10 +565,28 @@ namespace Surveyor
             float chatter = rage ? Mathf.Sin(_t * 40f) * 3f : 0f;
 
             // smooth everything (no snapping between poses), quicker during strikes
-            float rate = (_act == Act.Slam && u > 0.5f && u < 0.65f) || _act == Act.Pounce ? 30f : 12f;
+            float rate = (_act == Act.Slam && u > 0.5f && u < 0.65f) || _act == Act.Pounce ? 26f : 9f;
             float a = 1f - Mathf.Exp(-rate * dt);
             _drop = Mathf.Lerp(_drop, drop, a);
             _root.position = pos + Vector3.up * (_drop * _s);
+
+            // face the prey: always while attacking or slow, otherwise where it is going (it still glances with its head)
+            Vector3 face = Vector3.zero;
+            Vector3 flat = new Vector3(_vel.x, 0f, _vel.z);
+            if (prey && (_act != Act.None || flat.magnitude < 4f || (prey.corePosition - pos).sqrMagnitude < 30f * 30f))
+                face = prey.corePosition - pos;
+            else if (flat.sqrMagnitude > 1f) face = flat;
+            face.y = 0f;
+            if (face.sqrMagnitude > 0.01f && _act != Act.Pounce && _act != Act.Death)
+            {
+                float want = Mathf.Atan2(face.x, face.z) * Mathf.Rad2Deg;
+                float turnRate = _act == Act.PounceWindup || _act == Act.ShriekWindup ? 220f : 140f;
+                float prev = _yaw;
+                _yaw = Mathf.SmoothDampAngle(_yaw, want, ref _yawSpeed, 0.35f, turnRate);
+                _yawVel = Mathf.DeltaAngle(prev, _yaw) / dt;
+            }
+            else _yawVel = Mathf.Lerp(_yawVel, 0f, dt * 5f);
+            _root.rotation = Quaternion.Euler(0f, _yaw, 0f);
             Set("hips", hips, a); Set("spine", spine, a); Set("chest", chest, a); Set("neck", neck, a); Set("head", headR, a);
             Set("jaw", new Vector3(_jaw + chatter, 0f, 0f), 1f);
             Set("upper_arm.R", uaR, a); Set("forearm.R", faR, a); Set("hand.R", hR, a);
@@ -560,7 +601,10 @@ namespace Surveyor
         {
             if (!_j.TryGetValue(n, out Transform t)) return;
             Quaternion want = Quaternion.Euler(e);
-            Quaternion q = _cur.TryGetValue(n, out Quaternion c) ? Quaternion.Slerp(c, want, a) : want;
+            if (a >= 1f) { _tgt[n] = want; _cur[n] = want; t.localRotation = want; return; }
+            Quaternion tg = _tgt.TryGetValue(n, out Quaternion t0) ? Quaternion.Slerp(t0, want, a) : want;
+            Quaternion q = _cur.TryGetValue(n, out Quaternion c) ? Quaternion.Slerp(c, tg, a) : tg;
+            _tgt[n] = tg;
             _cur[n] = q;
             t.localRotation = q;
         }

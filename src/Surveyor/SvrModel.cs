@@ -656,14 +656,13 @@ namespace Surveyor
 
         // the body's own rest pose, remembered per bone name relative to the model (item displays can carry skinned meshes
         // bound to the same bones with their own bind poses; late in a run those used to win and the suit flew off)
-        private static readonly Dictionary<string, Matrix4x4> BindCache = new Dictionary<string, Matrix4x4>();
 
         private static bool IsItemDisplay(Transform t, Transform model)
         {
             for (Transform p = t; p && p != model; p = p.parent)
             {
                 string n = p.name;
-                if (n.StartsWith("Display") || n.Contains("(Clone)") || n.StartsWith("SvrPart_")) return true;
+                if (n.StartsWith("Display") || n.StartsWith("SvrPart_")) return true;
             }
             return false;
         }
@@ -671,31 +670,24 @@ namespace Surveyor
         private static void BuildBindPose(Transform model)
         {
             Bind.Clear();
-            Matrix4x4 toLocal = model.worldToLocalMatrix, toWorld = model.localToWorldMatrix;
-            // 1) the body's own skinned meshes only (never item displays)
+            // the body mesh is the skinned mesh with the most bones (item displays and props have a handful); it alone
+            // decides the rest pose, other meshes only fill bones it does not have
+            List<SkinnedMeshRenderer> smrs = new List<SkinnedMeshRenderer>();
             foreach (SkinnedMeshRenderer smr in model.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                if (smr && smr.sharedMesh && smr.bones != null && smr.sharedMesh.bindposes != null && !smr.name.StartsWith("SvrPart_")) smrs.Add(smr);
+            smrs.Sort((x, y) => (IsItemDisplay(x.transform, model) ? 1 : 0).CompareTo(IsItemDisplay(y.transform, model) ? 1 : 0) != 0
+                ? (IsItemDisplay(x.transform, model) ? 1 : 0).CompareTo(IsItemDisplay(y.transform, model) ? 1 : 0)
+                : y.bones.Length.CompareTo(x.bones.Length));
+            foreach (SkinnedMeshRenderer smr in smrs)
             {
-                if (IsItemDisplay(smr.transform, model)) continue;
-                Mesh mesh = smr.sharedMesh;
+                Matrix4x4[] bp = smr.sharedMesh.bindposes;
                 Transform[] bones = smr.bones;
-                if (!mesh || bones == null) continue;
-                Matrix4x4[] bp = mesh.bindposes;
-                if (bp == null) continue;
                 Matrix4x4 rootM = smr.transform.localToWorldMatrix;
                 for (int i = 0; i < bones.Length && i < bp.Length; i++)
-                {
-                    if (!bones[i] || Bind.ContainsKey(bones[i])) continue;
-                    Matrix4x4 m = rootM * bp[i].inverse;
-                    Bind[bones[i]] = m;
-                    if (!BindCache.ContainsKey(bones[i].name)) BindCache[bones[i].name] = toLocal * m;
-                }
+                    if (bones[i] && !Bind.ContainsKey(bones[i])) Bind[bones[i]] = rootM * bp[i].inverse;
             }
-            // 2) any bone still missing: what we remembered from an earlier, clean build
-            foreach (Transform t in model.GetComponentsInChildren<Transform>(true))
-                if (t && !Bind.ContainsKey(t) && !IsItemDisplay(t, model) && BindCache.TryGetValue(t.name, out Matrix4x4 lm))
-                    Bind[t] = toWorld * lm;
             if (Bind.Count == 0) SvrPlugin.Log.LogWarning("Surveyor model: no bind pose found, using the current pose.");
-            else SvrPlugin.Log.LogInfo($"Surveyor model: bind pose for {Bind.Count} bones.");
+            else SvrPlugin.Log.LogInfo($"Surveyor model: bind pose for {Bind.Count} bones (body mesh {(smrs.Count > 0 ? smrs[0].name : "-")}).");
         }
 
         private static Matrix4x4 BM(Transform t) => Bind.TryGetValue(t, out Matrix4x4 m) ? m : t.localToWorldMatrix;
