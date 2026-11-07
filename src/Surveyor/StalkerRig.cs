@@ -180,12 +180,7 @@ namespace Surveyor
             }
             catch { }
 
-            try
-            {
-                FieldInfo cf = typeof(CharacterBody).GetField("coreTransform", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (cf != null) cf.SetValue(_body, _j["chest"]);
-            }
-            catch { }
+
             _yaw = holder.eulerAngles.y;
             try { BuildHurtBoxes(model, bones, head); }
             catch (System.Exception e) { SvrPlugin.Log.LogWarning("Stalker hitboxes kept the Imp Overlord's: " + e.Message); }
@@ -255,6 +250,7 @@ namespace Surveyor
                 if (c.main) main = hbx;
             }
             if (made.Count == 0) return;
+            try { AnchorBody(main ? main : made[0]); } catch (System.Exception e) { SvrPlugin.Log.LogWarning("Stalker anchor: " + e.Message); }
             // retire the Imp Overlord's (now invisible) hitboxes
             if (group.hurtBoxes != null)
                 foreach (HurtBox old in group.hurtBoxes)
@@ -262,6 +258,40 @@ namespace Surveyor
             group.hurtBoxes = made.ToArray();
             group.mainHurtBox = main ? main : made[0];
             group.bullseyeCount = 1;
+        }
+
+        /// <summary>
+        /// The health bar, hit effects and ice sit on the body's core point, its main hitbox and its radius. They were still the
+        /// tall Imp Overlord's (the bar floated far above the hound): point them all at the hound's chest.
+        /// </summary>
+        private void AnchorBody(HurtBox main)
+        {
+            const BindingFlags F = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            Transform chest = _j["chest"];
+            int done = 0;
+            foreach (string n in new[] { "coreTransform", "_coreTransform" })
+            {
+                FieldInfo f = typeof(CharacterBody).GetField(n, F);
+                if (f != null && f.FieldType == typeof(Transform)) { f.SetValue(_body, chest); done++; }
+                PropertyInfo p = typeof(CharacterBody).GetProperty(n, F);
+                if (p != null && p.PropertyType == typeof(Transform)) { MethodInfo set = p.GetSetMethod(true); if (set != null) { set.Invoke(_body, new object[] { chest }); done++; } }
+            }
+            foreach (string n in new[] { "mainHurtBox", "<mainHurtBox>k__BackingField", "_mainHurtBox" })
+            {
+                FieldInfo f = typeof(CharacterBody).GetField(n, F);
+                if (f != null && f.FieldType == typeof(HurtBox)) { f.SetValue(_body, main); done++; }
+                PropertyInfo p = typeof(CharacterBody).GetProperty(n, F);
+                if (p != null && p.PropertyType == typeof(HurtBox)) { MethodInfo set = p.GetSetMethod(true); if (set != null) { set.Invoke(_body, new object[] { main }); done++; } }
+            }
+            float rad = 0.55f * _s;
+            foreach (string n in new[] { "radius", "<radius>k__BackingField", "_radius", "bestFitRadius", "<bestFitRadius>k__BackingField" })
+            {
+                FieldInfo f = typeof(CharacterBody).GetField(n, F);
+                if (f != null && f.FieldType == typeof(float)) { f.SetValue(_body, rad); done++; }
+                PropertyInfo p = typeof(CharacterBody).GetProperty(n, F);
+                if (p != null && p.PropertyType == typeof(float)) { MethodInfo set = p.GetSetMethod(true); if (set != null) { try { set.Invoke(_body, new object[] { rad }); done++; } catch { } } }
+            }
+            SvrPlugin.Log.LogInfo($"Stalker anchored to its chest ({done} fields set), radius {rad:0.0}.");
         }
 
         private static void SetTeam(HurtBox hb)

@@ -419,20 +419,41 @@ namespace Surveyor
                 bool alive = b && b.healthComponent && b.healthComponent.alive;
                 if (!alive || (f == 0 && !locked)) { _gone.Add(b); if (c.Root) Destroy(c.Root); continue; }
                 float k = locked ? 1f : Mathf.Clamp01(f / (float)SvrAmmo.FrostLockStacks);
-                float r = Mathf.Max(0.6f, b.radius);
-                c.Root.transform.position = b.corePosition;
-                for (int s = 0; s < c.Shards.Length; s++)
+                // ice grows UP FROM THE FEET as the slow stacks; once locked it engulfs the whole body
+                Vector3 feet = b.footPosition;
+                float height = Mathf.Clamp((b.corePosition.y - feet.y) * 2f, 1f, 10f);
+                float r = Mathf.Clamp(b.radius, 0.5f, 3f);
+                c.Root.transform.position = feet;
+                int n = c.Shards.Length;
+                for (int s = 0; s < n; s++)
                 {
                     Transform t = c.Shards[s];
-                    bool show = locked || s < Mathf.CeilToInt(c.Shards.Length * k);
+                    bool ring = s < n / 2;                       // first half: the ring at the feet, second half: the body shell
+                    bool show = ring ? (s < Mathf.CeilToInt(n / 2f * Mathf.Max(0.25f, k))) : locked;
                     t.gameObject.SetActive(show);
                     if (!show) continue;
-                    Vector3 d = c.Dirs[s];
-                    float len = r * c.Size[s] * (locked ? 1.5f : (0.5f + 0.9f * k));
-                    t.position = b.corePosition + d * r * (locked ? 0.35f : 0.75f);
-                    t.rotation = Quaternion.LookRotation(d, Vector3.up);
-                    t.localScale = new Vector3(len * 0.32f, len * 0.32f, len);
+                    float ang = c.Size[s] * 37f + s * 2.399f;
+                    Vector3 outDir = new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang));
+                    if (ring)
+                    {
+                        // spikes erupting from the ground around the feet, leaning in, taller as it stacks
+                        float len = height * (0.25f + 0.45f * k) * c.Size[s];
+                        t.position = feet + outDir * r * (0.9f + 0.3f * c.Size[s]) - Vector3.up * 0.1f;
+                        t.rotation = Quaternion.LookRotation((Vector3.up * 1.6f - outDir * 0.5f).normalized, outDir);
+                        t.localScale = new Vector3(len * 0.35f, len * 0.35f, len);
+                    }
+                    else
+                    {
+                        // the shell: big crystals over the whole body, pointing outward
+                        float hFrac = ((s - n / 2) + 0.5f) / (n - n / 2);
+                        float len = Mathf.Max(r, height * 0.35f) * (0.9f + 0.4f * c.Size[s]);
+                        t.position = feet + Vector3.up * height * (0.1f + 0.85f * hFrac) + outDir * r * 0.3f;
+                        Vector3 d = (outDir + Vector3.up * (hFrac - 0.3f)).normalized;
+                        t.rotation = Quaternion.LookRotation(d, Vector3.up);
+                        t.localScale = new Vector3(len * 0.55f, len * 0.55f, len);
+                    }
                 }
+                if (c.Glow) c.Glow.transform.position = feet + Vector3.up * height * 0.4f;
                 if (c.Glow) c.Glow.intensity = 0.6f + 1.4f * k;
             }
             foreach (CharacterBody b in _gone) _ice.Remove(b);
@@ -467,7 +488,7 @@ namespace Surveyor
                 }
             }
             Cluster c = new Cluster { Root = new GameObject("SvrIceCluster") };
-            int n = 14;
+            int n = 24;
             c.Shards = new Transform[n];
             c.Dirs = new Vector3[n];
             c.Size = new float[n];

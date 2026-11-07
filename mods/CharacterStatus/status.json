@@ -121,8 +121,8 @@
       "match": [
         "surveyor"
       ],
-      "version": "0.7.9",
-      "note": "Active WIP (v0.7.9): suit head/lean fixed (skins carry the body mesh again so the suit finds its rest pose), thruster flame error spam fixed; plus hound Stalker with spring physics, tankier boss, centred radar"
+      "version": "0.8.0",
+      "note": "Active WIP (v0.8.0): Frost ice grows from enemies' feet and fully engulfs them when locked; Stalker health bar, hit effects and ice anchored to its body (were floating at the old Imp height); suit head fix + flame error fix from v0.7.9"
     },
     {
       "name": "MOMMY MILKERS",
