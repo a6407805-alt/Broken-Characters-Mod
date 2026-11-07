@@ -30,7 +30,7 @@ namespace Surveyor
             _bhVel = aim.direction * 42f;
             _bhUntil = Time.time + 1.1f;                       // flight time before it anchors on its own (~45 m)
             _bhReadyAt = Time.time + SvrPlugin.BlackHoleCooldown.Value;
-            Util.PlaySound("Play_engi_R_turret_rotate_start", owner.gameObject);
+            Util.PlaySound("Play_UI_menuClick", owner.gameObject);
             return true;
         }
 

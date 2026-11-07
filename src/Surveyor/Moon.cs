@@ -46,7 +46,7 @@ namespace Surveyor
             base.OnEnter();
             SvrThrusters.Burst(gameObject, 1.4f);                 // runs on every client: everyone sees the burn
             Util.PlaySound("Play_moonBrother_dash", gameObject);
-            Util.PlaySound("Play_item_use_fireballDash_start", gameObject);
+            Util.PlaySound("Play_lunar_golem_attack1_launch", gameObject);
             Util.PlaySound("Play_env_geyser_launch", gameObject);
             if (!isAuthority || !characterMotor) return;
             Vector3 aim = GetAimRay().direction;
