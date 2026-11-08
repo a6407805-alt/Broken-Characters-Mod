@@ -143,8 +143,8 @@
         "berserk",
         "zoid"
       ],
-      "version": "0.1.6",
-      "note": "Active WIP (v0.1.6): rigged model + heavy T-rex walk (stomps, tail, head, skill poses);: Zoids Battle Legends port with Buster Claws, E-Shield, Magneser Drills, and Charged Particle Cannon (CPC)"
+      "version": "0.1.7",
+      "note": "Active WIP (v0.1.7): articulated Buster Claws (booms, spinning palms, 3 opening prongs) + heavy T-rex walk;: Zoids Battle Legends port with Buster Claws, E-Shield, Magneser Drills, and Charged Particle Cannon (CPC)"
     }
   ]
 }

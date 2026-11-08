@@ -21,6 +21,7 @@ namespace BerserkFury
             public string Name, Parent;
             public Vector3 Pivot;   // model space
             public Mesh Mesh;
+            public Vector3 Dir;     // prongs: direction the tip opens towards (model space, XY)
         }
 
         // Parent before child.
@@ -32,7 +33,10 @@ namespace BerserkFury
             new[] { "tail1", "body" }, new[] { "tail2", "tail1" }, new[] { "tail3", "tail2" },
             new[] { "head", "body" },
             new[] { "armL", "body" }, new[] { "armR", "body" },
-            new[] { "clawL", "body" }, new[] { "clawR", "body" },
+            new[] { "mountL", "body" }, new[] { "clawL", "mountL" },
+            new[] { "prongTopL", "clawL" }, new[] { "prongOutL", "clawL" }, new[] { "prongInL", "clawL" },
+            new[] { "mountR", "body" }, new[] { "clawR", "mountR" },
+            new[] { "prongTopR", "clawR" }, new[] { "prongOutR", "clawR" }, new[] { "prongInR", "clawR" },
         };
 
         public static List<Part> Parts;
@@ -41,7 +45,10 @@ namespace BerserkFury
         {
             float ax = Mathf.Abs(c.x);
             string side = c.x < 0f ? "L" : "R";
-            if (c.y > 2.0f && c.z > 0.45f) return "claw" + side;
+            // Buster Claw units: boom + hub ("mount"), palm ("claw"), three prongs
+            if (c.y > 2.0f && c.z > 0.69f && ax > 0.5f) return (c.y > 2.4f ? "prongTop" : ax > 0.85f ? "prongOut" : "prongIn") + side;
+            if (c.y > 2.0f && ax >= 0.6f && c.z > -0.1f && c.z <= 0.69f) return "claw" + side;
+            if (c.y > 1.7f && ax > 0.25f && ax < 0.7f && c.z > -1.35f && c.z < 0.5f) return "mount" + side;
             if (c.z < -0.75f && ax < 0.35f && c.y < 1.7f) return c.z > -1.45f ? "tail1" : (c.z > -2.05f ? "tail2" : "tail3");
             if (ax < 0.3f && c.z > 0.7f && c.y > 1.2f) return "head";
             if (ax >= 0.2f && c.z > 0.5f && c.y < 1.3f) return "arm" + side;
@@ -146,7 +153,10 @@ namespace BerserkFury
                     case "tail1": case "tail2": case "tail3": return new Vector3(0f, c.y, b.max.z);
                     case "head": return new Vector3(0f, b.min.y + 0.2f, b.min.z + 0.1f);
                     case "armL": case "armR": return new Vector3(c.x, b.max.y, b.min.z);
+                    case "mountL": case "mountR": return new Vector3(Mathf.Sign(c.x) * 0.48f, 1.9f, -1.15f);
                     case "clawL": case "clawR": return new Vector3(c.x, c.y, b.min.z);
+                    case "prongTopL": case "prongOutL": case "prongInL":
+                    case "prongTopR": case "prongOutR": case "prongInR": return new Vector3(c.x, c.y, b.min.z);
                 }
                 return c;
             }
@@ -158,7 +168,13 @@ namespace BerserkFury
                 string parent = h[1];
                 while (parent != "" && !groups.ContainsKey(parent)) parent = Array.Find(Hierarchy, x => x[0] == parent)[1];
                 Vector3 pivot = PivotFor(h[0]);
-                Parts.Add(new Part { Name = h[0], Parent = parent, Pivot = pivot, Mesh = MakeMesh(h[0], tris, pivot, pos, uv, nrm) });
+                Vector3 dir = Vector3.zero;
+                if (h[0].StartsWith("prong") && bounds.TryGetValue("claw" + h[0].Substring(h[0].Length - 1), out Bounds palm))
+                {
+                    Vector3 d = pivot - palm.center; d.z = 0f;
+                    dir = d.sqrMagnitude > 1e-4f ? d.normalized : Vector3.up;
+                }
+                Parts.Add(new Part { Name = h[0], Parent = parent, Pivot = pivot, Dir = dir, Mesh = MakeMesh(h[0], tris, pivot, pos, uv, nrm) });
             }
             BerserkFuryPlugin.Log.LogInfo("Rig: " + string.Join(", ", Parts.ConvertAll(p => p.Name + "(" + p.Mesh.triangles.Length / 3 + ")")));
         }
@@ -226,12 +242,16 @@ namespace BerserkFury
                 mr.shadowCastingMode = ShadowCastingMode.On;
                 mr.receiveShadows = true;
                 renderers.Add(mr);
+                if (p.Dir != Vector3.zero) go.AddComponent<BerserkFuryProng>().Dir = p.Dir;
                 made[p.Name] = go.transform;
                 pivots[p.Name] = p.Pivot;
             }
             return renderers;
         }
     }
+
+    /// <summary>Remembers which way a Buster Claw prong opens.</summary>
+    public class BerserkFuryProng : MonoBehaviour { public Vector3 Dir; }
 
     /// <summary>
     /// Heavy T-rex gait for the rigged Zoid: stride-locked leg swing with knee lift, body drop + roll on each
@@ -243,9 +263,11 @@ namespace BerserkFury
 
         CharacterBody _body;
         EntityStateMachine _weapon, _body2;
-        Transform _bodyT, _thighL, _thighR, _shinL, _shinR, _t1, _t2, _t3, _head, _armL, _armR, _clawL, _clawR;
+        Transform _bodyT, _thighL, _thighR, _shinL, _shinR, _t1, _t2, _t3, _head, _armL, _armR, _mountL, _mountR, _clawL, _clawR;
+        BerserkFuryProng[] _prongsL, _prongsR;
+        float _spinL, _spinR, _open, _shield, _drillSpin;
         Vector3 _bodyRest;
-        float _phase, _move, _lastYaw, _turn, _brace, _lunge, _surge, _recoil, _jawT;
+        float _phase, _move, _lastYaw, _turn, _brace, _lunge, _surge, _recoil;
         bool _plantedL, _plantedR;
         static GameObject _dust;
 
@@ -260,7 +282,10 @@ namespace BerserkFury
         {
             _bodyT = F("BF_body"); _thighL = F("BF_thighL"); _thighR = F("BF_thighR"); _shinL = F("BF_shinL"); _shinR = F("BF_shinR");
             _t1 = F("BF_tail1"); _t2 = F("BF_tail2"); _t3 = F("BF_tail3"); _head = F("BF_head");
-            _armL = F("BF_armL"); _armR = F("BF_armR"); _clawL = F("BF_clawL"); _clawR = F("BF_clawR");
+            _armL = F("BF_armL"); _armR = F("BF_armR"); _mountL = F("BF_mountL"); _mountR = F("BF_mountR");
+            _clawL = F("BF_clawL"); _clawR = F("BF_clawR");
+            _prongsL = _clawL ? _clawL.GetComponentsInChildren<BerserkFuryProng>() : new BerserkFuryProng[0];
+            _prongsR = _clawR ? _clawR.GetComponentsInChildren<BerserkFuryProng>() : new BerserkFuryProng[0];
             if (_bodyT) _bodyRest = _bodyT.localPosition;
             _body = GetComponentInParent<CharacterBody>();
             if (!_dust) { try { _dust = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/ImpactEffects/CharacterLandImpact"); } catch { } }
@@ -356,10 +381,44 @@ namespace BerserkFury
             Rot(_armL, -legL * 0.4f - _lunge * 55f, 0f, 0f);
             Rot(_armR, -legR * 0.4f - _lunge * 55f, 0f, 0f);
 
-            // Buster Claws: inertia on footfalls, recoil while firing, swing forward to aim the CPC
-            float clawP = impact * 5f * m + _recoil * 8f - _brace * 10f + _surge * -6f;
-            Rot(_clawL, clawP + Mathf.Sin(time * 25f) * _recoil * 3f, -_brace * 6f, 0f);
-            Rot(_clawR, clawP - Mathf.Sin(time * 25f) * _recoil * 3f, _brace * 6f, 0f);
+            // ---- Buster Claws: boom swing, palm aim + spin, three prongs open/close ----
+            _shield = Mathf.MoveTowards(_shield, sprinting && grounded && _brace < 0.1f ? 1f : 0f, dt * 4f);
+            bool firing = state.Contains("Blaster");
+            float openTarget = 0.12f + Mathf.Sin(time * 1.3f) * 0.05f;               // idle: breathing
+            if (firing) openTarget = 0.55f;
+            if (_shield > 0.5f) openTarget = 0.75f;
+            if (_brace > 0.5f) openTarget = 1f;
+            if (_lunge > 0.3f || _surge > 0.3f) openTarget = -0.15f;                // clamp shut to drill / streamline
+            _open = Mathf.MoveTowards(_open, openTarget, dt * 3.5f);
+
+            // Spin: drills spin hard, shield spins slowly, CPC turns slowly
+            float spinRate = _lunge * 1500f + _shield * 220f + _brace * 90f;
+            _spinL += spinRate * dt; _spinR -= spinRate * dt;
+            if (spinRate < 1f) { _spinL = Mathf.MoveTowardsAngle(_spinL, 0f, dt * 180f); _spinR = Mathf.MoveTowardsAngle(_spinR, 0f, dt * 180f); }
+
+            // Booms: + pitch = claws dip forward/down; yaw = swing out
+            float boomPitch = impact * 6f * m - (sprinting ? 4f : 0f)
+                              + _lunge * 22f            // drill: thrust forward-down
+                              - _surge * 28f            // thrusters: claws fold up and back
+                              + _brace * 10f            // CPC: level out
+                              + _shield * 6f;
+            float boomYaw = _brace * 32f + _shield * 12f - _lunge * 10f + Mathf.Sin(time * 0.9f) * 2f * (1 - m);
+            float kickL = firing && Mathf.Sin(time * 12f) > 0f ? _recoil : 0f;
+            float kickR = firing && Mathf.Sin(time * 12f) <= 0f ? _recoil : 0f;
+            Rot(_mountL, boomPitch - kickL * 10f + lag1 * 2f * m, -boomYaw, 0f);
+            Rot(_mountR, boomPitch - kickR * 10f - lag1 * 2f * m, boomYaw, 0f);
+            Rot(_clawL, -kickL * 14f - _brace * 6f, -_shield * 8f, _spinL);
+            Rot(_clawR, -kickR * 14f - _brace * 6f, _shield * 8f, _spinR);
+            float openDeg = _open * 38f;
+            foreach (BerserkFuryProng pr in _prongsL) OpenProng(pr, openDeg);
+            foreach (BerserkFuryProng pr in _prongsR) OpenProng(pr, openDeg);
+        }
+
+        static void OpenProng(BerserkFuryProng pr, float deg)
+        {
+            if (!pr) return;
+            Vector3 axis = Vector3.Cross(pr.Dir, Vector3.forward);
+            pr.transform.localRotation = Quaternion.AngleAxis(-deg, axis);
         }
 
         void Stomp(Transform foot)
