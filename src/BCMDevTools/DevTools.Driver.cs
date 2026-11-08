@@ -167,32 +167,23 @@ namespace BCMDevTools
 
         static void TurnCamera(float deg)
         {
-            // Rotate the camera rig's yaw (field name differs between versions, so look it up by name).
             foreach (CameraRigController rig in CameraRigController.readOnlyInstancesList)
             {
                 if (!rig || rig.localUserViewer == null) continue;
-                Traverse t = Traverse.Create(rig);
-                foreach (string f in new[] { "yaw", "currentCameraState" })
+                try
                 {
-                    if (t.Field(f).FieldExists() && t.Field(f).GetValue() is float y) { t.Field(f).SetValue(y + deg); return; }
+                    // CameraModePlayerBasic keeps pitch/yaw in its per-rig instance data
+                    object inst = Traverse.Create(rig).Field("cameraModeInstanceData").GetValue();
+                    if (inst == null) { Debug.Log("[BCM driver] no cameraModeInstanceData"); return; }
+                    Traverse py = Traverse.Create(inst).Field("pitchYaw");
+                    if (!py.FieldExists()) { Debug.Log("[BCM driver] no pitchYaw"); return; }
+                    object v = py.GetValue();
+                    Traverse vt = Traverse.Create(v);
+                    vt.Field("yaw").SetValue(vt.Field("yaw").GetValue<float>() + deg);
+                    py.SetValue(v);
                 }
-                // Newer versions keep yaw on the camera mode instance data
-                object modeData = t.Field("cameraModeInstanceData").GetValue();
-                if (modeData != null)
-                {
-                    Traverse md = Traverse.Create(modeData);
-                    foreach (string f in new[] { "yaw" })
-                        if (md.Field(f).FieldExists()) { md.Field(f).SetValue(md.Field(f).GetValue<float>() + deg); return; }
-                    Traverse pitchYaw = md.Field("pitchYaw");
-                    if (pitchYaw.FieldExists())
-                    {
-                        object py = pitchYaw.GetValue();
-                        Traverse pyt = Traverse.Create(py);
-                        pyt.Field("yaw").SetValue(pyt.Field("yaw").GetValue<float>() + deg);
-                        pitchYaw.SetValue(py);
-                        return;
-                    }
-                }
+                catch (Exception e) { Debug.Log("[BCM driver] turn: " + e.Message); }
+                return;
             }
         }
 
@@ -232,6 +223,18 @@ namespace BCMDevTools
                 Logger.LogInfo($"Dump:  {r.name} type={r.GetType().Name} active={r.gameObject.activeInHierarchy} enabled={r.enabled} forceOff={r.forceRenderingOff} " +
                                $"mat={(r.sharedMaterial ? r.sharedMaterial.name + "/" + r.sharedMaterial.shader.name : "NONE")} bounds={r.bounds.center}/{r.bounds.size}");
             }
+            try
+            {
+                CameraTargetParams ctp = me.GetComponent<CameraTargetParams>();
+                if (ctp)
+                {
+                    Logger.LogInfo($"Dump: cam params={(ctp.cameraParams ? ctp.cameraParams.name : "null")} ideal={(ctp.cameraParams ? ctp.cameraParams.data.idealLocalCameraPos.value.ToString() : "-")} pivotOff={(ctp.cameraParams ? ctp.cameraParams.data.pivotVerticalOffset.value.ToString() : "-")} pivot={(ctp.cameraPivotTransform ? ctp.cameraPivotTransform.position.ToString() : "null")}");
+                    Logger.LogInfo("Dump: cam current " + Traverse.Create(ctp).Property("currentCameraParamsData").GetValue()?.ToString());
+                }
+                foreach (CameraRigController rig in CameraRigController.readOnlyInstancesList)
+                    if (rig && rig.sceneCam) Logger.LogInfo($"Dump: camera pos={rig.sceneCam.transform.position} fwd={rig.sceneCam.transform.forward} dist={(rig.sceneCam.transform.position - me.corePosition).magnitude:F1}");
+            }
+            catch (Exception e) { Logger.LogInfo("Dump cam: " + e.Message); }
             CharacterModel cm = model.GetComponent<CharacterModel>();
             if (cm && cm.baseRendererInfos != null)
                 foreach (var info in cm.baseRendererInfos)
