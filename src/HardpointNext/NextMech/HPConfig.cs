@@ -146,7 +146,7 @@ internal static class HPConfig
 		BaseDamage = cfg.Bind("1. NEXT", "Base Damage", 13f, "");
 		DamagePerLevel = cfg.Bind("1. NEXT", "Damage Per Level", 2.6f, "");
 		BaseArmor = cfg.Bind("1. NEXT", "Base Armor", 25f, "");
-		MoveSpeed = cfg.Bind("1. NEXT", "Move Speed", 7.5f, "");
+		MoveSpeed = cfg.Bind("1. NEXT", "Move Speed (NEXT)", 9f, "A NEXT is faster than Hardpoint (7.5).");
 		SprintMultiplier = cfg.Bind("1. NEXT", "Ground Boost Multiplier", 1.6f, "Sprinting is the ground boost: this many times the walk speed (Commando: 1.45).");
 		AcMovement = cfg.Bind("1. NEXT", "AC6 Movement", defaultValue: true, "(user, Nov 6) His back always faces the camera and the ground boost (sprint) works in every direction, firing included, like Armored Core 6. False = the old Commando-style movement.");
 		ModelScale = cfg.Bind("1. NEXT", "Model Scale", 1f, "1 = 3 m tall.");

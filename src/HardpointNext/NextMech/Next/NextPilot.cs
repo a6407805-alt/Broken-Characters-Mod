@@ -8,10 +8,9 @@ using UnityEngine;
 
 namespace NextMech;
 
-// The pilot's extra keys on their own NEXT: Overed Boost (V) and Hanger swap (F).
+// The pilot's extra keys on their own NEXT: Overed Boost (V) and the left back unit (G).
 public class NextPilot : MonoBehaviour
 {
-	public bool hangerOut;
 	public bool obStopRequested;
 	public float lastQbTime = -99f;
 	public bool lastQbWasSecond;
@@ -75,7 +74,6 @@ public class NextPilot : MonoBehaviour
 			if (slot) slot.ExecuteIfReady();
 		}
 		if (KeyDown(NextConfig.ObKey.Value)) ToggleOveredBoost();
-		if (KeyDown(NextConfig.HangerKey.Value)) SwapHanger();
 	}
 
 	private void ToggleOveredBoost()
@@ -91,29 +89,5 @@ public class NextPilot : MonoBehaviour
 		if (st && !st.CanSpend(NextConfig.ObStartCost.Value)) return;
 		obStopRequested = false;
 		boostMachine.SetInterruptState(new OveredBoost(), InterruptPriority.Skill);
-	}
-
-	private void SwapHanger()
-	{
-		GenericSkill primary = body.skillLocator ? body.skillLocator.primary : null;
-		if (!primary) return;
-		HangerPart part = Garage.Hanger(body);
-		SkillDef def = part == HangerPart.None ? null : Garage.Hangers[(int)part];
-		if (!hangerOut && def && primary.baseSkill == def) return;
-		if (hangerOut)
-		{
-			foreach (SkillDef d in Garage.Hangers) if (d) primary.UnsetSkillOverride(this, d, GenericSkill.SkillOverridePriority.Replacement);
-			hangerOut = false;
-		}
-		else if (def)
-		{
-			primary.SetSkillOverride(this, def, GenericSkill.SkillOverridePriority.Replacement);
-			hangerOut = true;
-		}
-		else
-		{
-			return;
-		}
-		CustomAudio.PlayNear(CustomAudio.Clip.Reload, transform.position, 40f);
 	}
 }

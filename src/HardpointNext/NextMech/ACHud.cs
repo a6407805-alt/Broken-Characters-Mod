@@ -476,11 +476,9 @@ public class ACHud : MonoBehaviour
 		float x2 = num - 560f;
 		float num30 = num2 - 370f;
 		SkillLocator skillLocator = body.skillLocator;
-		bool hanger = (bool)pilot && pilot.hangerOut;
-		Slot(x2, num30, hanger ? "R-ARM · HANGER" : "R-ARM", skillLocator ? skillLocator.primary : null, "M1", hanger ? "" : (hPStatus ? hPStatus.magazine.ToString() : ""), hanger ? null : $"/ {HPConfig.RifleMagazine.Value}");
+		Slot(x2, num30, "R-ARM", skillLocator ? skillLocator.primary : null, "M1", RifleAmmo(skillLocator ? skillLocator.primary : null, false, hPStatus), RifleMax(skillLocator ? skillLocator.primary : null));
 		GenericSkill lArm = skillLocator ? skillLocator.secondary : null;
-		bool lRifle = (bool)lArm && Arsenal.Of(lArm.skillDef)?.id == "BURSTRIFLE";
-		Slot(x2, num30 + 64f, "L-ARM", lArm, "M2", lRifle && hPStatus ? hPStatus.magazineL.ToString() : "", lRifle ? $"/ {HPConfig.RifleMagazine.Value}" : null);
+		Slot(x2, num30 + 64f, "L-ARM", lArm, "M2", RifleAmmo(lArm, true, hPStatus), RifleMax(lArm));
 		Slot(x2, num30 + 128f, "BOOSTER", skillLocator ? skillLocator.utility : null, "SHIFT", "", null);
 		Slot(x2, num30 + 192f, "R-BACK", skillLocator ? skillLocator.special : null, "R", "", null);
 		Slot(x2, num30 + 256f, "L-BACK", NextPilot.BackLeftSlot(body), NextConfig.LeftBackKey.Value.MainKey.ToString(), "", null);
@@ -497,6 +495,12 @@ public class ACHud : MonoBehaviour
 		Corner(num31, num2 - num31, 1, -1);
 		Corner(num - num31, num2 - num31, -1, -1);
 	}
+
+	private static bool IsRifle(GenericSkill gs) => (bool)gs && Arsenal.Of(gs.skillDef)?.id == "BURSTRIFLE";
+
+	private static string RifleAmmo(GenericSkill gs, bool left, HPStatus st) => IsRifle(gs) && (bool)st ? (left ? st.magazineL : st.magazine).ToString() : "";
+
+	private static string RifleMax(GenericSkill gs) => IsRifle(gs) ? $"/ {HPConfig.RifleMagazine.Value}" : null;
 
 	private bool IsOveredBoosting()
 	{

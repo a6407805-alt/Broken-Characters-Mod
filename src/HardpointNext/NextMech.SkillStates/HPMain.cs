@@ -12,6 +12,12 @@ public class HPMain : GenericCharacterMain
 	{
 		base.HandleMovements();
 		FaceCamera();
+		// Gatling fire slows the frame down.
+		HPStatus st = HPStatus.Of(base.characterBody);
+		if (st && Time.time < st.gatlingSlowUntil && base.characterMotor)
+		{
+			base.characterMotor.moveDirection *= 0.55f;
+		}
 	}
 
 	public override void Update()

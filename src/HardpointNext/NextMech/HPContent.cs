@@ -276,15 +276,14 @@ internal static class HPContent
 		// Arsenal: both arms take any arm weapon; two back units.
 		Arsenal.Define();
 		component.primary = AddSkillSlot(BodyPrefab, "Primary", Arsenal.DefsFor(Mount.RightArm, "BURSTRIFLE"));
-		component.secondary = AddSkillSlot(BodyPrefab, "Secondary", Arsenal.DefsFor(Mount.LeftArm, "PULSEBLADE"));
+		component.secondary = AddSkillSlot(BodyPrefab, "Secondary", Arsenal.DefsFor(Mount.LeftArm, "BURSTRIFLE"));
 		component.utility = AddSkillSlot(BodyPrefab, "Utility", eNSkillDef, eNSkillDef2);
 		component.special = AddSkillSlot(BodyPrefab, "Special", Arsenal.DefsFor(Mount.RightBack, "MISSILES"));
 		GenericSkill backLeft = AddSkillSlot(BodyPrefab, "BackLeft", Arsenal.DefsFor(Mount.LeftBack, "LASERCANNON"));
 		backLeft.loadoutTitleToken = "BCM_NEXT_GARAGE_LBACK";
 		backLeft.hideInCharacterSelect = false;
-		// Hanger weapons (swapped onto the right arm with the Hanger key) and the garage rows.
-		Garage.Hangers = new SkillDef[] { Arsenal.RightArmDefs["SHOTGUN"], Arsenal.RightArmDefs["LINEAR"] };
 		FireGrenadeCannon.CreateShell();
+		FireBazooka.Shell = FireGrenadeCannon.MakeShell("HardpointNextBazookaShell", NextConfig.BazookaRadius.Value, 70f);
 		Garage.CreateSlots(BodyPrefab);
 		BodyPrefab.AddComponent<NextParts>();
 	}

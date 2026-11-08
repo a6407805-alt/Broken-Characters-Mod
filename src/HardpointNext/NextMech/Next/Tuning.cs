@@ -118,7 +118,7 @@ public class TuningScreen : MonoBehaviour
 			}
 			return;
 		}
-		float w = 760f * k, h = 470f * k;
+		float w = 760f * k, h = 650f * k;
 		float x = (Screen.width - w) / 2f, y = (Screen.height - h) / 2f;
 		GUI.color = new Color(0.03f, 0.05f, 0.07f, 0.92f);
 		GUI.DrawTexture(new Rect(x, y, w, h), white);
@@ -126,7 +126,15 @@ public class TuningScreen : MonoBehaviour
 		GUI.DrawTexture(new Rect(x, y, w, 2f * k), white);
 		GUI.DrawTexture(new Rect(x, y + h - 2f * k, w, 2f * k), white);
 		GUI.color = Color.white;
-		GUI.Label(new Rect(x + 30f * k, y + 20f * k, w, 40f * k), "ACSIS // TUNE", title);
+		GUI.Label(new Rect(x + 30f * k, y + 20f * k, w, 40f * k), "ACSIS // ASSEMBLY & TUNE", title);
+		// Assembly: booster and generator (saved in the config, kept between runs)
+		Picker(x, y + 80f * k, k, "BOOSTER", new[] { "STANDARD", "QUICK TYPE", "OVERED TYPE" }, NextConfig.BoosterChoice);
+		Picker(x, y + 140f * k, k, "GENERATOR", new[] { "STANDARD", "HIGH-OUTPUT", "HIGH-CAPACITY" }, NextConfig.GeneratorChoice);
+		int load = Garage.Load(body), maxLoad = Garage.MaxLoad(body);
+		GUI.color = load > maxLoad ? new Color(1f, 0.35f, 0.3f) : new Color(0.6f, 0.65f, 0.7f);
+		GUI.Label(new Rect(x + 30f * k, y + 196f * k, w, 26f * k), $"WEAPON LOAD {load} / {maxLoad}" + (load > maxLoad ? "   OVERWEIGHT" : ""), label);
+		GUI.color = Color.white;
+		y += 180f * k;
 		GUI.Label(new Rect(x + w - 330f * k, y + 28f * k, 300f * k, 30f * k), $"FRS MEMORY  {free} / {Tuning.Earned(body)}", label);
 		float rowY = y + 90f * k;
 		int max = NextConfig.TuneMaxPerStat.Value;
@@ -147,7 +155,22 @@ public class TuningScreen : MonoBehaviour
 			if (GUI.Button(new Rect(x + 680f * k, ry + 2f * k, 50f * k, 36f * k), "+", button) && free > 0 && Tuning.Points[i] < max) Tuning.Points[i]++;
 		}
 		GUI.color = new Color(0.6f, 0.65f, 0.7f);
-		GUI.Label(new Rect(x + 30f * k, y + h - 44f * k, w - 60f * k, 30f * k), $"1 point per level  ·  [{NextConfig.TuneKey.Value}] or ESC to close", label);
+		GUI.Label(new Rect(x + 30f * k, y + h - 224f * k, w - 60f * k, 30f * k), $"1 point per level  ·  [{NextConfig.TuneKey.Value}] or ESC to close", label);
+		GUI.color = Color.white;
+	}
+
+	private void Picker(float x, float y, float k, string name, string[] options, BepInEx.Configuration.ConfigEntry<int> entry)
+	{
+		GUI.Label(new Rect(x + 30f * k, y + 8f * k, 200f * k, 30f * k), name, label);
+		for (int i = 0; i < options.Length; i++)
+		{
+			bool on = entry.Value == i;
+			GUI.color = on ? new Color(0.4f, 0.95f, 1f) : new Color(0.55f, 0.6f, 0.65f);
+			if (GUI.Button(new Rect(x + 220f * k + i * 175f * k, y, 165f * k, 44f * k), options[i], button) && !on)
+			{
+				entry.Value = i;
+			}
+		}
 		GUI.color = Color.white;
 	}
 

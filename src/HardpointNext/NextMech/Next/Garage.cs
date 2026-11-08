@@ -10,28 +10,19 @@ namespace NextMech;
 
 public enum FramePart { Middle, Light, Heavy }
 public enum BoosterPart { Standard, QuickType, OverType }
-public enum GeneratorPart { Standard, HighOutput, HighCapacity, Kojima }
-public enum HangerPart { Shotgun, LinearRifle, None }
+public enum GeneratorPart { Standard, HighOutput, HighCapacity }
 
-// The garage: extra loadout rows (FRAME / BOOSTER / GENERATOR / HANGER) on the character select screen.
-// They are never activated as skills; the chosen variant is read back as a part. The loadout is networked,
-// so every machine knows each NEXT's parts.
+// The garage. FRAME is a loadout row (networked: it changes AP, armor and max load). BOOSTER and GENERATOR are
+// picked on the in-game ACSIS screen (T) and saved in the config: they only change things the pilot's own
+// machine runs (boosts, EN), so the character select screen stays short.
 public static class Garage
 {
 	private static readonly Dictionary<SkillDef, int> partIndex = new Dictionary<SkillDef, int>();
-
-	public static SkillDef[] Hangers = new SkillDef[2];
 
 	public static void CreateSlots(GameObject body)
 	{
 		Row(body, "Frame", "FRAME", new[] { "MIDDLE", "LIGHT", "HEAVY" },
 			new[] { new Color(0.55f, 0.6f, 0.65f), new Color(0.35f, 0.85f, 1f), new Color(0.85f, 0.55f, 0.2f) });
-		Row(body, "Booster", "BOOSTER", new[] { "STANDARD", "QUICK", "OVERED" },
-			new[] { new Color(0.55f, 0.6f, 0.65f), new Color(0.3f, 1f, 0.6f), new Color(1f, 0.4f, 0.25f) });
-		Row(body, "Generator", "GENERATOR", new[] { "STANDARD", "OUTPUT", "CAPACITY", "KOJIMA" },
-			new[] { new Color(0.55f, 0.6f, 0.65f), new Color(1f, 0.85f, 0.25f), new Color(0.35f, 0.55f, 1f), new Color(0.3f, 1f, 0.85f) });
-		Row(body, "Hanger", "HANGER", new[] { "SHOTGUN", "LINEAR", "NONE" },
-			new[] { new Color(1f, 0.6f, 0.3f), new Color(0.6f, 0.4f, 1f), new Color(0.3f, 0.3f, 0.3f) });
 	}
 
 	private static void Row(GameObject body, string slot, string token, string[] variants, Color[] colors)
@@ -105,9 +96,10 @@ public static class Garage
 	}
 
 	public static FramePart Frame(CharacterBody b) => (FramePart)Get(b, "Frame");
-	public static BoosterPart Booster(CharacterBody b) => (BoosterPart)Get(b, "Booster");
-	public static GeneratorPart Generator(CharacterBody b) => (GeneratorPart)Get(b, "Generator");
-	public static HangerPart Hanger(CharacterBody b) => (HangerPart)Get(b, "Hanger");
+	public static BoosterPart Booster(CharacterBody b) => IsLocal(b) ? (BoosterPart)Mathf.Clamp(NextConfig.BoosterChoice.Value, 0, 2) : BoosterPart.Standard;
+	public static GeneratorPart Generator(CharacterBody b) => IsLocal(b) ? (GeneratorPart)Mathf.Clamp(NextConfig.GeneratorChoice.Value, 0, 2) : GeneratorPart.Standard;
+
+	private static bool IsLocal(CharacterBody b) => b && b.hasEffectiveAuthority;
 
 	// ---- weapon load (AC weight limits) ----
 
@@ -127,18 +119,13 @@ public static class Garage
 		if (!parts) return 0;
 		int load = Arsenal.WeightOf(parts.Slot("Primary")) + Arsenal.WeightOf(parts.Slot("Secondary"))
 			+ Arsenal.WeightOf(parts.Slot("Special")) + Arsenal.WeightOf(parts.Slot("BackLeft"));
-		switch (Hanger(b))
-		{
-			case HangerPart.Shotgun: load += Arsenal.Arms.Find(w => w.id == "SHOTGUN")?.weight ?? 0; break;
-			case HangerPart.LinearRifle: load += Arsenal.Arms.Find(w => w.id == "LINEAR")?.weight ?? 0; break;
-		}
 		return load;
 	}
 
 	public static int Overweight(CharacterBody b) => Mathf.Max(0, Load(b) - MaxLoad(b));
 
 	// 1 = no penalty; drops per point over the load, down to 0.4.
-	public static float WeightFactor(CharacterBody b) => 1f - Mathf.Min(0.6f, Overweight(b) * NextConfig.OverweightPenalty.Value);
+	public static float WeightFactor(CharacterBody b) => 1f - Mathf.Min(0.5f, Overweight(b) * NextConfig.OverweightPenalty.Value);
 
 	// ---- what the parts do (multipliers; 1 = Hardpoint's numbers) ----
 
@@ -175,14 +162,14 @@ public static class Garage
 	public static float EnCapacity(CharacterBody b)
 	{
 		float m = 1f;
-		switch (Generator(b)) { case GeneratorPart.HighOutput: m *= 0.8f; break; case GeneratorPart.HighCapacity: m *= 1.5f; break; case GeneratorPart.Kojima: m *= 0.9f; break; }
+		switch (Generator(b)) { case GeneratorPart.HighOutput: m *= 0.8f; break; case GeneratorPart.HighCapacity: m *= 1.5f; break; }
 		return m * Tuning.Mult(Tuning.Stat.Capacity);
 	}
 
 	public static float EnRegen(CharacterBody b)
 	{
 		float m = 1f;
-		switch (Generator(b)) { case GeneratorPart.HighOutput: m *= 1.4f; break; case GeneratorPart.HighCapacity: m *= 0.85f; break; case GeneratorPart.Kojima: m *= 0.85f; break; }
+		switch (Generator(b)) { case GeneratorPart.HighOutput: m *= 1.4f; break; case GeneratorPart.HighCapacity: m *= 0.85f; break; }
 		if (Frame(b) == FramePart.Heavy) m *= 0.9f;
 		return m * Tuning.Mult(Tuning.Stat.Output) * WeightFactor(b);
 	}
@@ -197,13 +184,12 @@ public static class Garage
 	{
 		float m = 1f;
 		switch (Frame(b)) { case FramePart.Light: m *= 0.6f; break; case FramePart.Heavy: m *= 1.5f; break; }
-		if (Generator(b) == GeneratorPart.Kojima) m *= 1.2f;
 		return m;
 	}
 
 	public static float PaRegen(CharacterBody b)
 	{
-		return Generator(b) == GeneratorPart.Kojima ? 1.6f : 1f;
+		return 1f;
 	}
 
 	internal static void Stats(CharacterBody body, RecalculateStatsAPI.StatHookEventArgs args)

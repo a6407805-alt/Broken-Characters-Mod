@@ -14,6 +14,8 @@ public class HPStatus : MonoBehaviour
 
 	public int magazineL;
 
+	public float gatlingSlowUntil = -99f;
+
 	public float gatlingSpinR, gatlingSpinL, gatlingLastR = -99f, gatlingLastL = -99f;
 
 	public readonly List<HurtBox> locksL = new List<HurtBox>();

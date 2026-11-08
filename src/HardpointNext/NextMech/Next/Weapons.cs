@@ -32,8 +32,11 @@ public abstract class GunShot : BaseSkillState
 		Shoot();
 	}
 
+	protected virtual bool CanShoot() => true;
+
 	protected void Shoot()
 	{
+		if (!CanShoot()) return;
 		string muzzle = Arsenal.Muzzle(this);
 		CustomAudio.PlayNear(Sound, transform.position, 70f);
 		if (HPAssets.MuzzleFlash) EffectManager.SimpleMuzzleFlash(HPAssets.MuzzleFlash, gameObject, muzzle, false);
@@ -79,6 +82,66 @@ public class FireAssaultRifle : GunShot
 	protected override float Spread => 1.2f;
 }
 
+// Energy weapon: no ammo, every shot spends EN. Can't fire while redlined.
+public class FirePulseGun : GunShot
+{
+	protected override float Interval => 0.16f;
+	protected override float Damage => NextConfig.PulseGunDamage.Value;
+	protected override float Spread => 0.8f;
+	protected override float Recoil => 0.35f;
+	protected override float Proc => 0.8f;
+
+	public override void OnEnter()
+	{
+		HPStatus st = HPStatus.Of(characterBody);
+		if (st && st.redline)
+		{
+			base.OnEnter();
+			return;
+		}
+		if (st) st.Spend(NextConfig.PulseGunEn.Value);
+		base.OnEnter();
+	}
+
+	protected override bool CanShoot()
+	{
+		HPStatus st = HPStatus.Of(characterBody);
+		return !st || !st.redline;
+	}
+}
+
+// Bazooka: slow heavy shell, big stagger and splash.
+public class FireBazooka : BaseSkillState
+{
+	public static GameObject Shell;
+	private float duration;
+
+	public override void OnEnter()
+	{
+		base.OnEnter();
+		duration = 1.3f / attackSpeedStat;
+		characterBody.SetAimTimer(2f);
+		if (!Arsenal.IsLeft(this)) Anim.Play(GetModelAnimator(), "Gesture, Override", "FireRifle", 0.6f);
+		CustomAudio.PlayNear(CustomAudio.Clip.Missile, transform.position, 80f);
+		CustomAudio.PlayNear(CustomAudio.Clip.Stomp, transform.position, 60f);
+		if (HPAssets.MuzzleFlash) EffectManager.SimpleMuzzleFlash(HPAssets.MuzzleFlash, gameObject, Arsenal.Muzzle(this), false);
+		if (isAuthority && Shell)
+		{
+			Ray aim = GetAimRay();
+			AddRecoil(-3f, -4f, -0.8f, 0.8f);
+			ProjectileManager.instance.FireProjectile(Shell, aim.origin + aim.direction * 2f, Util.QuaternionSafeLookRotation(aim.direction), gameObject, damageStat * NextConfig.BazookaDamage.Value, 2000f, RollCrit());
+		}
+	}
+
+	public override void FixedUpdate()
+	{
+		base.FixedUpdate();
+		if (isAuthority && fixedAge >= duration) outer.SetNextStateToMain();
+	}
+
+	public override InterruptPriority GetMinimumInterruptPriority() => InterruptPriority.Skill;
+}
+
 public class FireSmg : GunShot
 {
 	protected override float Interval => 0.065f;
@@ -98,7 +161,7 @@ public class FireHandgun : GunShot
 	protected override float Recoil => 1.4f;
 }
 
-// Spins up while held: slow at first, then a wall of lead.
+// Spins up while held: slow at first, then a wall of lead. Slows you while firing (HPMain).
 public class FireGatling : GunShot
 {
 	private float spin;
@@ -117,6 +180,7 @@ public class FireGatling : GunShot
 			float last = left ? st.gatlingLastL : st.gatlingLastR;
 			float s = left ? st.gatlingSpinL : st.gatlingSpinR;
 			s = Time.time - last > 0.4f ? 0f : Mathf.Min(1f, s + 0.12f);
+			st.gatlingSlowUntil = Time.time + 0.3f;
 			if (left) { st.gatlingSpinL = s; st.gatlingLastL = Time.time; }
 			else { st.gatlingSpinR = s; st.gatlingLastR = Time.time; }
 			spin = s;
@@ -222,28 +286,34 @@ public class FireGrenadeCannon : BaseSkillState
 
 	public static void CreateShell()
 	{
+		Shell = MakeShell("HardpointNextGrenadeShell", NextConfig.GrenadeRadius.Value, 90f);
+	}
+
+	public static GameObject MakeShell(string name, float radius, float speed)
+	{
 		GameObject src = LegacyResourcesAPI.Load<GameObject>("Prefabs/Projectiles/CommandoGrenadeProjectile");
 		if (!src)
 		{
-			HPPlugin.Log.LogWarning("Commando grenade not found: Grenade Cannon disabled.");
-			return;
+			HPPlugin.Log.LogWarning("Commando grenade not found: " + name + " disabled.");
+			return null;
 		}
-		Shell = R2API.PrefabAPI.InstantiateClone(src, "HardpointNextGrenadeShell", true);
-		ProjectileImpactExplosion pie = Shell.GetComponent<ProjectileImpactExplosion>();
+		GameObject shell = R2API.PrefabAPI.InstantiateClone(src, name, true);
+		ProjectileImpactExplosion pie = shell.GetComponent<ProjectileImpactExplosion>();
 		if (pie)
 		{
-			pie.blastRadius = NextConfig.GrenadeRadius.Value;
+			pie.blastRadius = radius;
 			pie.lifetime = 4f;
 			pie.destroyOnEnemy = true;
 			pie.destroyOnWorld = true;
 			pie.impactOnWorld = true;
 			if (HPAssets.BigExplosion) pie.explosionEffect = HPAssets.BigExplosion;
 		}
-		ProjectileSimple ps = Shell.GetComponent<ProjectileSimple>();
-		if (ps) ps.desiredForwardSpeed = 90f;
-		Rigidbody rb = Shell.GetComponent<Rigidbody>();
+		ProjectileSimple ps = shell.GetComponent<ProjectileSimple>();
+		if (ps) ps.desiredForwardSpeed = speed;
+		Rigidbody rb = shell.GetComponent<Rigidbody>();
 		if (rb) rb.useGravity = true;
-		R2API.ContentAddition.AddProjectile(Shell);
+		R2API.ContentAddition.AddProjectile(shell);
+		return shell;
 	}
 
 	public override InterruptPriority GetMinimumInterruptPriority() => InterruptPriority.PrioritySkill;

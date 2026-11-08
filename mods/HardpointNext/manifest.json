@@ -1,8 +1,8 @@
 {
   "name": "HardpointNext",
-  "version_number": "0.2.0",
+  "version_number": "0.2.1",
   "website_url": "",
-  "description": "Hardpoint NEXT: an Armored Core 4 / For Answer take on Vince's Hardpoint. Chainable quick boost + second stage, Primal Armor, Overed Boost with km/h speedometer, hanger weapon swap, garage parts (frame/booster/generator/hanger) and FRS tuning points.",
+  "description": "Hardpoint NEXT: an Armored Core 4 / For Answer take on Vince's Hardpoint. Chainable quick boost + second stage, Primal Armor, Overed Boost with km/h speedometer, frame loadout + ACSIS screen (booster/generator) and FRS tuning points.",
   "dependencies": [
     "bbepis-BepInExPack-5.4.2121",
     "RiskofThunder-RoR2BepInExPack-1.41.0",

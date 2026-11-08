@@ -38,15 +38,15 @@ public static class Arsenal
 	{
 		Arms.Clear();
 		Backs.Clear();
+		// Arm list (same for M1 and M2), in the owner's order.
 		Arm("BURSTRIFLE", 12, typeof(FireRifle), hold: true, icon: HPAssets.PrimaryIcon, c: new Color(0.9f, 0.85f, 0.75f));
 		Arm("ASSAULTRIFLE", 14, typeof(FireAssaultRifle), hold: true, c: new Color(0.95f, 0.75f, 0.35f));
 		Arm("SMG", 8, typeof(FireSmg), hold: true, c: new Color(0.5f, 0.95f, 0.6f));
 		Arm("SHOTGUN", 16, typeof(FireShotgun), hold: true, c: new Color(1f, 0.6f, 0.3f));
 		Arm("LINEAR", 20, typeof(FireLinear), hold: true, c: new Color(0.6f, 0.45f, 1f));
+		Arm("PULSEGUN", 10, typeof(FirePulseGun), hold: true, c: new Color(0.4f, 0.95f, 1f));
+		Arm("BAZOOKA", 30, typeof(FireBazooka), hold: true, c: new Color(1f, 0.85f, 0.3f));
 		Arm("GATLING", 34, typeof(FireGatling), hold: true, c: new Color(1f, 0.4f, 0.3f));
-		Arm("HANDGUN", 8, typeof(FireHandgun), hold: true, c: new Color(0.45f, 0.85f, 1f));
-		Arm("PULSEBLADE", 10, typeof(PulseBlade), hold: false, cd: HPConfig.BladeCooldown.Value, machine: "Body", prio: InterruptPriority.Skill, icon: HPAssets.SecondaryIcon, c: new Color(0.4f, 0.95f, 1f));
-		Arm("PILEBUNKER", 24, typeof(PileBunker), hold: false, cd: 3f, prio: InterruptPriority.Skill, c: new Color(0.85f, 0.85f, 0.9f));
 
 		Back("MISSILES", 22, typeof(MissileLock), HPConfig.MissileCooldown.Value, null, InterruptPriority.Skill, HPAssets.SpecialIcon, new Color(1f, 0.45f, 0.2f));
 		Back("GRENADE", 40, typeof(FireGrenadeCannon), 5f, null, InterruptPriority.Skill, null, new Color(1f, 0.7f, 0.2f));

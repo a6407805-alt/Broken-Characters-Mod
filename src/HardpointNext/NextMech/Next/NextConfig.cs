@@ -27,7 +27,6 @@ public static class NextConfig
 	public static ConfigEntry<float> ObPaDrain;
 	public static ConfigEntry<float> SpeedometerScale;
 
-	public static ConfigEntry<KeyboardShortcut> HangerKey;
 	public static ConfigEntry<float> ShotgunDamage;
 	public static ConfigEntry<int> ShotgunPellets;
 	public static ConfigEntry<float> ShotgunInterval;
@@ -35,6 +34,12 @@ public static class NextConfig
 	public static ConfigEntry<float> LinearInterval;
 
 	public static ConfigEntry<KeyboardShortcut> LeftBackKey;
+	public static ConfigEntry<int> BoosterChoice;
+	public static ConfigEntry<int> GeneratorChoice;
+	public static ConfigEntry<float> PulseGunDamage;
+	public static ConfigEntry<float> PulseGunEn;
+	public static ConfigEntry<float> BazookaDamage;
+	public static ConfigEntry<float> BazookaRadius;
 	public static ConfigEntry<float> OverweightPenalty;
 	public static ConfigEntry<float> AssaultRifleDamage;
 	public static ConfigEntry<float> SmgDamage;
@@ -77,18 +82,23 @@ public static class NextConfig
 		ObPaDrain = cfg.Bind("N3. Overed Boost", "PA Drain", 10f, "Primal Armor lost per second while boosting (like For Answer).");
 		SpeedometerScale = cfg.Bind("N3. Overed Boost", "Speedometer Scale", 1f, "1 = real km/h.");
 
-		HangerKey = cfg.Bind("N4. Hanger", "Key", new KeyboardShortcut(KeyCode.F), "Swap the right arm between the Burst Rifle and the hanger weapon picked in the loadout.");
-		ShotgunDamage = cfg.Bind("N4. Hanger", "Shotgun Damage", 0.6f, "Per pellet (60%).");
-		ShotgunPellets = cfg.Bind("N4. Hanger", "Shotgun Pellets", 8, "");
-		ShotgunInterval = cfg.Bind("N4. Hanger", "Shotgun Interval", 0.85f, "Seconds between shots.");
-		LinearDamage = cfg.Bind("N4. Hanger", "Linear Rifle Damage", 3f, "Per shot (300%), pierces.");
-		LinearInterval = cfg.Bind("N4. Hanger", "Linear Rifle Interval", 0.7f, "Seconds between shots.");
+		ShotgunDamage = cfg.Bind("N6. Arsenal", "Shotgun Damage", 0.6f, "Per pellet (60%).");
+		ShotgunPellets = cfg.Bind("N6. Arsenal", "Shotgun Pellets", 8, "");
+		ShotgunInterval = cfg.Bind("N6. Arsenal", "Shotgun Interval", 0.85f, "Seconds between shots.");
+		LinearDamage = cfg.Bind("N6. Arsenal", "Linear Rifle Damage", 3f, "Per shot (300%), pierces.");
+		LinearInterval = cfg.Bind("N6. Arsenal", "Linear Rifle Interval", 0.7f, "Seconds between shots.");
 
 		LeftBackKey = cfg.Bind("N6. Arsenal", "Left Back Key", new KeyboardShortcut(KeyCode.G), "Fires the left back unit (R fires the right one).");
-		LoadLight = cfg.Bind("N6. Arsenal", "Load Light", 70, "Max weapon load on the Light frame.");
-		LoadMiddle = cfg.Bind("N6. Arsenal", "Load Middle", 100, "Max weapon load on the Middle frame.");
-		LoadHeavy = cfg.Bind("N6. Arsenal", "Load Heavy", 140, "Max weapon load on the Heavy frame.");
-		OverweightPenalty = cfg.Bind("N6. Arsenal", "Overweight Penalty", 0.012f, "Per point over the load: -1.2% speed, quick boost distance and EN recovery (max -60%).");
+		LoadLight = cfg.Bind("N6. Arsenal", "Max Load Light", 90, "Max weapon load on the Light frame.");
+		LoadMiddle = cfg.Bind("N6. Arsenal", "Max Load Middle", 120, "Max weapon load on the Middle frame.");
+		LoadHeavy = cfg.Bind("N6. Arsenal", "Max Load Heavy", 160, "Max weapon load on the Heavy frame.");
+		OverweightPenalty = cfg.Bind("N6. Arsenal", "Overweight Penalty Per Point", 0.008f, "Per point over the load: -0.8% speed, quick boost distance and EN recovery (max -50%).");
+		PulseGunDamage = cfg.Bind("N6. Arsenal", "Pulse Gun Damage", 0.85f, "Energy weapon: no ammo.");
+		PulseGunEn = cfg.Bind("N6. Arsenal", "Pulse Gun EN Per Shot", 3f, "");
+		BazookaDamage = cfg.Bind("N6. Arsenal", "Bazooka Damage", 8f, "");
+		BazookaRadius = cfg.Bind("N6. Arsenal", "Bazooka Radius", 6f, "");
+		BoosterChoice = cfg.Bind("N7. Assembly (set on the T screen)", "Booster", 0, "0 Standard, 1 Quick Boost type, 2 Overed Boost type.");
+		GeneratorChoice = cfg.Bind("N7. Assembly (set on the T screen)", "Generator", 0, "0 Standard, 1 High-Output, 2 High-Capacity.");
 		AssaultRifleDamage = cfg.Bind("N6. Arsenal", "Assault Rifle Damage", 0.75f, "");
 		SmgDamage = cfg.Bind("N6. Arsenal", "SMG Damage", 0.4f, "");
 		HandgunDamage = cfg.Bind("N6. Arsenal", "Handgun Damage", 1.8f, "");
