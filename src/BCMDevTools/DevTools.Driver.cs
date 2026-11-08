@@ -24,7 +24,7 @@ namespace BCMDevTools
 {
     public partial class DevToolsPlugin
     {
-        static string DriverFile => Path.Combine(Paths.BepInExRootPath, "bcm_devcmd.txt");
+        static string DriverFile => System.IO.Path.Combine(Paths.BepInExRootPath, "bcm_devcmd.txt");
         float _driverPoll;
 
         static readonly float[] _skillUntil = new float[4];
@@ -152,7 +152,7 @@ namespace BCMDevTools
             // Rotate the camera rig's yaw (field name differs between versions, so look it up by name).
             foreach (CameraRigController rig in CameraRigController.readOnlyInstancesList)
             {
-                if (!rig || !rig.localUserViewer) continue;
+                if (!rig || rig.localUserViewer == null) continue;
                 Traverse t = Traverse.Create(rig);
                 foreach (string f in new[] { "yaw", "currentCameraState" })
                 {
