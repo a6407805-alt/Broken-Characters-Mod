@@ -318,6 +318,7 @@ namespace BerserkFury
             visualObj.AddComponent<BerserkFuryLocomotion>();
 
             // forceRenderingOff is not saved on prefabs, so Commando reappeared in game. Keep him hidden at runtime.
+            if (!characterModelRoot.GetComponent<BerserkFuryLook>()) characterModelRoot.AddComponent<BerserkFuryLook>();
             BerserkFuryHideBase hider = characterModelRoot.GetComponent<BerserkFuryHideBase>();
             if (!hider) hider = characterModelRoot.AddComponent<BerserkFuryHideBase>();
             hider.Visual = visualObj.transform;

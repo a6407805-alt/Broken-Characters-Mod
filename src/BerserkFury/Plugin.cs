@@ -21,7 +21,7 @@ namespace BerserkFury
     {
         public const string PluginGUID = "com.bcm.berserkfury";
         public const string PluginName = "BerserkFury";
-        public const string PluginVersion = "0.2.6";
+        public const string PluginVersion = "0.2.7";
         public const string TokenPrefix = "BCM_BERSERKFURY_";
 
         public static ManualLogSource Log;
@@ -115,6 +115,7 @@ namespace BerserkFury
             if (modelTransform)
             {
                 BerserkFuryModel.Attach(modelTransform.gameObject);
+                BerserkFuryPalettes.AddSkins(modelTransform, TokenPrefix);
             }
 
             ContentAddition.AddBody(BodyPrefab);
@@ -127,6 +128,7 @@ namespace BerserkFury
             if (displayModel)
             {
                 BerserkFuryModel.Attach(displayModel.gameObject);
+                BerserkFuryPalettes.AddSkins(displayModel, TokenPrefix);
             }
         }
 
@@ -269,6 +271,7 @@ namespace BerserkFury
             LanguageAPI.Add(TokenPrefix + "SECONDARY_NAME", "Buster Claw Slash");
             LanguageAPI.Add(TokenPrefix + "SECONDARY_DESC", "Fold the Buster Claws into blades and slash: <style=cIsDamage>320%</style> left, <style=cIsDamage>320%</style> right, then a twin overhead slam for <style=cIsDamage>600%</style> that <style=cIsUtility>stuns</style>. Tap for one slash, hold to chain.");
 
+            for (int i = 0; i < BerserkFuryPalettes.All.Length; i++) LanguageAPI.Add(TokenPrefix + "SKIN_" + i, BerserkFuryPalettes.All[i].Name);
             LanguageAPI.Add(TokenPrefix + "UTILITY_NAME", "Magneser Drill Thrust");
             LanguageAPI.Add(TokenPrefix + "UTILITY_DESC", "Lunge forward with dual spinning magneser drills, piercing enemies for <style=cIsDamage>7x85% damage</style>.");
 

@@ -10,6 +10,9 @@ namespace BerserkFury
     public class BusterBlasterState : BaseSkillState
     {
         private static bool _alternateSide;
+        public static float LastShotTime = -1f;
+        public static bool LastShotRight;
+        public static GameObject LastShooter;
         public static float BaseDuration = 0.38f;
         public static float DamageCoeff = 3.2f;
 
@@ -23,6 +26,7 @@ namespace BerserkFury
             StartAimMode(aim, 2f, false);
 
             _alternateSide = !_alternateSide;
+            LastShotTime = Time.time; LastShotRight = _alternateSide; LastShooter = gameObject;
             Vector3 sideOffset = characterBody.gameObject.transform.right * (_alternateSide ? 0.9f : -0.9f) + Vector3.up * 1.5f;
 
             if (isAuthority)
@@ -220,6 +224,8 @@ namespace BerserkFury
         public static float ChargeDuration = 1.0f;
         public static float FiringDuration = 2.4f;
         private bool _isFiring;
+        public bool Firing => _isFiring;
+        public float ChargeProgress => Mathf.Clamp01(fixedAge / ChargeDuration);
         private float _fireTimer;
         private const float FireTickInterval = 0.12f;
 
