@@ -2,12 +2,12 @@
   "characters": [
     {
       "name": "THE SURVEYOR",
-      "tagline": "Blind. Moon-light. Something hunts the stragglers.",
+      "tagline": "Blind. Armored. Something follows.",
       "added": "2026-10-24T10:06:00-04:00",
       "accent": "#7AD33A",
       "status": "active",
-      "version": "0.8.0",
-      "note": "Active WIP (v0.8.0): Frost ice grows from enemies' feet and fully engulfs them when locked; Stalker health bar, hit effects and ice anchored to its body (were floating at the old Imp height); suit head fix + flame error fix from v0.7.9",
+      "version": "0.5.3",
+      "note": "Active WIP (v0.5.3): M1 minigun, M2 poltergust vacuum item suction & demon capture, Q-only 4-mode scanner cycle, cyan/orange LiDAR palette",
       "image": "Assets/Roster/Surveyor.png"
     }
   ]

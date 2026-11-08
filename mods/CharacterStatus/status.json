@@ -15,7 +15,7 @@
         "auditechnician",
         "auditech"
       ],
-      "version": "1.0.3"
+      "version": "1.0.1"
     },
     {
       "name": "BILLY BIGSUITS",
@@ -24,7 +24,7 @@
         "billybigsuits",
         "billy"
       ],
-      "version": "1.0.3"
+      "version": "1.0.2"
     },
     {
       "name": "WILBUR",
@@ -32,7 +32,7 @@
       "match": [
         "wilbur"
       ],
-      "version": "2.5.0"
+      "version": "1.0.0"
     },
     {
       "name": "BROTHER",
@@ -41,7 +41,7 @@
         "oatsbrother",
         "brother"
       ],
-      "version": "1.0.5"
+      "version": "1.0.2"
     },
     {
       "name": "ASHWING DRAKE",
@@ -49,7 +49,7 @@
       "match": [
         "ashwing"
       ],
-      "version": "1.8.6"
+      "version": "1.8.4"
     },
     {
       "name": "NIDUS",
@@ -57,7 +57,7 @@
       "match": [
         "nidus"
       ],
-      "version": "1.0.12"
+      "version": "1.0.9"
     },
     {
       "name": "PHANTOM ASSASSIN",
@@ -66,7 +66,7 @@
         "phantomassassin",
         "phantom"
       ],
-      "version": "1.0.4"
+      "version": "1.0.3"
     },
     {
       "name": "INFESTED GENERAL",
@@ -74,7 +74,7 @@
       "match": [
         "infestedgeneral"
       ],
-      "version": "1.1.14"
+      "version": "1.1.11"
     },
     {
       "name": "GRAVITOS",
@@ -82,7 +82,7 @@
       "match": [
         "gravitos"
       ],
-      "version": "1.2.1"
+      "version": "1.2.0"
     },
     {
       "name": "CLAY REBEL",
@@ -91,39 +91,31 @@
         "clayrebel",
         "rebel"
       ],
-      "version": "1.0.3"
+      "version": "1.0.1"
     },
     {
       "name": "EMBERWARDEN",
       "status": "yellow",
       "match": [
         "emberwarden"
-      ]
+      ],
+      "version": "1.0.0"
     },
     {
       "name": "REAPER",
       "status": "green",
       "match": [
         "reaper"
-      ]
+      ],
+      "version": "1.0.0"
     },
     {
       "name": "THE DUELIST",
-      "status": "active",
+      "status": "yellow",
       "match": [
         "duelist"
       ],
-      "version": "1.1.1",
-      "note": "Removed the collar that clipped like a hat; no deck-out loss in duels"
-    },
-    {
-      "name": "THE SURVEYOR",
-      "status": "active",
-      "match": [
-        "surveyor"
-      ],
-      "version": "0.8.0",
-      "note": "Active WIP (v0.8.0): Frost ice grows from enemies' feet and fully engulfs them when locked; Stalker health bar, hit effects and ice anchored to its body (were floating at the old Imp height); suit head fix + flame error fix from v0.7.9"
+      "version": "1.0.0"
     },
     {
       "name": "MOMMY MILKERS",
@@ -132,25 +124,27 @@
         "mommymilkers",
         "mommy"
       ],
-      "version": "1.0.1"
+      "version": "1.0.0"
     },
     {
-      "name": "GRAVITOS NEXT",
+      "name": "THE SURVEYOR",
       "status": "active",
       "match": [
-        "gravitosnext"
+        "surveyor"
+      ],
+      "version": "0.6.7",
+      "note": "Active WIP (v0.6.7): Shimmer Demon Spectral Boss encounter (spawns once/stage, 6000 HP, invulnerable phase shield broken by Poltergust Vacuum, hunts all players, vulnerable to all players, top-center boss HUD) + Complete audio overhaul eliminating all loud ear-piercing sound loops."
+    },
+    {
+      "name": "BERSERK FURY",
+      "status": "active",
+      "match": [
+        "berserkfury",
+        "berserk",
+        "zoid"
       ],
       "version": "0.1.0",
-      "note": "Active WIP (v0.1.0): new original Blender model (Lodestar) on the Engineer rig, orbiting rings + hand shards; kit still Gravitos 1.2.1"
-    },
-    {
-      "name": "HARDPOINT NEXT",
-      "status": "active",
-      "match": [
-        "hardpointnext"
-      ],
-      "version": "0.2.4",
-      "note": "Active WIP (v0.2.4): Blender-made 3D models for every gun and back cannon (src/HardpointNext/Blender/build_weapons.py), held in the hands / on the shoulders and aimed; shots, flashes and tracers come from each gun's barrel; built-in rifle/blade/pods hidden when replaced"
+      "note": "Active WIP (v0.1.0): Zoids Battle Legends port with Buster Claws, E-Shield, Magneser Drills, and Charged Particle Cannon (CPC)"
     }
   ]
 }

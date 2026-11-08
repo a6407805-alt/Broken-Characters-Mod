@@ -1,0 +1,15 @@
+{
+  "name": "Gravitos",
+  "version_number": "1.2.0",
+  "website_url": "",
+  "description": "A fragile gravity/electric survivor who lifts, slams and pulls enemies, and opens a black hole that doesn't care whose side you're on.",
+  "dependencies": [
+    "bbepis-BepInExPack-5.4.2121",
+    "RiskofThunder-RoR2BepInExPack-1.41.0",
+    "RiskofThunder-R2API_Core-5.3.0",
+    "RiskofThunder-R2API_ContentManagement-1.0.11",
+    "RiskofThunder-R2API_Prefab-1.1.1",
+    "RiskofThunder-R2API_Language-1.1.0",
+    "RiskofThunder-R2API_Networking-1.0.4"
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "name": "DropPodRevive",
-  "version_number": "0.1.2",
+  "version_number": "0.1.0",
   "website_url": "",
   "description": "Each player gets lives (3, +1 per stage). Dying with a life left drops you back in by drop pod; vanilla revives (Dio's etc.) get first chance.",
   "dependencies": [

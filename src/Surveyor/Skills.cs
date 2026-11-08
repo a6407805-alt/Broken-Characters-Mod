@@ -128,22 +128,17 @@ namespace Surveyor
 
         private void Awake() { _body = GetComponent<CharacterBody>(); }
 
-        /// <summary>The minigun calls this every tick it fires, so the barrels do not wind down; heat depends on the ammo.</summary>
+        /// <summary>The minigun calls this every tick it is held, so the barrels do not wind down.</summary>
         public void Held()
         {
             _idle = 0f;
-            float heatRate = SvrAmmo.HeatPerSecond[SvrAmmo.Current];
+            bool cryoCool = (SvrLidar.MinigunMode == 1) || SvrUpgrades.Has(SvrUpgrades.MINI_CRYO);
+            float heatRate = cryoCool ? 0.035f : 0.11f;
             if (AnchorLeft > 0f) heatRate *= 0.65f;
             Heat = Mathf.Clamp01(Heat + Time.fixedDeltaTime * heatRate);
-            if (Heat >= 0.999f && !Overheated)
-            {
+            if (Heat >= 0.99f && !cryoCool)
                 Overheated = true;
-                Util.PlaySound("Play_item_proc_igniteOnKill", gameObject);
-            }
         }
-
-        /// <summary>Barrels still turning but not firing (overheated, venting).</summary>
-        public void Spinning() { _idle = 0f; }
 
         private void FixedUpdate()
         {
@@ -151,12 +146,16 @@ namespace Surveyor
             float dt = Time.fixedDeltaTime;
             _idle += dt;
             if (AnchorLeft > 0f) AnchorLeft = Mathf.Max(0f, AnchorLeft - dt);
-            if (_idle > 0.15f && Spool > 0f)
-                Spool = Mathf.MoveTowards(Spool, 0f, dt / (SvrPlugin.SpoolSeconds.Value * 1.4f));
-            // cools whenever it isn't firing; venting after an overheat is faster, and it fires again below 30%
-            if (_idle > 0.15f || Overheated)
-                Heat = Mathf.MoveTowards(Heat, 0f, dt * (Overheated ? 0.5f : 0.35f));
-            if (Overheated && Heat < 0.3f) Overheated = false;
+            if (_idle > 0.15f)
+            {
+                bool cryoCool = (SvrLidar.MinigunMode == 1) || SvrUpgrades.Has(SvrUpgrades.MINI_CRYO);
+                float windDown = cryoCool ? 2.4f : 1.4f;
+                if (Spool > 0f)
+                    Spool = Mathf.MoveTowards(Spool, 0f, dt / (SvrPlugin.SpoolSeconds.Value * windDown));
+                float coolRate = cryoCool ? 0.55f : 0.28f;
+                Heat = Mathf.MoveTowards(Heat, 0f, dt * coolRate);
+                if (Overheated && Heat < 0.35f) Overheated = false;
+            }
 
             bool slowed = Spool > 0.3f && AnchorLeft <= 0f && !SvrUpgrades.Has(SvrUpgrades.GYRO_HARNESS);
             if (slowed != _slowed || _senseVersion != SvrSenses.Version)
@@ -185,37 +184,6 @@ namespace Surveyor
             _lidar = GetComponent<SvrLidar>();
             try { _tracer = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/Tracers/TracerCommandoDefault"); } catch { _tracer = null; }
             try { _hit = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/ImpactEffects/HitsparkCommando"); } catch { _hit = null; }
-            LoadModeFx();
-        }
-
-        // Per-ammo tracers and impacts (first prefab that exists wins; Commando's are the fallback)
-        private static readonly GameObject[] ModeTracer = new GameObject[4], ModeHit = new GameObject[4];
-        private static bool _modeFxLoaded;
-
-        private static GameObject LoadFirst(params string[] paths)
-        {
-            foreach (string p in paths)
-            {
-                try { GameObject g = LegacyResourcesAPI.Load<GameObject>(p); if (g) return g; } catch { }
-            }
-            return null;
-        }
-
-        private static void LoadModeFx()
-        {
-            if (_modeFxLoaded) return;
-            _modeFxLoaded = true;
-            ModeTracer[0] = LoadFirst("Prefabs/Effects/Tracers/TracerBandit2Rifle", "Prefabs/Effects/Tracers/TracerCommandoShotgun");
-            ModeHit[0] = LoadFirst("Prefabs/Effects/ImpactEffects/HitsparkBandit2", "Prefabs/Effects/ImpactEffects/HitsparkBandit", "Prefabs/Effects/ImpactEffects/HitsparkCommandoShotgun");
-            ModeTracer[1] = LoadFirst("Prefabs/Effects/Tracers/TracerMageFire", "Prefabs/Effects/Tracers/TracerClayBruiserMinigun");
-            ModeHit[1] = LoadFirst("Prefabs/Effects/ImpactEffects/IgniteExplosionVFX", "Prefabs/Effects/ImpactEffects/MissileExplosionVFX");
-            ModeTracer[2] = LoadFirst("Prefabs/Effects/Tracers/TracerMageIceLarge", "Prefabs/Effects/Tracers/TracerMageIceLaser", "Prefabs/Effects/Tracers/TracerHuntressSnipe");
-            ModeHit[2] = LoadFirst("Prefabs/Effects/ImpactEffects/IceRingImpact", "Prefabs/Effects/ImpactEffects/MageIceExplosion", "Prefabs/Effects/ImpactEffects/IceCullExplosion");
-            ModeTracer[3] = LoadFirst("Prefabs/Effects/Tracers/TracerCrocoSpit", "Prefabs/Effects/Tracers/TracerVoidSurvivorBeam", "Prefabs/Effects/Tracers/TracerMageLightning");
-            ModeHit[3] = LoadFirst("Prefabs/Effects/ImpactEffects/CrocoDiseaseImpactEffect", "Prefabs/Effects/ImpactEffects/PoisonNovaProc", "Prefabs/Effects/ImpactEffects/ImpactMageLightning");
-            int found = 0;
-            for (int i = 0; i < 4; i++) { if (ModeTracer[i]) found++; if (ModeHit[i]) found++; }
-            SvrPlugin.Log.LogInfo("Minigun ammo effects: " + found + "/8 prefabs found (missing ones use Commando's).");
         }
 
         public override void FixedUpdate()
@@ -224,7 +192,7 @@ namespace Surveyor
             if (!isAuthority) return;
             if (!_spool || !inputBank || !inputBank.skill1.down) { outer.SetNextStateToMain(); return; }
 
-            _spool.Spinning();
+            _spool.Held();
             bool anchored = _spool.AnchorLeft > 0f;
             float spoolTime = SvrPlugin.SpoolSeconds.Value / Mathf.Clamp(attackSpeedStat, 0.5f, 3f) * SvrSenses.SpoolMult;
             if (anchored) spoolTime *= 0.33f;
@@ -233,78 +201,58 @@ namespace Surveyor
             Ray aim = GetAimRay();
             StartAimMode(aim, 2f, false);
             if (_spool.Spool < 0.2f) return;
-            if (_spool.Overheated) return;      // venting: barrels spin, no rounds
-            _spool.Held();                       // heat builds every tick it fires (how fast depends on the ammo)
 
             _timer -= Time.fixedDeltaTime;
             if (_timer > 0f) return;
-            int ammo = SvrAmmo.Current;
-            float rate = Mathf.Lerp(SvrPlugin.MinRate.Value, SvrPlugin.MaxRate.Value, Mathf.InverseLerp(0.2f, 1f, _spool.Spool)) * Mathf.Clamp(attackSpeedStat, 1f, 2f) * SvrAmmo.RateMult[ammo];
+            float rate = Mathf.Lerp(SvrPlugin.MinRate.Value, SvrPlugin.MaxRate.Value, Mathf.InverseLerp(0.2f, 1f, _spool.Spool)) * Mathf.Clamp(attackSpeedStat, 1f, 2f);
+            if (SvrLidar.MinigunMode == 0) rate *= 0.88f; // Iridium AP heavy fire rate
+            if (_spool.Overheated) rate *= 0.55f;
             _timer += 1f / Mathf.Max(0.5f, rate);
             if (_timer < 0f) _timer = 0f;
-            Shoot(aim, anchored, ammo);
+            Shoot(aim, anchored);
         }
 
-        public override void OnExit()
-        {
-            Util.PlaySound("Stop_clayBruiser_attack1_shootLoop", gameObject);
-            base.OnExit();
-        }
-
-        // what other players hear: the gun firing at a steady clip while the state runs on their side
-        private float _remoteTimer;
-
-        public override void Update()
-        {
-            base.Update();
-            if (isAuthority || fixedAge < 0.35f) return;
-            _remoteTimer -= Time.deltaTime;
-            if (_remoteTimer > 0f) return;
-            _remoteTimer = 1f / 11f;
-            Util.PlaySound("Play_clayBruiser_attack1_shoot_bullet", gameObject);
-        }
-
-        // each ammo has its own voice on top of the heavy base rattle
-        // sound design: a heavy minigun body (Clay Templar's rotary cannon: wind up, firing loop, a round per shot, wind down)
-        // with a voice per ammo on top. Every one of these lives in the game's Global sound bank, so it always plays.
-        private static readonly string[][] AmmoSounds =
-        {
-            new[] { "Play_commando_M1", null, null },                                                              // LEAD: dry, fast rattle
-            new[] { "Play_lemurian_fireball_shoot", "Play_fireballsOnHit_shoot", null }, // INFERNO: roaring fire
-            new[] { "Play_lunar_wisp_attack1_shoot_bullet", "Play_item_proc_iceRingSpear", null },                   // FROST: crystal crack
-            new[] { "Play_voidBarnacle_m1_shoot", "Play_affix_void_bug_infect", null }                              // RAD: wet, sick hiss
-        };
-        private bool _loopOn;
-
-        private void Shoot(Ray aim, bool anchored, int ammo)
+        private void Shoot(Ray aim, bool anchored)
         {
             _shotCounter++;
+            int mMode = SvrLidar.MinigunMode % 4;
+            bool isIridium = (mMode == 0);
+            bool isCryo = (mMode == 1);
+            bool isIncendiary = (mMode == 2);
+            bool isPlasma = (mMode == 3);
+
             bool hasGyro = SvrUpgrades.Has(SvrUpgrades.GYRO_HARNESS);
+            bool hasLeech = SvrUpgrades.Has(SvrUpgrades.AETHER_LEECH);
 
             float spread = Mathf.Lerp(SvrPlugin.SpreadMax.Value, SvrPlugin.SpreadMin.Value, _spool.Spool) * SvrSenses.SpreadMult * (anchored ? 0.5f : (hasGyro ? 0.72f : 1f));
-            float dmg = damageStat * SvrPlugin.BulletDamage.Value * (anchored ? 1f + SvrPlugin.AnchorDamageBonus.Value : 1f) * SvrAmmo.DamageMult[ammo];
+            float dmgMult = (anchored ? 1f + SvrPlugin.AnchorDamageBonus.Value : 1f) * (isIridium ? 1.6f : (isIncendiary ? 1.15f : 1f));
+            float dmg = damageStat * SvrPlugin.BulletDamage.Value * dmgMult;
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
 
-            // sound: the base rattle every round, the ammo's own layer every 2nd / 3rd round
-            Util.PlaySound("Play_clayBruiser_attack1_shoot_bullet", gameObject);
-            string[] snd = AmmoSounds[ammo];
-            bool heavy = ammo != SvrAmmo.Lead;          // heavy rounds are 4x slower, so every one gets its full voice
-            if ((heavy || _shotCounter % 3 == 0) && snd[0] != null) Util.PlaySound(snd[0], gameObject);
-            if (heavy && _shotCounter % 2 == 0 && snd[1] != null) Util.PlaySound(snd[1], gameObject);
-
+            // Comfortable, crisp audio throttled so rapid 20 rounds/sec firing never clips or deafens the team
+            if (_shotCounter % 2 == 0)
+            {
+                string shootSound = isIridium ? (_shotCounter % 4 == 0 ? "Play_commando_M1" : null) : "Play_MULT_m1_smg_shoot";
+                if (!string.IsNullOrEmpty(shootSound)) Util.PlaySound(shootSound, gameObject);
+            }
             characterBody.AddSpreadBloom(hasGyro ? 0.05f : 0.09f);
-            float rk = (anchored ? 0.45f : 1f) * (hasGyro ? 0.5f : 1f) * (ammo == SvrAmmo.Inferno ? 1.4f : 1f);
+            float rk = (anchored ? 0.45f : 1f) * (hasGyro ? 0.5f : 1f);     // heavy gun: the camera kicks with every round
             AddRecoil(-0.35f * rk, -0.75f * rk, -0.25f * rk, 0.25f * rk);
-            _spool.KickPulse += ammo == SvrAmmo.Inferno ? 0.4f : 0.22f;
+            _spool.KickPulse += isIridium ? 0.35f : 0.22f;
 
-            DamageTypeCombo dt = DamageType.Generic;
-            if (ammo == SvrAmmo.Inferno) dt = DamageType.IgniteOnHit;
-            if (ammo == SvrAmmo.Frost) dt = DamageType.SlowOnHit;
-            float range = SvrPlugin.MinigunRange.Value * SvrAmmo.RangeMult[ammo];
-            bool crit = RollCrit();
-            GameObject me = gameObject;
+            // Cryo cooling: cools down minigun heat on each shot
+            if (isCryo)
+            {
+                _spool.Heat = Mathf.Max(0f, _spool.Heat - 0.045f);
+                _spool.Overheated = false;
+            }
 
-            BulletAttack ba = new BulletAttack
+            DamageTypeCombo dtCombo = DamageType.Generic;
+            if (isCryo) dtCombo = DamageType.SlowOnHit;
+            if (isIncendiary) dtCombo = DamageType.IgniteOnHit;
+            if (isPlasma && (_shotCounter % 3 == 0)) dtCombo = DamageType.Shock5s;
+
+            new BulletAttack
             {
                 owner = gameObject,
                 weapon = gameObject,
@@ -313,34 +261,74 @@ namespace Surveyor
                 minSpread = 0f,
                 maxSpread = spread,
                 damage = dmg,
-                force = ammo == SvrAmmo.Inferno ? 260f : 120f,
-                tracerEffectPrefab = ModeTracer[ammo] ? ModeTracer[ammo] : _tracer,
+                force = isIridium ? 280f : 120f,
+                tracerEffectPrefab = _tracer,
                 muzzleName = "MuzzleRight",
-                // the big ammo impacts every other round (13 rounds a second of explosions would bury the screen)
-                hitEffectPrefab = (ModeHit[ammo] && _shotCounter % 2 == 0) ? ModeHit[ammo] : _hit,
-                isCrit = crit,
-                radius = 0.3f,
+                hitEffectPrefab = _hit,
+                isCrit = RollCrit(),
+                radius = isIridium ? 0.45f : 0.25f,
                 smartCollision = true,
-                maxDistance = range,
-                procCoefficient = ammo == SvrAmmo.Lead ? 0.8f : 0.7f,
-                damageType = dt
-            };
-            if (ammo != SvrAmmo.Lead)
+                maxDistance = SvrPlugin.MinigunRange.Value,
+                procCoefficient = isIridium ? 0.9f : 0.7f,
+                damageType = dtCombo
+            }.Fire();
+
+            // Depleted-Uranium Slug & Cryo-Jacket & Plasma-Accelerator on-hit effects
+            try
             {
-                ba.hitCallback = (BulletAttack b, ref BulletAttack.BulletHit hit) =>
+                RaycastHit hit;
+                if (Physics.Raycast(aim.origin, aim.direction, out hit, SvrPlugin.MinigunRange.Value, LayerIndex.entityPrecise.mask | LayerIndex.world.mask, QueryTriggerInteraction.Ignore))
                 {
-                    bool r = BulletAttack.defaultHitCallback(b, ref hit);
-                    try
+                    HurtBox hb = hit.collider ? hit.collider.GetComponent<HurtBox>() : null;
+                    HealthComponent hc = hb ? hb.healthComponent : null;
+                    if (hc && hc.alive && hc.body && hc.body != characterBody)
                     {
-                        HurtBox hb = hit.hitHurtBox;
-                        if (hb && hb.healthComponent && hb.healthComponent.body != characterBody)
-                            SvrAmmo.SendHit(hb.healthComponent, me, dmg, ammo);
+                        if (hasLeech && characterBody.healthComponent)
+                            characterBody.healthComponent.AddBarrier(Mathf.Max(1.5f, characterBody.maxBarrier * 0.012f));
+
+                        if (NetworkServer.active)
+                        {
+                            if (isIridium) hc.body.AddTimedBuff(RoR2Content.Buffs.Pulverized, 4f);
+                            if (isCryo) hc.body.AddTimedBuff(RoR2Content.Buffs.Slow80, 3.5f);
+                            if (isIncendiary)
+                            {
+                                InflictDotInfo info = new InflictDotInfo
+                                {
+                                    victimObject = hc.gameObject,
+                                    attackerObject = gameObject,
+                                    totalDamage = dmg,
+                                    dotIndex = DotController.DotIndex.Burn,
+                                    damageMultiplier = 1f
+                                };
+                                DotController.InflictDot(ref info);
+                            }
+                            if (isPlasma && _spool.Spool > 0.5f && (_shotCounter % 2 == 0))
+                            {
+                                LightningOrb orb = new LightningOrb
+                                {
+                                    origin = hit.point,
+                                    damageValue = dmg * 0.85f,
+                                    isCrit = RollCrit(),
+                                    bouncesRemaining = 3,
+                                    teamIndex = TeamComponent.GetObjectTeam(gameObject),
+                                    attacker = gameObject,
+                                    procCoefficient = 0.5f,
+                                    lightningType = LightningOrb.LightningType.Ukulele,
+                                    range = 20f
+                                };
+                                orb.bouncedObjects = new List<HealthComponent> { hc };
+                                HurtBox nextTarget = orb.PickNextTarget(hit.point);
+                                if (nextTarget)
+                                {
+                                    orb.target = nextTarget;
+                                    OrbManager.instance.AddOrb(orb);
+                                }
+                            }
+                        }
                     }
-                    catch { }
-                    return r;
-                };
+                }
             }
-            ba.Fire();
+            catch { }
 
             if (_lidar) _lidar.Shot(aim, _spool.Spool, anchored);
         }
@@ -354,23 +342,14 @@ namespace Surveyor
     {
         private SvrLidar _lidar;
         private float _soundTimer;
-        private bool _firedOrb;
 
         public override void OnEnter()
         {
             base.OnEnter();
             _lidar = GetComponent<SvrLidar>();
-            // BLACK HOLE mode: pressing M2 fires a singularity orb (on its own cooldown) instead of channelling
-            if (isAuthority && _lidar && SvrLidar.VacuumMode % 4 == 1 && _lidar.TryFireSingularity(GetAimRay(), characterBody))
-            {
-                _firedOrb = true;
-                PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
-                AddRecoil(-1.5f, -2.5f, -0.5f, 0.5f);
-                return;
-            }
             PlayAnimation("Gesture Additive, Right", "FirePistol, Right");
-            Util.PlaySound("Play_UI_menuClick", gameObject);         // one soft servo hum to start, then throttled (below)
-            _soundTimer = 1.6f;
+            Util.PlaySound("Play_drone_repair", gameObject);
+            _soundTimer = 1.4f;
         }
 
         public override void FixedUpdate()
@@ -379,12 +358,6 @@ namespace Surveyor
 
             Ray aim = GetAimRay();
             StartAimMode(aim, 1.5f, false);
-
-            if (_firedOrb)
-            {
-                if (isAuthority && fixedAge >= 0.35f && (!inputBank || !inputBank.skill2.down)) outer.SetNextStateToMain();
-                return;
-            }
 
             if (_lidar)
             {
@@ -395,7 +368,7 @@ namespace Surveyor
             if (_soundTimer <= 0f)
             {
                 _soundTimer = 1.6f;
-                Util.PlaySound("Play_UI_menuClick", gameObject);
+                Util.PlaySound("Play_MULT_m2_aim", gameObject);
             }
 
             if (isAuthority)
@@ -413,12 +386,11 @@ namespace Surveyor
             {
                 _lidar.Demon.TetherActive = false;
             }
+            Util.PlaySound("Play_drone_repair", gameObject);
             base.OnExit();
         }
 
-        // PrioritySkill, not Skill: with Skill, holding M2 let a fresh copy of this state interrupt itself every frame
-        // (OnEnter/OnExit 60 times a second, each playing a sound) = the screech.
-        public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.PrioritySkill; }
+        public override InterruptPriority GetMinimumInterruptPriority() { return InterruptPriority.Skill; }
     }
 
     // ================================================================ Alt M2: Surveyor Lance
@@ -508,7 +480,7 @@ namespace Surveyor
             flat.y = 0f;
             if (move.sqrMagnitude > 0.01f) _dir = move.normalized;
             else _dir = flat.sqrMagnitude < 0.01f ? transform.forward : flat.normalized;
-            Util.PlaySound("Play_env_geyser_launch", gameObject);
+            Util.PlaySound("Play_commando_shift", gameObject);
         }
 
         public override void FixedUpdate()
@@ -615,7 +587,7 @@ namespace Surveyor
                 else
                 {
                     lidar.StartPeek();
-                    Util.PlaySound("Play_UI_menuClick", gameObject);
+                    Util.PlaySound("Play_huntress_m2_throw_short", gameObject);
                 }
             }
         }

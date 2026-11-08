@@ -1,6 +1,6 @@
 {
   "name": "Gravitos",
-  "version_number": "1.2.1",
+  "version_number": "1.2.0",
   "website_url": "",
   "description": "A fragile gravity/electric survivor who lifts, slams and pulls enemies, and opens a black hole that doesn't care whose side you're on.",
   "dependencies": [

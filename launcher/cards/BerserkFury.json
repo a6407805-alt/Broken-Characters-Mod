@@ -1,0 +1,14 @@
+{
+  "characters": [
+    {
+      "name": "BERSERK FURY",
+      "tagline": "The Ultimate Tyrannosaur Zoid.",
+      "added": "2026-11-08T11:30:00-05:00",
+      "accent": "#9C27B0",
+      "status": "active",
+      "version": "0.1.0",
+      "note": "Active WIP (v0.1.0): Zoids Battle Legends port with Buster Claws, E-Shield, Magneser Drills, and Charged Particle Cannon (CPC)",
+      "image": "Assets/Roster/BerserkFury.png"
+    }
+  ]
+}

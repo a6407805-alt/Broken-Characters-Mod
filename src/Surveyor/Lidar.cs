@@ -39,7 +39,7 @@ namespace Surveyor
             return pick;
         }
 
-        /// <summary>Restores one stolen sense (when the Shimmer Demon is vacuum-captured into her canister). Returns its name, or null if none were lost.</summary>
+        /// <summary>Restores one stolen sense (when the Shimmer Demon is vacuum-captured in the Ghost-Trap). Returns its name, or null if none were lost.</summary>
         public static string RestoreOne()
         {
             List<string> stolen = new List<string>();
@@ -161,7 +161,7 @@ namespace Surveyor
         }
     }
 
-    public partial class SvrDemon
+    public class SvrDemon
     {
         public enum Mode { Dormant, Prowl, Stalk, Hunt, Stagger, Gone }
 
@@ -178,7 +178,10 @@ namespace Surveyor
         private Vector3 _lastPos;
         private static readonly Vector3[] Sph = BuildSphere();
 
-        // Vacuum capture: proton tether + wrestling + payoff state (captured straight into her canister, no floor trap)
+        // Ghostbusters / Luigi's Mansion containment trap + proton tether + wrestling + payoff state
+        public bool TrapActive;
+        public Vector3 TrapPos;
+        public float TrapUntil, TrapReadyAt;
         public float CaptureProgress; // 0 .. 1
         public bool TetherActive;
         public int StrainStacks;      // 0 .. 10 stacking "Containment Strain" debuff
@@ -230,16 +233,28 @@ namespace Surveyor
         {
             if (Time.time < _shieldDeflectToastUntil) return;
             _shieldDeflectToastUntil = Time.time + 1.8f;
-            Util.PlaySound("Play_item_use_EMPScanner_findChest", PhysicalGo);
-            LastRestoredSense = "PHASE SHIELD — " + ElementName(RequiredElement) + " ROUNDS NEEDED (HOLD M1 + SCROLL)";
+            Util.PlaySound("Play_captain_drone_zap", PhysicalGo);
+            LastRestoredSense = "PHASE SHIELD ACTIVE — VACUUM [M2] TO EXPOSE!";
             LastRestoredUntil = Time.time + 2.5f;
         }
 
         public void VacuumBreakShield(float dt, CharacterBody body)
         {
             if (!Active) return;
-            // The vacuum no longer breaks the shield (the right minigun element does). It only hurts an exposed Demon.
-            if (Invulnerable) { OnShieldDeflect(); return; }
+            bool wasInvuln = Invulnerable;
+            VulnerableTimer = 4.2f;
+
+            if (wasInvuln)
+            {
+                Util.PlaySound("Play_item_proc_shieldBreak", PhysicalGo ? PhysicalGo : (body ? body.gameObject : null));
+                LastRestoredSense = "SHIELD BROKEN — ALL PLAYERS ATTACK NOW!";
+                LastRestoredUntil = Time.time + 3.8f;
+                try
+                {
+                    Chat.AddMessage("<color=#ffdd33>[BOSS EXPOSED]</color> <color=#ff3b30>Shimmer Demon Phase Shield shattered by Poltergust Vacuum!</color> <color=#90e0ef>All players attack now!</color>");
+                }
+                catch { }
+            }
 
             float vacDps = (body ? body.damage * 4.5f : 60f) * dt;
             TakeDamage(vacDps, body ? body.corePosition : Pos);
@@ -255,10 +270,18 @@ namespace Surveyor
             if (PhysicalGo) UnityEngine.Object.Destroy(PhysicalGo);
 
             StoredSpirits = Mathf.Min(MaxStoredSpirits, StoredSpirits + 1);
-            Util.PlaySound("Play_UI_shrineActivate", null);
+            Util.PlaySound("Play_UI_shrineSuccess", null);
             Util.PlaySound("Play_UI_obj_casinoChest_open", null);
 
-            DropLoot();
+            try
+            {
+                if (UnityEngine.Networking.NetworkServer.active)
+                {
+                    PickupIndex drop = PickupCatalog.FindPickupIndex(ItemTier.Tier2);
+                    PickupDropletController.CreatePickupDroplet(drop, Pos + Vector3.up * 1.5f, Vector3.up * 8f);
+                }
+            }
+            catch { }
 
             string restored = SvrSenses.RestoreAll();
             LastRestoredSense = "DEMON EXORCISED — ALL SENSES RESTORED!";
@@ -422,7 +445,7 @@ namespace Surveyor
             BuildPose(t);
             Quaternion q = Quaternion.Euler(0f, Yaw, 0f);
             float shake = (State == Mode.Stagger || TetherActive) ? 0.08f : 0.012f;
-            float shrink = CaptureProgress > 0.15f ? Mathf.Lerp(1.15f, 0.28f, Mathf.SmoothStep(0f, 1f, CaptureProgress)) : 1.15f;
+            float shrink = TrapActive && CaptureProgress > 0.15f ? Mathf.Lerp(1.15f, 0.28f, Mathf.SmoothStep(0f, 1f, CaptureProgress)) : 1.15f;
             for (int i = 0; i < _local.Count; i++)
             {
                 Vector3 w = _local[i] * shrink;
@@ -484,10 +507,7 @@ namespace Surveyor
 
             if (Invulnerable)
             {
-                // Elemental phase shield: only the matching minigun rounds crack it (shown by the boss bar colour)
-                NoteHeavyFire();
-                if (SvrLidar.MinigunMode % 4 == RequiredElement) ElementHit(anchored);
-                else OnShieldDeflect();
+                OnShieldDeflect();
                 Knock(aim.origin, 0.25f, 0f);
                 return;
             }
@@ -511,6 +531,10 @@ namespace Surveyor
             if (Near(aim, 150f)) Knock(aim.origin, 10f, SvrPlugin.MinigunStagger.Value);
         }
 
+        public void DeployTrap(CharacterBody body, InputBankTest input)
+        {
+        }
+
         public bool RedeployMinion(CharacterBody body)
         {
             if (StoredSpirits <= 0 || !body) return false;
@@ -529,7 +553,7 @@ namespace Surveyor
         {
             if (StoredSpirits <= 0 || !body) return false;
             StoredSpirits--;
-            Util.PlaySound("Play_UI_shrineActivate", body.gameObject);
+            Util.PlaySound("Play_UI_shrineSuccess", body.gameObject);
             float diff = Run.instance ? Mathf.Max(1f, Run.instance.difficultyCoefficient) : 1f;
             uint gold = (uint)Mathf.RoundToInt(125f * diff);
             if (body.master) body.master.GiveMoney(gold);
@@ -568,9 +592,6 @@ namespace Surveyor
                 if (dDemon < 52f && (angDemon < 52f || dDemon < 14f))
                 {
                     VacuumBreakShield(dt, body);
-                    bool capturable = !Invulnerable && CurrentHp <= MaxHp * 0.35f;
-                    if (capturable)
-                    {
                     TetherActive = true;
                     State = Mode.Stagger;
                     _stagger = Mathf.Max(_stagger, 0.45f);
@@ -589,7 +610,6 @@ namespace Surveyor
                     if (CaptureProgress >= 0.99f || CurrentHp <= 0f)
                     {
                         DefeatDemon();
-                    }
                     }
                 }
                 else
@@ -693,7 +713,6 @@ namespace Surveyor
             int pCount = Run.instance ? Mathf.Max(1, Run.instance.participatingPlayerCount) : 1;
             MaxHp = 6000f * diff * Mathf.Sqrt(pCount);
             CurrentHp = MaxHp;
-            BeginFight();
             VulnerableTimer = 0f; // Phase shield starts active!
             IsInvisible = true;
 
@@ -701,7 +720,7 @@ namespace Surveyor
 
             try
             {
-                Chat.AddMessage("<color=#ff2a2a>[BOSS SPAWNED]</color> <color=#ff6b6b>The Spectral Shimmer Demon stalks the stage!</color> <color=#ffdd33>Elemental phase shield: the boss bar colour shows which minigun rounds crack it (hold M1 + scroll).</color>");
+                Chat.AddMessage("<color=#ff2a2a>[BOSS SPAWNED]</color> <color=#ff6b6b>The Spectral Shimmer Demon stalks the stage!</color> <color=#ffdd33>Phase shield invulnerable — find with LiDAR and vacuum [M2] to break shield!</color>");
             }
             catch { }
         }
@@ -730,9 +749,7 @@ namespace Surveyor
 
                 HurtBoxGroup hbg = PhysicalGo.AddComponent<HurtBoxGroup>();
                 HurtBox hb = PhysicalGo.AddComponent<HurtBox>();
-                // HurtBox.collider has a private setter the game blocks for mods (MethodAccessException): set it by reflection
-                try { typeof(HurtBox).GetProperty("collider", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).GetSetMethod(true).Invoke(hb, new object[] { col }); }
-                catch (Exception cex) { SvrPlugin.Log.LogWarning("Demon hurtbox collider: " + cex.Message); }
+                hb.collider = col;
                 hb.healthComponent = hc;
                 hb.isBullseye = true;
                 hb.damageModifier = HurtBox.DamageModifier.Normal;
@@ -776,9 +793,8 @@ namespace Surveyor
 
         public void OnShieldRecharge()
         {
-            RotateElement();
-            Util.PlaySound("Play_item_use_EMPScanner_findChest", PhysicalGo);
-            LastRestoredSense = "PHASE SHIELD RE-ATTUNED — " + ElementName(RequiredElement) + " ROUNDS NEEDED!";
+            Util.PlaySound("Play_captain_drone_zap", PhysicalGo);
+            LastRestoredSense = "PHASE SHIELD RECHARGED — VACUUM TO BREAK!";
             LastRestoredUntil = Time.time + 2.5f;
         }
 
@@ -864,9 +880,6 @@ namespace Surveyor
                 if (vacuuming && dDemon < 55f && angle < 32f)
                 {
                     VacuumBreakShield(dt, body);
-                    bool capturable = !Invulnerable && CurrentHp <= MaxHp * 0.35f;
-                    if (capturable)
-                    {
                     TetherActive = true;
                     State = Mode.Stagger;
                     _stagger = Mathf.Max(_stagger, 0.45f);
@@ -895,7 +908,6 @@ namespace Surveyor
                         DefeatDemon();
                     }
                     return;
-                    }
                 }
             }
 
@@ -912,7 +924,6 @@ namespace Surveyor
                 _retargetTimer = Random.Range(10f, 18f);
             }
             Vector3 targetPos = _currentVictim ? _currentVictim.footPosition : pp;
-            BlinkTick(dt, targetPos);
 
             Vector3 to = targetPos - Pos;
             Vector3 flat = new Vector3(to.x, 0f, to.z);
@@ -1006,7 +1017,7 @@ namespace Surveyor
                 try { Chat.AddMessage("<color=#ff4a4a>[DEMON STRIKE] The Shimmer Demon savaged " + victim.GetUserName() + " for " + Mathf.RoundToInt(bossDmg) + " damage!</color>"); } catch { }
             }
 
-            Util.PlaySound("Play_UI_menuClick", victim.gameObject);
+            Util.PlaySound("Play_huntress_m2_throw_short", victim.gameObject);
 
             State = Mode.Prowl;
             _modeTimer = Random.Range(16f, 24f);
@@ -1047,6 +1058,11 @@ namespace Surveyor
         public float NextBuildAttempt;
         public readonly List<WirePart> Parts = new List<WirePart>(6);
 
+        private Renderer[] _renderers;
+        private Material[] _origMats;
+        private Material _holoMat;
+        private bool _matsSwapped;
+        private static Shader _hgShader;
 
         public bool IsRevealed => Time.time < RevealUntil;
 
@@ -1067,6 +1083,67 @@ namespace Surveyor
             RevealUntil = Mathf.Max(RevealUntil, now + duration);
             PeakIntensity = Mathf.Max(PeakIntensity, Mathf.Clamp01(intensity));
             if (!Built && now >= NextBuildAttempt) BuildWireframe();
+            ApplyHologramMaterial(true);
+        }
+
+        public void ApplyHologramMaterial(bool active)
+        {
+            try
+            {
+                if (_renderers == null)
+                {
+                    _renderers = GetComponentsInChildren<Renderer>(false);
+                    if (_renderers != null && _renderers.Length > 0)
+                    {
+                        _origMats = new Material[_renderers.Length];
+                        for (int i = 0; i < _renderers.Length; i++)
+                            if (_renderers[i]) _origMats[i] = _renderers[i].sharedMaterial;
+                    }
+                }
+                if (_renderers == null || _renderers.Length == 0) return;
+
+                if (active && !_matsSwapped)
+                {
+                    if (!_holoMat)
+                    {
+                        if (!_hgShader) _hgShader = Shader.Find("Hopoo Games/Deferred/Standard");
+                        if (_hgShader)
+                        {
+                            _holoMat = new Material(_hgShader) { name = "SvrHoloTargetMat" };
+                            if (_holoMat.HasProperty("_Color")) _holoMat.SetColor("_Color", HoloColor * 0.35f);
+                            if (_holoMat.HasProperty("_EmColor")) _holoMat.SetColor("_EmColor", HoloColor);
+                            if (_holoMat.HasProperty("_EmPower")) _holoMat.SetFloat("_EmPower", 3.2f);
+                            if (_holoMat.HasProperty("_FresnelBoost")) _holoMat.SetFloat("_FresnelBoost", 4.5f);
+                        }
+                    }
+                    if (_holoMat)
+                    {
+                        if (_holoMat.HasProperty("_EmColor")) _holoMat.SetColor("_EmColor", HoloColor);
+                        for (int i = 0; i < _renderers.Length; i++)
+                        {
+                            Renderer r = _renderers[i];
+                            if (!r || (r is ParticleSystemRenderer)) continue;
+                            r.sharedMaterial = _holoMat;
+                        }
+                        _matsSwapped = true;
+                    }
+                }
+                else if (!active && _matsSwapped)
+                {
+                    for (int i = 0; i < _renderers.Length; i++)
+                    {
+                        if (_renderers[i] && _origMats != null && i < _origMats.Length && _origMats[i])
+                            _renderers[i].sharedMaterial = _origMats[i];
+                    }
+                    _matsSwapped = false;
+                }
+            }
+            catch { }
+        }
+
+        private void OnDisable()
+        {
+            if (_matsSwapped) ApplyHologramMaterial(false);
         }
 
         public void BuildWireframe()
@@ -1554,7 +1631,7 @@ namespace Surveyor
 
     // ================================================================ the LiDAR: a decaying point cloud drawn over a black world
 
-    public partial class SvrLidar : MonoBehaviour
+    public class SvrLidar : MonoBehaviour
     {
         private struct Dot
         {
@@ -1568,7 +1645,6 @@ namespace Surveyor
         // Each mode offers a distinct purpose: Bio-Scan reveals monsters through walls in a needle beam,
         // Salvage reveals chests/loot through walls, Topography maps terrain paths, and Peripheral gives wide close-range footing.
         public static readonly string[] OdNames = { "BIO-SCAN (THREAT RADAR)", "SALVAGE SPECTROMETER", "TOPOGRAPHY RECON", "WIDE PERIPHERAL FLOOD" };
-        public static readonly string[] OdShort = { "BIO-SCAN", "SALVAGE", "TOPOGRAPHY", "WIDE FLOOD" };
         public static readonly string[] OdDescs =
         {
             "NARROW 10° · REACH 180M · REVEALS MONSTERS & DEMON THROUGH WALLS",
@@ -1587,28 +1663,6 @@ namespace Surveyor
         public static int MinigunMode = 0; // 0 = IRIDIUM AP, 1 = CRYO COLD, 2 = INCENDIARY, 3 = PLASMA SHOCK
         public static int VacuumMode = 0;  // 0 = POLTERGUST, 1 = SINGULARITY, 2 = CRYO-EXHAUST, 3 = REPULSOR
         private float _miniModeFlash = -10f;
-        private bool _startedVisorOpen;
-        /// <summary>The R swap calls this: shows the ammo banner.</summary>
-        public void FlashAmmo() { _miniModeFlash = Time.time; }
-
-        private GUIStyle _bannerStyle;
-        private void Banner(string title, string sub, Color c, float t, float scale, float y)
-        {
-            if (_bannerStyle == null) _bannerStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, clipping = TextClipping.Overflow, wordWrap = false };
-            float a = Mathf.Clamp01(t / 0.12f) * Mathf.Clamp01((1.6f - t) / 0.4f);
-            float w = 640f * scale, h = 66f * scale;
-            float x = (Screen.width - w) * 0.5f;
-            GUI.color = new Color(0.02f, 0.04f, 0.07f, 0.8f * a);
-            GUI.DrawTexture(new Rect(x, y, w, h), Texture2D.whiteTexture);
-            GUI.color = new Color(c.r, c.g, c.b, a);
-            GUI.DrawTexture(new Rect(x, y, w, 2f * scale), Texture2D.whiteTexture);
-            GUI.DrawTexture(new Rect(x, y + h - 2f * scale, w, 2f * scale), Texture2D.whiteTexture);
-            _bannerStyle.fontSize = Mathf.Max(14, Mathf.RoundToInt(26f * scale));
-            GUI.Label(new Rect(x, y + 4f * scale, w, 34f * scale), title, _bannerStyle);
-            _bannerStyle.fontSize = Mathf.Max(10, Mathf.RoundToInt(14f * scale));
-            GUI.color = new Color(0.9f, 0.95f, 1f, 0.9f * a);
-            GUI.Label(new Rect(x, y + 38f * scale, w, 24f * scale), sub, _bannerStyle);
-        }
         private float _vacModeFlash = -10f;
 
         public static readonly string[] MinigunModeNames = { "IRIDIUM AP", "CRYO COLD", "INCENDIARY", "PLASMA SHOCK" };
@@ -1627,11 +1681,11 @@ namespace Surveyor
             new Color(0.85f, 0.35f, 1f, 0.95f)    // Violet Plasma / Shock
         };
 
-        public static readonly string[] VacuumModeNames = { "POLTERGUST", "BLACK HOLE", "CRYO-EXHAUST", "REPULSOR" };
+        public static readonly string[] VacuumModeNames = { "POLTERGUST", "SINGULARITY", "CRYO-EXHAUST", "REPULSOR" };
         public static readonly string[] VacuumModeDescs =
         {
-            "HIGH-FLOW SUCTION · REELS ITEMS & THE DEMON",
-            "FIRES A SINGULARITY · PULLS FOES & SHOTS · IMPLODES",
+            "HIGH-FLOW SUCTION · REELS ITEMS, CHESTS & DEMON",
+            "GRAVITATIONAL VORTEX · CLUSTERS ENEMY SWARMS",
             "SUB-ZERO CONE · FREEZES FOES & LEECHES BARRIER",
             "REVERSE BLAST WAVE · DEFLECTS PROJS & BLOWS FOES"
         };
@@ -1809,14 +1863,15 @@ namespace Surveyor
                 _demon.VacuumHold(body, aim, dt);
             }
 
-            // 1) Sucks dropped item pickups to her feet. World interactables (chests, barrels, shrines) never move.
+            // 1) Sucks dropped items and pulls chests/lockboxes/barrels directly toward the player
             Vector3 foot = body ? (body.footPosition + Vector3.up * 0.5f) : (aim.origin - Vector3.up * 0.5f);
             for (int i = 0; i < _pois.Count; i++)
             {
                 Poi p = _pois[i];
                 if (!p.Tr || !p.Tr.gameObject.activeInHierarchy) continue;
                 bool isItem = (p.Kind == 3);
-                if (!isItem) continue;
+                bool isChest = (p.Kind == 0 || p.Kind == 2);
+                if (!isItem && !isChest) continue;
 
                 Vector3 toObj = p.Tr.position - aim.origin;
                 float dObj = toObj.magnitude;
@@ -1826,10 +1881,30 @@ namespace Surveyor
                     // never drag anything that belongs to the player
                     if (body && moveTr.IsChildOf(body.gameObject.transform)) continue;
 
-                    // pickups don't collide with the player: pull them straight to the feet
-                    moveTr.position = Vector3.MoveTowards(moveTr.position, foot, 36f * dt);
-                    Rigidbody rb = moveTr.GetComponent<Rigidbody>();
-                    if (rb) rb.velocity = (foot - moveTr.position).normalized * 36f;
+                    if (isItem)
+                    {
+                        // pickups don't collide with the player: pull them straight to the feet
+                        moveTr.position = Vector3.MoveTowards(moveTr.position, foot, 36f * dt);
+                        Rigidbody rb = moveTr.GetComponent<Rigidbody>();
+                        if (rb) rb.velocity = (foot - moveTr.position).normalized * 36f;
+                    }
+                    else
+                    {
+                        // chests/barrels are SOLID: dragging them into the player's capsule makes the character
+                        // controller shove the player around wildly. Slide them along the ground only and park
+                        // them at a safe distance in front of the player.
+                        Vector3 me = body ? body.footPosition : aim.origin;
+                        Vector3 flat = moveTr.position - me; flat.y = 0f;
+                        const float park = 3.5f;
+                        if (flat.magnitude > park + 0.1f)
+                        {
+                            Vector3 goal = me + flat.normalized * park;
+                            goal.y = moveTr.position.y;
+                            moveTr.position = Vector3.MoveTowards(moveTr.position, goal, 14f * dt);
+                        }
+                        Rigidbody rb = moveTr.GetComponent<Rigidbody>();
+                        if (rb && !rb.isKinematic) rb.velocity = Vector3.zero;
+                    }
                     p.Pos = moveTr.position + Vector3.up * 0.4f;
                 }
             }
@@ -1861,10 +1936,7 @@ namespace Surveyor
             catch { }
 
             // Mode-specific vacuum mechanics
-            if (vMode == 1) // BLACK HOLE: the orb itself is fired on press (SvrVacuumState); holding M2 only reels in items
-            {
-            }
-            else if (vMode == -1)
+            if (vMode == 1) // SINGULARITY: gravitational pull on enemy swarms
             {
                 Vector3 vortexPt = aim.origin + aim.direction * 14f;
                 var bodies = CharacterBody.readOnlyInstancesList;
@@ -2769,7 +2841,7 @@ namespace Surveyor
             _pulseLeft = 3600;
             _pulseRange = 260f;
             _revealUntil = Mathf.Max(_revealUntil, Time.time + 10.0f);
-            Util.PlaySound("Play_captain_R_impact", gameObject);
+            Util.PlaySound("Play_commando_R_stun", gameObject);
             Util.PlaySound("Play_UI_obj_casinoChest_open", gameObject);
 
             // Refresh and ping all interactables & chests across the stage
@@ -2850,7 +2922,7 @@ namespace Surveyor
             _peekUntil = Time.time;
             _rebootStart = Time.time;
             _peekReady = Time.time + 0.35f;
-            Util.PlaySound("Play_UI_menuClick", gameObject);
+            Util.PlaySound("Play_huntress_m2_throw_short", gameObject);
             SvrRigPart.CloseVisor(gameObject);
         }
 
@@ -2965,7 +3037,7 @@ namespace Surveyor
         private void FireRepulsorBlow()
         {
             _repulsorReadyAt = Time.time + (SvrUpgrades.Has(SvrUpgrades.REPULSOR_BLOW) ? 4.5f : 7.5f);
-            Util.PlaySound("Play_UI_menuClick", gameObject);
+            Util.PlaySound("Play_MULT_m2_aim", gameObject);
             Vector3 o = _input ? _input.aimOrigin : _body.corePosition;
             Vector3 aim = _input ? _input.aimDirection : transform.forward;
 
@@ -3091,33 +3163,148 @@ namespace Surveyor
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
-            if (!_startedVisorOpen) { _startedVisorOpen = true; StartPeek(); }
-            // v0.7.1 kit: F toggles LiDAR mode, 1/2/3 pick the LiDAR view (each fires a pulse across the map), R swaps ammo.
-            ViewKeys();
-            KeyCode qk;
-            if (TryKey(SvrPlugin.ScanNextKey.Value, out qk) && Input.GetKeyDown(qk))
+            if (!_techSpawned && Time.timeSinceLevelLoad > 2.5f) SpawnFieldTechCaches();
+
+            // Tapping Q sequentially rolls through the 4 modes (Bio-Scan -> Salvage -> Topography -> Peripheral Flood) with a snappy audio cue
+            KeyCode next, peek, repKey, minKey, cashKey;
+            int n0 = OdNames.Length;
+            if (TryKey(SvrPlugin.ScanNextKey.Value, out next) && Input.GetKeyDown(next))
             {
-                OdMode = (OdMode + 1) & 3;
-                _modeFlash = Time.time;
-                Util.PlaySound("Play_item_use_EMPScanner_findChest", gameObject);
-                Util.PlaySound("Play_UI_menuClick", gameObject);
+                OdMode = (OdMode + 1) % n0;
+                TriggerModeBurst();
             }
-            KeyCode peek;
+
+            // Ensure selected modes are valid unlocked modes
+            if (!SvrUpgrades.IsMinigunUnlocked(MinigunMode)) MinigunMode = 0;
+            if (!SvrUpgrades.IsVacuumUnlocked(VacuumMode)) VacuumMode = 0;
+
+            // Mouse Scroll Wheel or Middle Click: switch Minigun Ammo modes (M1) or Vacuum modes (M2) (only cycle unlocked options)
+            float scroll = Input.GetAxis("Mouse ScrollWheel");
+            bool midClick = Input.GetMouseButtonDown(2);
+            if (Mathf.Abs(scroll) > 0.02f || midClick)
+            {
+                int dir = (scroll > 0.02f || midClick) ? 1 : -1;
+                bool holdingM2 = Input.GetMouseButton(1) || (_input && _input.skill2.down);
+                if (holdingM2)
+                {
+                    int cur = VacuumMode;
+                    int candMode = cur;
+                    for (int step = 0; step < 4; step++)
+                    {
+                        candMode = (candMode + dir + 4) % 4;
+                        if (SvrUpgrades.IsVacuumUnlocked(candMode))
+                        {
+                            if (candMode != cur)
+                            {
+                                VacuumMode = candMode;
+                                _vacModeFlash = Time.time;
+                                Util.PlaySound("Play_UI_menuClick", gameObject);
+                            }
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    int cur = MinigunMode;
+                    int candMode = cur;
+                    for (int step = 0; step < 4; step++)
+                    {
+                        candMode = (candMode + dir + 4) % 4;
+                        if (SvrUpgrades.IsMinigunUnlocked(candMode))
+                        {
+                            if (candMode != cur)
+                            {
+                                MinigunMode = candMode;
+                                _miniModeFlash = Time.time;
+                                Util.PlaySound("Play_UI_menuClick", gameObject);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Peek on its own key. Fully toggleable: pressing F lifts visor, pressing F again closes it.
             if (TryKey(SvrPlugin.PeekKey.Value, out peek) && Input.GetKeyDown(peek))
             {
-                if (Peeking) EndPeek();
+                if (Peeking)
+                {
+                    EndPeek();
+                }
                 else
                 {
                     StartPeek();
-                    Util.PlaySound("Play_UI_menuClick", gameObject);
+                    Util.PlaySound("Play_huntress_m2_throw_short", gameObject);
+                }
+            }
+            // Reverse-Flow Repulsor ("Blow" Function) [V]: blasts away swarms & reflects projectiles
+            if (TryKey(SvrPlugin.RepulsorKey.Value, out repKey) && Input.GetKeyDown(repKey) && Time.time >= _repulsorReadyAt)
+            {
+                FireRepulsorBlow();
+            }
+            // Redeploy Captured Spirit as 30s Friendly Spectral Hologram Guardian [H]
+            if (TryKey(SvrPlugin.MinionKey.Value, out minKey) && Input.GetKeyDown(minKey) && _demon.StoredSpirits > 0)
+            {
+                _demon.RedeployMinion(_body);
+            }
+            // Cash in Captured Spirit at the Teleporter [B]
+            if (TryKey(SvrPlugin.CashInKey.Value, out cashKey) && Input.GetKeyDown(cashKey) && _demon.StoredSpirits > 0)
+            {
+                TeleporterInteraction tp = FindObjectOfType<TeleporterInteraction>();
+                if (tp && Vector3.Distance(_body.corePosition, tp.transform.position) < 12f)
+                {
+                    _demon.CashInAtTeleporter(_body, tp.transform.position);
+                }
+            }
+
+            // Check & paint LiDAR-Exclusive Hidden Tech Caches (via their SvrLiDARScanTarget 3D wireframe hologram)
+            _nearCacheIdx = -1;
+            for (int cIdx = 0; cIdx < _techCaches.Count; cIdx++)
+            {
+                FieldTechCache fc = _techCaches[cIdx];
+                if (fc.Collected) continue;
+                float dCache = Vector3.Distance(_body.corePosition, fc.Pos);
+                if (dCache < 4.8f) _nearCacheIdx = cIdx;
+                if (fc.Target && fc.Target.IsRevealed && _peekK < 0.65f)
+                {
+                    PaintTargetWireframe(fc.Target, 8, 0.42f);
+                }
+            }
+            if (_nearCacheIdx >= 0 && Input.GetKeyDown(KeyCode.E))
+            {
+                FieldTechCache fc = _techCaches[_nearCacheIdx];
+                fc.Collected = true;
+                if (fc.Go) fc.Go.SetActive(false);
+                _techCaches[_nearCacheIdx] = fc;
+                SvrUpgrades.Unlock(fc.UpgradeId);
+                Util.PlaySound("Play_UI_shrineSuccess", gameObject);
+
+                // Auto-equip unlocked weapon/vacuum mode so the player can immediately try it out!
+                if (fc.UpgradeId == SvrUpgrades.MINI_CRYO) { MinigunMode = 1; _miniModeFlash = Time.time; }
+                else if (fc.UpgradeId == SvrUpgrades.MINI_INCENDIARY) { MinigunMode = 2; _miniModeFlash = Time.time; }
+                else if (fc.UpgradeId == SvrUpgrades.MINI_PLASMA) { MinigunMode = 3; _miniModeFlash = Time.time; }
+                else if (fc.UpgradeId == SvrUpgrades.VAC_VORTEX) { VacuumMode = 1; _vacModeFlash = Time.time; }
+                else if (fc.UpgradeId == SvrUpgrades.VAC_CRYO) { VacuumMode = 2; _vacModeFlash = Time.time; }
+                else if (fc.UpgradeId == SvrUpgrades.VAC_REPULSE) { VacuumMode = 3; _vacModeFlash = Time.time; }
+
+                _upgradeToast = "MODULE RETRIEVED: " + SvrUpgrades.Names[fc.UpgradeId] + " — " + SvrUpgrades.Descs[fc.UpgradeId];
+                _upgradeToastUntil = Time.time + 5.2f;
+
+                try
+                {
+                    Chat.AddMessage("<color=#00ffd8>[SURVEYOR FIELD-TECH]</color> Activated <color=#ffea33>" + SvrUpgrades.Names[fc.UpgradeId] + "</color>! <color=#90c0df>" + SvrUpgrades.Descs[fc.UpgradeId] + "</color>");
+                }
+                catch { }
+
+                for (int i = 0; i < 220; i++)
+                {
+                    AddDot(fc.Pos + Random.onUnitSphere * Random.Range(0.3f, 3.8f), (i & 1) == 0 ? new Color(1f, 0.86f, 0.2f, 1f) : new Color(0.25f, 1f, 0.9f, 1f), 2.5f, true);
                 }
             }
 
             float prevRestored = _demon.LastRestoredUntil;
-            // the old client-only Shimmer Demon is retired: the Shimmer Stalker is a real shared enemy (Stalker.cs)
-            // new features never get to stop the scanner: an error here is logged once and skipped
-            try { BlackHoleTick(dt); MiscLidarFx(dt); ViewTick(dt); }
-            catch (Exception ex) { if (!_loggedFeatureError) { _loggedFeatureError = true; SvrPlugin.Log.LogError("Black Hole / blink fx: " + ex); } }
+            _demon.Tick(dt, _body, _input);
             if (_demon.LastRestoredUntil > prevRestored)
             {
                 // Celebratory containment burst when the Demon is captured and a lost sense is restored!
@@ -3229,7 +3416,7 @@ namespace Surveyor
                     Transform tr = gpc.gameObject.transform;
                     if ((tr.position - me).sqrMagnitude > maxDistSqr * 1.3f) continue;
                     string tag = "ITEM";
-                    string desc = "DROPPED ITEM";
+                    string desc = "HOLD [M2] TO VACUUM ITEM";
                     Color col = new Color(0.32f, 1f, 0.94f, 1f);
                     ResolvePickupDisplay(gpc.gameObject, ref tag, ref col, ref desc);
                     Vector3 ext = new Vector3(0.55f, 0.55f, 0.55f);
@@ -3291,6 +3478,8 @@ namespace Surveyor
                     PurchaseInteraction pi = pis[i];
                     if (!IsPurchaseOpen(pi))
                     {
+                        SvrLiDARScanTarget oldSt = pi ? pi.GetComponent<SvrLiDARScanTarget>() : null;
+                        if (oldSt) oldSt.ApplyHologramMaterial(false);
                         continue;
                     }
                     if (pi.GetComponentInParent<TeleporterInteraction>()) continue;
@@ -3335,6 +3524,8 @@ namespace Surveyor
                     BarrelInteraction bi = bis[i];
                     if (!IsBarrelOpen(bi))
                     {
+                        SvrLiDARScanTarget oldSt = bi ? bi.GetComponent<SvrLiDARScanTarget>() : null;
+                        if (oldSt) oldSt.ApplyHologramMaterial(false);
                         continue;
                     }
                     Transform tr = bi.gameObject.transform;
@@ -3670,23 +3861,18 @@ namespace Surveyor
             if (!Alive) { RestoreCamera(); DropPeekFx(); _peekK = 0f; return; }
 
             int pLay = SvrModel.PlayerModelLayer;
-            int darkLay = SvrModel.DarkSuitLayer;
-            // The suit lives on the normal character layer. Only while the world is blacked out (visor down) does it move
-            // to the dark-suit layer, the one layer the dimmed camera still draws. Any other moment it goes straight back.
-            bool darkNow = SvrPlugin.DarkWorld.Value && !Peeking && _peekK < 0.02f;
-            int suitLay = darkNow ? darkLay : pLay;
             if (_body)
             {
                 ModelLocator ml = _body.modelLocator;
                 Transform mt = ml ? ml.modelTransform : null;
                 if (mt)
                 {
-                    Renderer[] rnds = mt.GetComponentsInChildren<Renderer>(true);
+                    Renderer[] rnds = mt.GetComponentsInChildren<Renderer>(false);
                     for (int rIdx = 0; rIdx < rnds.Length; rIdx++)
                     {
                         Renderer r = rnds[rIdx];
-                        if (r && r.name.StartsWith("SvrPart_") && r.gameObject.layer != suitLay)
-                            r.gameObject.layer = suitLay;
+                        if (r && r.name.StartsWith("SvrPart_") && r.gameObject.layer != pLay)
+                            r.gameObject.layer = pLay;
                     }
                 }
             }
@@ -3701,7 +3887,7 @@ namespace Surveyor
                 _suitLight.range = 14f;
                 _suitLight.intensity = 3.8f;
                 _suitLight.color = new Color(0.92f, 0.97f, 1f);
-                _suitLight.cullingMask = (1 << pLay) | (1 << darkLay) | (1 << 0) | (1 << 5) | (1 << 12);
+                _suitLight.cullingMask = (1 << pLay) | (1 << 0) | (1 << 5) | (1 << 12);
             }
 
             float now = Time.time;
@@ -3765,6 +3951,10 @@ namespace Surveyor
             if (Peeking || _peekK > 0.02f)
             {
                 RestoreCamera();                          // keep the real world visible throughout the entire transition
+                if (cam && pLay >= 0)
+                {
+                    cam.cullingMask |= (1 << pLay);
+                }
                 ApplyPeekFx(cam, _peekK);
                 return;
             }
@@ -3822,7 +4012,8 @@ namespace Surveyor
             int uiMask = uiLayer >= 0 ? (1 << uiLayer) : (1 << 5);
             int uiObj = LayerMask.NameToLayer("UIObject");
             if (uiObj >= 0) uiMask |= (1 << uiObj);
-            uiMask |= (1 << SvrModel.DarkSuitLayer);
+            int playerLay = SvrModel.PlayerModelLayer;
+            if (playerLay >= 0) uiMask |= (1 << playerLay);
             cam.cullingMask = uiMask;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = Color.black;
@@ -3837,8 +4028,6 @@ namespace Surveyor
         }
 
         // Scan-mode accent colors for the HUD (0=BIO-SCAN, 1=SALVAGE, 2=TOPOGRAPHY, 3=PERIPHERAL FLOOD).
-        public static Color ModeColorOf(int mode) => ModeAccent(mode);
-
         private static Color ModeAccent(int mode)
         {
             switch (mode % 4)
@@ -4171,7 +4360,7 @@ namespace Surveyor
                         int uiMask = uiLayer >= 0 ? (1 << uiLayer) : (1 << 5);
                         int uiObj = LayerMask.NameToLayer("UIObject");
                         if (uiObj >= 0) uiMask |= (1 << uiObj);
-                        uiMask |= (1 << SvrModel.DarkSuitLayer);
+                        if (playerLay >= 0) uiMask |= playerMask;
                         c.cullingMask = uiMask;
                         c.clearFlags = CameraClearFlags.SolidColor;
                         c.backgroundColor = Color.black;
@@ -4213,8 +4402,6 @@ namespace Surveyor
 
             DrawDots(cam, scale, dotAlpha);
             DrawDemon(cam, scale, dotAlpha);
-            try { DrawChestXray(cam, scale); } catch (Exception ex) { if (!_loggedFeatureError) { _loggedFeatureError = true; SvrPlugin.Log.LogError("Chest X-ray: " + ex); } }
-            try { DrawMap(cam, scale); } catch (Exception ex) { if (!_loggedFeatureError) { _loggedFeatureError = true; SvrPlugin.Log.LogError("LiDAR map: " + ex); } }
             DrawPeekWash(scale);
             DrawHud(scale);
             GUI.color = old;
@@ -4641,7 +4828,7 @@ namespace Surveyor
             {
                 Vector3 muzzleWorld = _body.corePosition + cam.transform.right * 0.48f - cam.transform.up * 0.18f + cam.transform.forward * 0.55f;
                 Vector3 demonCenter = _demon.TetherTargetPos;
-                Vector3 canisterWorld = muzzleWorld;
+                Vector3 trapWorld = muzzleWorld;
 
                 // 1) Ghostbusters Proton Stream: crackling orange/red core beam + spiraling electric blue helix from gun to Demon
                 Vector3 prevCore = Vector3.zero, prevHelix = Vector3.zero;
@@ -4684,16 +4871,16 @@ namespace Surveyor
                     else hasPrevStream = false;
                 }
 
-                // 2) Luigi's Mansion Poltergust Suction Vortex: spiraling ectoplasm-green funnel pulling the Demon into her canister
+                // 2) Luigi's Mansion Poltergust Suction Vortex: spiraling ectoplasm-green funnel pulling Demon into the Ghost-Trap
                 Vector3 prevVortex = Vector3.zero;
                 bool hasPrevVortex = false;
                 const int vortexSegs = 26;
                 for (int v = 0; v <= vortexSegs; v++)
                 {
-                    float u = v / (float)vortexSegs; // 0 = Demon, 1 = canister
+                    float u = v / (float)vortexSegs; // 0 = Demon, 1 = Trap
                     float funnelRad = Mathf.Lerp(1.15f, 0.12f, u);
                     float vAng = Time.time * 32f + u * 22f;
-                    Vector3 vWorld = Vector3.Lerp(demonCenter, canisterWorld, u)
+                    Vector3 vWorld = Vector3.Lerp(demonCenter, trapWorld, u)
                         + new Vector3(Mathf.Cos(vAng) * funnelRad, Mathf.Sin(u * 3.14159f) * 0.45f, Mathf.Sin(vAng) * funnelRad);
                     Vector3 sv = cam.WorldToScreenPoint(vWorld);
                     if (sv.z > 0.3f)
@@ -4841,57 +5028,88 @@ namespace Surveyor
             int fs = Mathf.RoundToInt(15f * scale);
             _label.fontSize = Mathf.Max(10, fs);
 
-            // v0.7.1 panel (left, under the money): LiDAR state, the view keys, the ammo. Rows have room so text never squashes.
-            _label.clipping = TextClipping.Overflow;
-            _label.wordWrap = false;
-            // right-hand column: under the objective / jukebox boxes, above the radar
-            float row = 23f * scale;
-            float panelW = 240f * scale;
-            float panelH = row * 4f + 6f * scale;
-            float radarCx = Screen.width - 70f * scale - 110f * scale;           // same centre as the radar (Lidar.Map.cs)
-            float sx = radarCx - panelW * 0.5f, sy = Screen.height - 200f * scale - 220f * scale - 34f * scale - panelH;
-            _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(13f * scale));
+            // Tactical LiDAR telemetry positioned cleanly at Center-Left (safely below RoR2 money & objectives, above health/chat)
+            float sx = 20f * scale, sy = 240f * scale;
+            float panelW = 460f * scale;
+            float panelH = (SvrUpgrades.UnlockedCount > 0 ? 144f : 120f) * scale;
+
+            // Semi-transparent tactical dark glass backdrop & sleek accented corner borders (100% readable over any stage)
             GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.72f);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy - 6f * scale, panelW + 16f * scale, panelH + 12f * scale), white);
             GUI.color = new Color(0.2f, 0.85f, 1f, 0.45f);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy - 6f * scale, 3f * scale, panelH + 12f * scale), white);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy - 6f * scale, 24f * scale, 1.5f * scale), white);
             GUI.DrawTexture(new Rect(sx - 8f * scale, sy + panelH + 6f * scale, 24f * scale, 1.5f * scale), white);
+
+            // Row 1: Senses status strip + Containment Cell Spirit Charge counter
+            float x = sx, y = sy + 4f * scale;
+            DrawSense("SEE", SvrSenses.Sight, ref x, y, scale);
+            DrawSense("HEAR", SvrSenses.Hearing, ref x, y, scale);
+            DrawSense("TOUCH", SvrSenses.Touch, ref x, y, scale);
+            DrawSense("BAL", SvrSenses.Balance, ref x, y, scale);
+            if (_demon.StoredSpirits > 0 || _demon.MinionActive)
             {
-                float ry = sy + 2f * scale;
-                GUI.color = Peeking ? new Color(0.4f, 1f, 0.7f, 0.95f) : new Color(0.3f, 0.95f, 1f, 0.95f);
-                GUI.Label(new Rect(sx, ry, panelW, row), Peeking ? "[F] LIDAR OFF" : "[F] LIDAR ON", _label);
-                GUI.color = ModeAccent(OdMode);
-                GUI.Label(new Rect(sx, ry + row, panelW, row), "[Q] " + OdShort[OdMode & 3], _label);
-                ry += row;
-                // view keys, the active one lit in its colour
-                float vx = sx;
-                for (int v = 1; v <= 3; v++)
-                {
-                    string t = "[" + v + "] " + (v == 1 ? "MOBS" : v == 2 ? "ITEMS" : "OBJ") + "  ";
-                    GUI.color = View == v ? ViewColors[v] : new Color(0.65f, 0.75f, 0.85f, 0.75f);
-                    Vector2 sz = _label.CalcSize(new GUIContent(t));
-                    GUI.Label(new Rect(vx, ry + row, sz.x + 4f, row), t, _label);
-                    vx += sz.x;
-                }
-                int am = SvrAmmo.Current;
-                GUI.color = SvrAmmo.Colors[am];
-                GUI.Label(new Rect(sx, ry + row * 2f, panelW, row), "[R] AMMO: " + SvrAmmo.Names[am], _label);
+                string cellTxt = _demon.MinionActive
+                    ? "GUARDIAN (" + Mathf.CeilToInt(_demon.MinionUntil - Time.time) + "s)"
+                    : "CELL: " + _demon.StoredSpirits + "/" + _demon.MaxStoredSpirits + " [H/B]";
+                float cw = (cellTxt.Length * 7.5f + 12f) * scale;
+                GUI.color = new Color(0.02f, 0.06f, 0.08f, 0.75f);
+                GUI.DrawTexture(new Rect(x, y, cw, 22f * scale), white);
+                GUI.color = new Color(0.28f, 1f, 0.85f, 0.96f);
+                GUI.DrawTexture(new Rect(x, y, 3f * scale, 22f * scale), white);
+                GUI.Label(new Rect(x + 5f * scale, y, cw, 22f * scale), cellTxt, _label);
             }
 
-            // ammo swap / view banner (centre, lower third)
-            float flash = Time.time - _miniModeFlash;
-            if (flash < 1.6f)
+            // Row 2: Scan mode readout (generous 10px vertical margin below senses)
+            int mIdx = OdMode % OdNames.Length;
+            float sinceSwitch = Time.time - _modeFlash;
+            bool flash = sinceSwitch < 0.75f;
+            float my = sy + 34f * scale;
+            Color accent = ModeAccent(mIdx);
+            Color modeCol = flash ? new Color(1f, 1f, 1f, 1f) : (OverdriveOn ? new Color(1f, 0.62f, 0.2f, 0.95f) : accent);
+            DrawModeIcon(new Vector2(sx + 8f * scale, my + 8f * scale), 7f * scale, mIdx, modeCol, scale, white);
+            GUI.color = modeCol;
+            GUI.Label(new Rect(sx + 22f * scale, my, panelW - 30f * scale, 18f * scale), "SCAN [Q]: " + OdNames[mIdx] + "   [R] OVERDRIVE", _label);
+
+            // Row 3: Scan mode description + 4 pips (plenty of width, never squished)
+            float dy = my + 20f * scale;
+            GUI.color = new Color(0.78f, 0.93f, 1f, 0.90f);
+            GUI.Label(new Rect(sx + 22f * scale, dy, panelW - 30f * scale, 18f * scale), OdDescs[mIdx], _label);
+            for (int i = 0; i < OdNames.Length; i++)
             {
-                int am = SvrAmmo.Current;
-                Banner(SvrAmmo.Names[am] + " ROUNDS", SvrAmmo.Descs[am], SvrAmmo.Colors[am], flash, scale, Screen.height * 0.7f);
+                Color pc = ModeAccent(i);
+                GUI.color = i == mIdx ? new Color(pc.r, pc.g, pc.b, 0.95f) : new Color(pc.r, pc.g, pc.b, 0.22f);
+                GUI.DrawTexture(new Rect(sx + i * 14f * scale, dy + 20f * scale, 10f * scale, 3.5f * scale), white);
             }
-            float qflash = Time.time - _modeFlash;
-            if (flash >= 1.6f && qflash < 1.6f)
-                Banner("LIDAR MODE: " + OdNames[OdMode & 3], OdDescs[OdMode & 3], ModeAccent(OdMode), qflash, scale, Screen.height * 0.7f);
-            float vflash = Time.time - _viewFlash;
-            if (flash >= 1.6f && qflash >= 1.6f && vflash < 1.6f && View > 0)
-                Banner("LIDAR VIEW: " + ViewNames[View], ViewDescs[View], ViewColors[View], vflash, scale, Screen.height * 0.7f);
+
+            // Row 4: Visor Peek & Vacuum controls
+            float py = dy + 28f * scale;
+            float pr = _peekReady - Time.time;
+            string peekTxt = Peeking ? "VISOR: OPEN [F/SHIFT TO CLOSE]" : "VISOR: CLOSED [F/SHIFT TO OPEN]";
+            Color peekCol = Peeking ? new Color(0.4f, 1f, 0.7f, 0.95f) : new Color(0.9f, 0.96f, 1f, 0.95f);
+            GUI.color = peekCol;
+            GUI.Label(new Rect(sx, py, 230f * scale, 18f * scale), peekTxt, _label);
+
+            GUI.color = new Color(0.35f, 0.95f, 1f, 0.92f);
+            GUI.Label(new Rect(sx + 215f * scale, py, 180f * scale, 18f * scale), "VACUUM [M2]", _label);
+
+            // Row 5: Installed tech badges
+            if (SvrUpgrades.UnlockedCount > 0)
+            {
+                float ux = sx, uy = py + 22f * scale;
+                for (int u = 0; u < SvrUpgrades.COUNT; u++)
+                {
+                    if (!SvrUpgrades.Has(u)) continue;
+                    string uName = SvrUpgrades.ShortNames[u];
+                    float uw = (uName.Length * 7.5f + 10f) * scale;
+                    Color uCol = u < 4 ? new Color(1f, 0.84f, 0.25f, 0.95f) : new Color(0.3f, 0.96f, 1f, 0.95f);
+                    GUI.color = uCol;
+                    GUI.DrawTexture(new Rect(ux, uy, 2.5f * scale, 16f * scale), white);
+                    GUI.DrawTexture(new Rect(ux, uy + 15f * scale, uw, 1.5f * scale), white);
+                    GUI.Label(new Rect(ux + 5f * scale, uy - 2f * scale, uw, 18f * scale), uName, _label);
+                    ux += uw + 5f * scale;
+                }
+            }
 
             // Top-Center Shimmer Demon Boss & Containment Health Bar (compact 360 width, no overlap)
             if (_demon.Active)
@@ -4954,7 +5172,7 @@ namespace Surveyor
                 float w = 210f * scale, h = 10f * scale;
                 float bx = Screen.width * 0.5f - w * 0.5f, by = Screen.height * 0.64f;
                 GUI.color = new Color(0.02f, 0.04f, 0.06f, 0.72f);
-                GUI.DrawTexture(new Rect(bx - 4f * scale, by - 4f * scale, w + 8f * scale, h + 38f * scale), white);
+                GUI.DrawTexture(new Rect(bx - 4f * scale, by - 4f * scale, w + 8f * scale, h + 28f * scale), white);
 
                 const int segs = 12;
                 float segGap = 2.5f * scale;
@@ -4974,14 +5192,12 @@ namespace Surveyor
                 }
 
                 // Thin thermal load bar right below the segmented spool gauge
-                GUI.color = sp.Overheated ? new Color(1f, 0.2f, 0.1f, 0.95f) : SvrAmmo.Colors[SvrAmmo.Current];
+                GUI.color = SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) ? new Color(0.35f, 0.95f, 1f, 0.9f) : new Color(1f, 0.38f, 0.12f, 0.9f);
                 GUI.DrawTexture(new Rect(bx, by + h + 2f * scale, w * Mathf.Clamp01(sp.Heat), 2.5f * scale), white);
 
                 string spoolTag = sp.Overheated ? "THERMAL OVERLOAD!" : (sp.AnchorLeft > 0f ? "SPOOL · ANCHORED" : (SvrUpgrades.Has(SvrUpgrades.CRYO_JACKET) ? "SPOOL · CRYO-COOLED" : "SPOOL · HEAT " + Mathf.RoundToInt(sp.Heat * 100f) + "%"));
-                if (sp.Overheated) spoolTag = "OVERHEATED — VENTING " + Mathf.RoundToInt(sp.Heat * 100f) + "%";
-                else if (sp.AnchorLeft <= 0f) spoolTag = SvrAmmo.Names[SvrAmmo.Current] + " · HEAT " + Mathf.RoundToInt(sp.Heat * 100f) + "%";
                 GUI.color = sp.Overheated ? new Color(1f, 0.35f, 0.25f, 0.98f) : new Color(0.82f, 1f, 0.75f, 0.92f);
-                GUI.Label(new Rect(bx, by + h + 6f * scale, w + 80f * scale, 26f * scale), spoolTag, _label);
+                GUI.Label(new Rect(bx, by + h + 4f * scale, w + 40f * scale, 20f * scale), spoolTag, _label);
             }
 
             // Ground item crosshair hover inspection tooltip
@@ -5030,6 +5246,21 @@ namespace Surveyor
             }
 
             {
+                // Top-center banner when tapping Q switches scanner mode (clean border lines, zero black box)
+                if (sinceSwitch < 1.35f)
+                {
+                    float bAlpha = Mathf.Clamp01(1.35f - sinceSwitch);
+                    float bw = 480f * scale, bh = 46f * scale;
+                    float bx = Screen.width * 0.5f - bw * 0.5f, by = Screen.height * 0.16f;
+                    GUI.color = new Color(accent.r, accent.g, accent.b, 0.96f * bAlpha);
+                    GUI.DrawTexture(new Rect(bx, by, bw, 2.5f * scale), white);
+                    GUI.DrawTexture(new Rect(bx, by + bh, bw, 1.5f * scale), white);
+                    DrawModeIcon(new Vector2(bx + 20f * scale, by + 23f * scale), 11f * scale, mIdx, GUI.color, scale, white);
+                    GUI.Label(new Rect(bx + 38f * scale, by + 4f * scale, bw - 44f * scale, 22f * scale), "SCANNER MODE: " + OdNames[mIdx] + "  (" + (mIdx + 1) + "/" + OdNames.Length + ")", _label);
+                    GUI.color = new Color(0.82f, 0.95f, 1f, 0.9f * bAlpha);
+                    GUI.Label(new Rect(bx + 38f * scale, by + 22f * scale, bw - 44f * scale, 22f * scale), OdDescs[mIdx], _label);
+                }
+
                 // Prompt when standing next to a LiDAR-Exclusive Hidden Tech Cache (clean glowing frame, zero black box)
                 if (_nearCacheIdx >= 0 && _nearCacheIdx < _techCaches.Count && !_techCaches[_nearCacheIdx].Collected)
                 {
@@ -5066,8 +5297,7 @@ namespace Surveyor
 
                     // Border color: Shielded (Crimson/Amber) vs Vulnerable (Bright Cyan/Green)
                     bool invuln = _demon.Invulnerable;
-                    Color elemCol = SvrDemon.ElementColors[_demon.RequiredElement % 4];
-                    Color frameCol = invuln ? elemCol : new Color(0.25f, 1f, 0.65f, 0.98f);
+                    Color frameCol = invuln ? new Color(1f, 0.30f, 0.22f, 0.98f) : new Color(0.25f, 1f, 0.65f, 0.98f);
                     GUI.color = frameCol;
                     GUI.DrawTexture(new Rect(bx, by, bw, 2f * scale), white);
                     GUI.DrawTexture(new Rect(bx, by + bh - 2f * scale, bw, 2f * scale), white);
@@ -5085,8 +5315,8 @@ namespace Surveyor
 
                     // Boss Phase Shield Status Badge
                     _label.alignment = TextAnchor.UpperRight;
-                    string statusTag = invuln ? ("[SHIELD · " + SvrDemon.ElementName(_demon.RequiredElement) + " ROUNDS · " + Mathf.RoundToInt(_demon.Crack * 100f) + "%]") : ("[EXPOSED! ATTACK (" + _demon.VulnerableTimer.ToString("0.0") + "s)]");
-                    GUI.color = invuln ? (Mathf.Sin(Time.time * 8f) > 0f ? elemCol : Color.Lerp(elemCol, Color.white, 0.45f)) : new Color(0.3f, 1f, 0.65f, 0.98f);
+                    string statusTag = invuln ? "[PHASE SHIELD · VACUUM TO BREAK]" : ("[EXPOSED! ATTACK (" + _demon.VulnerableTimer.ToString("0.0") + "s)]");
+                    GUI.color = invuln ? (Mathf.Sin(Time.time * 8f) > 0f ? new Color(1f, 0.35f, 0.25f, 0.98f) : new Color(1f, 0.75f, 0.2f, 0.98f)) : new Color(0.3f, 1f, 0.65f, 0.98f);
                     GUI.Label(new Rect(bx + bw * 0.45f - 12f * scale, by + 4f * scale, bw * 0.55f, 20f * scale), statusTag, _label);
 
                     // Health Bar
@@ -5099,13 +5329,8 @@ namespace Surveyor
                     GUI.DrawTexture(new Rect(barX, barY, barW, barH), white);
 
                     // Health bar fill
-                    GUI.color = invuln ? new Color(elemCol.r * 0.85f, elemCol.g * 0.85f, elemCol.b * 0.85f, 0.95f) : new Color(0.2f, 1f, 0.55f, 0.95f);
+                    GUI.color = invuln ? new Color(0.85f, 0.22f, 0.88f, 0.95f) : new Color(0.2f, 1f, 0.55f, 0.95f);
                     GUI.DrawTexture(new Rect(barX, barY, barW * hpPct, barH), white);
-                    if (invuln && _demon.Crack > 0.001f)          // shield crack meter under the bar
-                    {
-                        GUI.color = Color.white;
-                        GUI.DrawTexture(new Rect(barX, barY + barH + 2f * scale, barW * Mathf.Clamp01(_demon.Crack), 3f * scale), white);
-                    }
 
                     // Vacuum suction progress overlay inside the health bar if vacuuming
                     if (_demon.CaptureProgress > 0.01f)
@@ -5148,6 +5373,165 @@ namespace Surveyor
                     _label.alignment = prevAl;
                 }
             }
+            if (Peeking)
+            {
+                float pw = 240f * scale, ph = 24f * scale;
+                float px = Screen.width * 0.5f - pw * 0.5f, pTopY = Screen.height * 0.12f;
+                GUI.color = new Color(0.04f, 0.08f, 0.12f, 0.75f);
+                GUI.DrawTexture(new Rect(px - 4f * scale, pTopY - 2f * scale, pw + 8f * scale, ph + 4f * scale), white);
+                GUI.color = new Color(0.35f, 1f, 0.7f, 0.95f);
+                GUI.DrawTexture(new Rect(px, pTopY, pw, 1.5f * scale), white);
+                GUI.DrawTexture(new Rect(px, pTopY + ph, pw, 1.5f * scale), white);
+                int prevSize = _label.fontSize;
+                TextAnchor prevAlign = _label.alignment;
+                _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
+                _label.alignment = TextAnchor.MiddleCenter;
+                GUI.color = new Color(0.4f, 1f, 0.75f, 0.95f);
+                GUI.Label(new Rect(px, pTopY, pw, ph), "VISOR OPEN [F / SHIFT TO TOGGLE]", _label);
+                _label.fontSize = prevSize;
+                _label.alignment = prevAlign;
+            }
+
+            // Bottom-Right Hotbar: Modular Minigun Ammo Modes & Vacuum Upgrades (docked comfortably above the skill bar)
+            {
+                float hotbarW = 440f * scale;
+                float hotbarX = Screen.width - hotbarW - 24f * scale;
+                float hotbarY = Screen.height - 215f * scale;
+                float hotbarH = 78f * scale;
+
+                // Tactical backdrop so chips & text are 100% readable over any background
+                GUI.color = new Color(0.02f, 0.05f, 0.08f, 0.75f);
+                GUI.DrawTexture(new Rect(hotbarX - 6f * scale, hotbarY - 6f * scale, hotbarW + 12f * scale, hotbarH + 12f * scale), white);
+                GUI.color = new Color(0.25f, 0.85f, 1f, 0.40f);
+                GUI.DrawTexture(new Rect(hotbarX - 6f * scale, hotbarY - 6f * scale, hotbarW + 12f * scale, 1.5f * scale), white);
+
+                // 1) MINIGUN AMMO MODES (M1 + SCROLL WHEEL)
+                int mMode = MinigunMode % 4;
+                bool mFlash = (Time.time - _miniModeFlash) < 0.65f;
+                Color mActiveCol = MinigunModeColors[mMode];
+
+                float chipW = (hotbarW - 3f * 6f * scale) / 4f;
+                float chipH = 20f * scale;
+
+                // Row 1: M1 Ammo Chips (Locked options start greyed-out until retrieved via LiDAR caches)
+                string[] mShortNames = { "IRIDIUM", "CRYO", "INCENDIARY", "PLASMA" };
+                for (int i = 0; i < 4; i++)
+                {
+                    bool unlocked = SvrUpgrades.IsMinigunUnlocked(i);
+                    bool active = (i == mMode && unlocked);
+                    Color cCol = MinigunModeColors[i];
+                    float cx = hotbarX + i * (chipW + 6f * scale);
+
+                    if (unlocked)
+                    {
+                        GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, mFlash ? 0.6f : 0.32f) : new Color(0.04f, 0.06f, 0.08f, 0.7f);
+                        GUI.DrawTexture(new Rect(cx, hotbarY, chipW, chipH), white);
+
+                        GUI.color = active ? (mFlash ? Color.white : cCol) : new Color(cCol.r, cCol.g, cCol.b, 0.38f);
+                        GUI.DrawTexture(new Rect(cx, hotbarY, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, hotbarY + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, hotbarY, 1.5f * scale, chipH), white);
+                        GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, hotbarY, 1.5f * scale, chipH), white);
+
+                        int prevSize = _label.fontSize;
+                        _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(10.5f * scale));
+                        _label.alignment = TextAnchor.MiddleCenter;
+                        GUI.color = active ? Color.white : new Color(0.75f, 0.85f, 0.92f, 0.85f);
+                        GUI.Label(new Rect(cx, hotbarY, chipW, chipH), mShortNames[i], _label);
+                        _label.fontSize = prevSize;
+                        _label.alignment = TextAnchor.MiddleLeft;
+                    }
+                    else
+                    {
+                        // LOCKED / GREYED OUT: Dark desaturated slate backdrop, faint charcoal border, dimmed grey text
+                        GUI.color = new Color(0.015f, 0.02f, 0.025f, 0.65f);
+                        GUI.DrawTexture(new Rect(cx, hotbarY, chipW, chipH), white);
+
+                        GUI.color = new Color(0.24f, 0.27f, 0.30f, 0.30f);
+                        GUI.DrawTexture(new Rect(cx, hotbarY, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, hotbarY + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, hotbarY, 1.5f * scale, chipH), white);
+                        GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, hotbarY, 1.5f * scale, chipH), white);
+
+                        int prevSize = _label.fontSize;
+                        _label.fontSize = Mathf.Max(8, Mathf.RoundToInt(9.5f * scale));
+                        _label.alignment = TextAnchor.MiddleCenter;
+                        GUI.color = new Color(0.38f, 0.42f, 0.46f, 0.48f);
+                        GUI.Label(new Rect(cx, hotbarY, chipW, chipH), mShortNames[i], _label);
+                        _label.fontSize = prevSize;
+                        _label.alignment = TextAnchor.MiddleLeft;
+                    }
+                }
+
+                // Row 2: M2 Vacuum Chips (Locked options start greyed-out until retrieved via LiDAR caches)
+                float vy = hotbarY + 26f * scale;
+                int vMode = VacuumMode % 4;
+                bool vFlash = (Time.time - _vacModeFlash) < 0.65f;
+                Color vActiveCol = VacuumModeColors[vMode];
+                string[] vShortNames = { "SUCTION", "VORTEX", "CRYO", "REPULSE" };
+
+                for (int i = 0; i < 4; i++)
+                {
+                    bool unlocked = SvrUpgrades.IsVacuumUnlocked(i);
+                    bool active = (i == vMode && unlocked);
+                    Color cCol = VacuumModeColors[i];
+                    float cx = hotbarX + i * (chipW + 6f * scale);
+
+                    if (unlocked)
+                    {
+                        GUI.color = active ? new Color(cCol.r, cCol.g, cCol.b, vFlash ? 0.6f : 0.32f) : new Color(0.04f, 0.06f, 0.08f, 0.7f);
+                        GUI.DrawTexture(new Rect(cx, vy, chipW, chipH), white);
+
+                        GUI.color = active ? (vFlash ? Color.white : cCol) : new Color(cCol.r, cCol.g, cCol.b, 0.38f);
+                        GUI.DrawTexture(new Rect(cx, vy, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, vy + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, vy, 1.5f * scale, chipH), white);
+                        GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, vy, 1.5f * scale, chipH), white);
+
+                        int prevSize = _label.fontSize;
+                        _label.fontSize = Mathf.Max(9, Mathf.RoundToInt(10.5f * scale));
+                        _label.alignment = TextAnchor.MiddleCenter;
+                        GUI.color = active ? Color.white : new Color(0.75f, 0.85f, 0.92f, 0.85f);
+                        GUI.Label(new Rect(cx, vy, chipW, chipH), vShortNames[i], _label);
+                        _label.fontSize = prevSize;
+                        _label.alignment = TextAnchor.MiddleLeft;
+                    }
+                    else
+                    {
+                        // LOCKED / GREYED OUT: Dark desaturated slate backdrop, faint charcoal border, dimmed grey text
+                        GUI.color = new Color(0.015f, 0.02f, 0.025f, 0.65f);
+                        GUI.DrawTexture(new Rect(cx, vy, chipW, chipH), white);
+
+                        GUI.color = new Color(0.24f, 0.27f, 0.30f, 0.30f);
+                        GUI.DrawTexture(new Rect(cx, vy, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, vy + chipH - 1.5f * scale, chipW, 1.5f * scale), white);
+                        GUI.DrawTexture(new Rect(cx, vy, 1.5f * scale, chipH), white);
+                        GUI.DrawTexture(new Rect(cx + chipW - 1.5f * scale, vy, 1.5f * scale, chipH), white);
+
+                        int prevSize = _label.fontSize;
+                        _label.fontSize = Mathf.Max(8, Mathf.RoundToInt(9.5f * scale));
+                        _label.alignment = TextAnchor.MiddleCenter;
+                        GUI.color = new Color(0.38f, 0.42f, 0.46f, 0.48f);
+                        GUI.Label(new Rect(cx, vy, chipW, chipH), vShortNames[i], _label);
+                        _label.fontSize = prevSize;
+                        _label.alignment = TextAnchor.MiddleLeft;
+                    }
+                }
+
+                // Row 3: Active Mode Detail Readout (Full name & effect)
+                float sy3 = vy + 26f * scale;
+                int descFs = Mathf.Max(9, Mathf.RoundToInt(11f * scale));
+                int origFs = _label.fontSize;
+                _label.fontSize = descFs;
+
+                GUI.color = mActiveCol;
+                GUI.Label(new Rect(hotbarX, sy3, hotbarW * 0.5f - 4f * scale, 18f * scale), "M1: " + MinigunModeNames[mMode], _label);
+
+                GUI.color = vActiveCol;
+                GUI.Label(new Rect(hotbarX + hotbarW * 0.5f, sy3, hotbarW * 0.5f, 18f * scale), "M2: " + VacuumModeNames[vMode], _label);
+                _label.fontSize = origFs;
+            }
+
             // Suit interference near the demon: subtle crimson/cyan vector glitch ticks on peripheral HUD (no solid/gray boxes).
             float prox = _demon.Proximity(_body.corePosition);
             if (prox <= 0.1f) return;

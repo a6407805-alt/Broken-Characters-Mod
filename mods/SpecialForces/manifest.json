@@ -1,6 +1,6 @@
 {
   "name": "SpecialForces",
-  "version_number": "1.0.9",
+  "version_number": "1.0.8",
   "website_url": "",
   "description": "A new game mode for up to 12 players: defend a control tower on a 1 km rainy night map against an endless storm, build defences, raid Storm Nests and kill the Hurricane.",
   "dependencies": [

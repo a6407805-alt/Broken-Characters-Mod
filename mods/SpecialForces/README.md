@@ -44,7 +44,6 @@ storm, sounds). Custom sounds play on Windows only.
 
 ## Changelog
 
-- **1.0.9**: the Hurricane heals a flat 500 health per second during the fight (it was a percentage).
 - **1.0.8**: the control tower heals a flat 5 health per second (it was 3% per second).
 - **1.0.7**: the Hurricane starts at 25M health (still +1M every 5 minutes until the fight) and regenerates 0.01% of his health per second during the fight.
 - **1.0.6**

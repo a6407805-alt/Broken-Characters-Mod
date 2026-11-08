@@ -169,13 +169,7 @@ namespace Surveyor
             _emTex.Apply(false, true);
         }
 
-        /// <summary>The suit's normal layer: the standard character layer, so every camera (and every other player) sees it,
-        /// and it stays in step with item displays.</summary>
-        public static int PlayerModelLayer => LayerIndex.defaultLayer.intVal;
-
-        /// <summary>Only on her own screen while the visor is down: the suit moves to this layer so it still shows against the
-        /// black LiDAR world (the scene camera then renders only UI + this layer). SvrLidar switches it back every frame otherwise.</summary>
-        public static int DarkSuitLayer
+        public static int PlayerModelLayer
         {
             get
             {
@@ -203,7 +197,7 @@ namespace Surveyor
             Renderer[] originals = model.GetComponentsInChildren<Renderer>(true);
 
             Material baseMat = StandardMaterial(model);
-            Material mat = MaterialForSkin(baseMat, SkinOf(model));
+            Material mat = MakeMaterial(baseMat);
             if (!mat) { SvrPlugin.Log.LogWarning("Surveyor model: no Hopoo shader found, keeping the Commando model."); return; }
 
             // map our bones onto the game skeleton
@@ -334,11 +328,7 @@ namespace Surveyor
                 grip = g.transform;
             }
             if (model.GetComponentInParent<CharacterBody>() && !model.root.name.Contains("Display"))
-            {
-                SvrHeavy oldHeavy = model.gameObject.GetComponent<SvrHeavy>();
-                if (oldHeavy) UnityEngine.Object.DestroyImmediate(oldHeavy);
                 model.gameObject.AddComponent<SvrHeavy>().Setup(game, grip);
-            }
 
             foreach (Renderer r in originals)       // hide Commando (item displays added later still show)
                 if (r) r.forceRenderingOff = true;
@@ -465,93 +455,7 @@ namespace Surveyor
             mr.shadowCastingMode = shadows;
         }
 
-        private static Material MakeMaterial(Material baseMat) => MaterialForSkin(baseMat, 0);
-
-        // ---------------------------------------------------------------- EVA mission skins (palette swaps)
-
-        public static readonly string[] SkinKeys = { "DEFAULT", "APOLLO", "ACES", "STARLINER", "ORLAN", "FEITIAN", "DRAGON" };
-        public static readonly string[] SkinNames = { "Survey Plate", "Apollo A7L", "Shuttle ACES \"Pumpkin\"", "Starliner Blue", "Orlan-MKS", "Feitian", "Dragon Flight Suit" };
-        // the suit's roles, by their colour in the file: fabric, white plates, blue trim, orange trim, grey, orange glow, dark
-        private static readonly Color[] RoleRef =
-        {
-            new Color(0.844f, 0.854f, 0.864f), new Color(0.942f, 0.942f, 0.932f), new Color(0.061f, 0.284f, 0.666f),
-            new Color(1f, 0.452f, 0.018f), new Color(0.626f, 0.646f, 0.676f), new Color(1f, 0.555f, 0.073f), new Color(0.084f, 0.096f, 0.119f)
-        };
-        // per skin, per role (null = keep)
-        private static readonly Color?[][] SkinRoles =
-        {
-            new Color?[] { null, null, null, null, null, null, null },
-            // Apollo A7L: white beta cloth, blue fittings, red commander stripes
-            new Color?[] { new Color(0.93f, 0.92f, 0.87f), new Color(0.97f, 0.96f, 0.92f), new Color(0.16f, 0.32f, 0.72f), new Color(0.82f, 0.12f, 0.1f), new Color(0.74f, 0.74f, 0.72f), new Color(1f, 0.35f, 0.25f), null },
-            // Shuttle ACES: the orange launch-and-entry "pumpkin" suit, NASA blue patches, silver fittings
-            new Color?[] { new Color(1f, 0.45f, 0.08f), new Color(0.98f, 0.52f, 0.13f), new Color(0.76f, 0.78f, 0.82f), new Color(0.14f, 0.28f, 0.62f), new Color(0.5f, 0.5f, 0.53f), new Color(1f, 0.7f, 0.3f), null },
-            // Boeing Starliner: blue suit, light grey trim, navy fittings
-            new Color?[] { new Color(0.14f, 0.27f, 0.56f), new Color(0.2f, 0.36f, 0.68f), new Color(0.07f, 0.12f, 0.28f), new Color(0.86f, 0.88f, 0.93f), new Color(0.55f, 0.6f, 0.68f), new Color(0.5f, 0.75f, 1f), null },
-            // Orlan-MKS: Russian EVA suit, white with red and blue stripes
-            new Color?[] { new Color(0.92f, 0.92f, 0.9f), new Color(0.96f, 0.96f, 0.95f), new Color(0.12f, 0.28f, 0.78f), new Color(0.86f, 0.13f, 0.13f), new Color(0.62f, 0.64f, 0.66f), new Color(1f, 0.3f, 0.25f), null },
-            // Feitian: Chinese EVA suit, white with red and gold
-            new Color?[] { new Color(0.94f, 0.94f, 0.92f), new Color(0.97f, 0.97f, 0.95f), new Color(0.95f, 0.76f, 0.22f), new Color(0.82f, 0.1f, 0.08f), new Color(0.66f, 0.66f, 0.64f), new Color(1f, 0.8f, 0.3f), null },
-            // SpaceX Dragon: white with black panels
-            new Color?[] { new Color(0.95f, 0.95f, 0.95f), new Color(0.98f, 0.98f, 0.98f), new Color(0.12f, 0.12f, 0.14f), new Color(0.07f, 0.07f, 0.08f), new Color(0.2f, 0.2f, 0.22f), new Color(0.85f, 0.9f, 1f), new Color(0.04f, 0.04f, 0.05f) },
-        };
-        private static readonly Dictionary<int, Material> _skinMats = new Dictionary<int, Material>();
-
-        public static Material MaterialForSkin(Material baseMat, int skin)
-        {
-            skin = Mathf.Clamp(skin, 0, SkinRoles.Length - 1);
-            if (_skinMats.TryGetValue(skin, out Material have) && have) return have;
-            if (skin == 0) { Material m0 = PaletteMaterial(baseMat, _tex, _emTex); _skinMats[0] = m0; return m0; }
-            int n = Mathf.Max(1, _palColor.Length);
-            Texture2D tex = new Texture2D(n, 1, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, name = "SvrPalette" + skin };
-            Texture2D em = new Texture2D(n, 1, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, name = "SvrPaletteEm" + skin };
-            for (int i = 0; i < _palColor.Length; i++)
-            {
-                Color c = _palColor[i];
-                int role = -1;
-                float best = 0.004f;
-                for (int r = 0; r < RoleRef.Length; r++)
-                {
-                    float d = (c.r - RoleRef[r].r) * (c.r - RoleRef[r].r) + (c.g - RoleRef[r].g) * (c.g - RoleRef[r].g) + (c.b - RoleRef[r].b) * (c.b - RoleRef[r].b);
-                    if (d < best) { best = d; role = r; }
-                }
-                if (role >= 0 && SkinRoles[skin][role].HasValue) { Color nc = SkinRoles[skin][role].Value; c = new Color(nc.r, nc.g, nc.b, 1f); }
-                tex.SetPixel(i, 0, c);
-                em.SetPixel(i, 0, _palEmit[i] > 0f ? c : c * 0.48f);
-            }
-            tex.Apply(false, true);
-            em.Apply(false, true);
-            Material m = PaletteMaterial(baseMat, tex, em);
-            _skinMats[skin] = m;
-            return m;
-        }
-
-        /// <summary>Which mission suit this model wears (the loadout skin).</summary>
-        public static int SkinOf(Transform model)
-        {
-            try
-            {
-                ModelSkinController msc = model ? model.GetComponent<ModelSkinController>() : null;
-                if (msc) return msc.currentSkinIndex;
-                CharacterBody b = model ? model.GetComponentInParent<CharacterBody>() : null;
-                if (b) return (int)b.skinIndex;
-            }
-            catch { }
-            return 0;
-        }
-
-        /// <summary>Repaint the suit after a skin change (character select).</summary>
-        public static void Repaint(Transform model, int skin)
-        {
-            Material m = MaterialForSkin(_standard, skin);
-            if (!m) return;
-            foreach (MeshRenderer mr in model.GetComponentsInChildren<MeshRenderer>(true))
-                if (mr && mr.name.StartsWith("SvrPart_")) mr.sharedMaterial = m;
-            CharacterModel cm = model.GetComponent<CharacterModel>();
-            if (cm && cm.baseRendererInfos != null)
-                for (int i = 0; i < cm.baseRendererInfos.Length; i++)
-                    if (cm.baseRendererInfos[i].renderer && cm.baseRendererInfos[i].renderer.name.StartsWith("SvrPart_"))
-                        cm.baseRendererInfos[i].defaultMaterial = m;
-        }
+        private static Material MakeMaterial(Material baseMat) => PaletteMaterial(baseMat, _tex, _emTex);
 
         /// <summary>Hopoo's character shader painted from a palette texture (colours + glow), cel-shaded.</summary>
         public static Material PaletteMaterial(Material baseMat, Texture2D tex, Texture2D emTex)
@@ -654,48 +558,20 @@ namespace Surveyor
         // ---- bind pose: where each bone sits in the skeleton's rest pose (from the skinned mesh's bindposes)
         private static readonly Dictionary<Transform, Matrix4x4> Bind = new Dictionary<Transform, Matrix4x4>();
 
-        // the body's own rest pose, remembered per bone name relative to the model (item displays can carry skinned meshes
-        // bound to the same bones with their own bind poses; late in a run those used to win and the suit flew off)
-
-        private static bool IsItemDisplay(Transform t, Transform model)
-        {
-            for (Transform p = t; p && p != model; p = p.parent)
-            {
-                string n = p.name;
-                if (n.StartsWith("Display") || n.StartsWith("SvrPart_")) return true;
-            }
-            return false;
-        }
-
-        private static bool _loggedSmr;
-
         private static void BuildBindPose(Transform model)
         {
             Bind.Clear();
-            // the body's own skinned meshes in hierarchy order (the order the suit was tuned against), then item
-            // displays only for bones nobody else covers (late in a run they used to win and the suit flew off)
-            List<SkinnedMeshRenderer> own = new List<SkinnedMeshRenderer>(), items = new List<SkinnedMeshRenderer>();
             foreach (SkinnedMeshRenderer smr in model.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
-                if (!smr || !smr.sharedMesh || smr.bones == null || smr.sharedMesh.bindposes == null || smr.name.StartsWith("SvrPart_")) continue;
-                (IsItemDisplay(smr.transform, model) ? items : own).Add(smr);
+                Mesh mesh = smr.sharedMesh;
+                Transform[] bones = smr.bones;
+                if (!mesh || bones == null) continue;
+                Matrix4x4[] bp = mesh.bindposes;
+                if (bp == null) continue;
+                Matrix4x4 rootM = smr.transform.localToWorldMatrix;
+                for (int i = 0; i < bones.Length && i < bp.Length; i++)
+                    if (bones[i] && !Bind.ContainsKey(bones[i])) Bind[bones[i]] = rootM * bp[i].inverse;
             }
-            if (!_loggedSmr)
-            {
-                _loggedSmr = true;
-                StringBuilder sb = new StringBuilder("Surveyor skinned meshes: ");
-                foreach (SkinnedMeshRenderer smr in own) sb.Append(smr.name).Append('(').Append(smr.bones.Length).Append(") ");
-                SvrPlugin.Log.LogInfo(sb.ToString());
-            }
-            foreach (List<SkinnedMeshRenderer> list in new[] { own, items })
-                foreach (SkinnedMeshRenderer smr in list)
-                {
-                    Matrix4x4[] bp = smr.sharedMesh.bindposes;
-                    Transform[] bones = smr.bones;
-                    Matrix4x4 rootM = smr.transform.localToWorldMatrix;
-                    for (int i = 0; i < bones.Length && i < bp.Length; i++)
-                        if (bones[i] && !Bind.ContainsKey(bones[i])) Bind[bones[i]] = rootM * bp[i].inverse;
-                }
             if (Bind.Count == 0) SvrPlugin.Log.LogWarning("Surveyor model: no bind pose found, using the current pose.");
             else SvrPlugin.Log.LogInfo($"Surveyor model: bind pose for {Bind.Count} bones.");
         }
@@ -718,84 +594,24 @@ namespace Surveyor
     /// <summary>Put on the body's and the lobby display's model; swaps in the Surveyor model once it spawns.</summary>
     public class SvrCustomModel : MonoBehaviour
     {
-        private bool _done, _applied;
-        private float _nextCheck;
-        private int _rebuilds;
+        private bool _done;
 
         private System.Collections.IEnumerator Start()
         {
             if (_done) yield break;
             _done = true;
-            // skins load asynchronously, and on later stages she arrives mid teleport-in (model shrunk, skeleton
-            // still filling in): wait (up to ~10 s) for the full skeleton at normal size before lining the suit up
-            for (int i = 0; i < 600 && !SkeletonReady(); i++) yield return null;
-            Build();
-        }
-
-        private void Build()
-        {
-            try { SvrModel.Apply(transform); _applied = true; }
+            // skins load asynchronously: wait (up to ~3 s) until the skinned mesh and its bones exist,
+            // so the parts can be lined up with the skeleton's rest pose
+            for (int i = 0; i < 180 && !SkeletonReady(); i++) yield return null;
+            try { SvrModel.Apply(transform); }
             catch (Exception e) { SvrPlugin.Log.LogError("Surveyor model failed, keeping Commando: " + e); }
         }
 
         private bool SkeletonReady()
         {
-            Vector3 ls = transform.lossyScale;
-            if (float.IsNaN(ls.x) || Mathf.Abs(ls.x) < 0.3f || Mathf.Abs(ls.y) < 0.3f) return false;
-            int most = 0;
             foreach (SkinnedMeshRenderer smr in GetComponentsInChildren<SkinnedMeshRenderer>(true))
-                if (smr.sharedMesh && smr.bones != null && smr.sharedMesh.bindposes.Length > 0) most = Mathf.Max(most, smr.bones.Length);
-            return most >= 30;
-        }
-
-        // Watchdog: if the suit is ever missing, collapsed or left behind (stage teleport, respawn), rebuild it.
-        private int _skin = -1;
-
-        private void LateUpdate()
-        {
-            if (!_applied || Time.time < _nextCheck || !SvrPlugin.UseCustomModel.Value) return;
-            _nextCheck = Time.time + 0.25f;
-            int sk = SvrModel.SkinOf(transform);
-            if (_skin < 0) _skin = sk;
-            else if (sk != _skin) { _skin = sk; try { SvrModel.Repaint(transform, sk); } catch { } }
-            if (_rebuilds >= 6) { ShowFallback(); return; }
-            if (!SkeletonReady()) return;
-            bool bad = false;
-            int parts = 0;
-            Vector3 root = transform.position;
-            foreach (MeshRenderer mr in GetComponentsInChildren<MeshRenderer>(true))
-            {
-                if (!mr || !mr.name.StartsWith("SvrPart_")) continue;
-                parts++;
-                Vector3 s = mr.transform.lossyScale;
-                if (float.IsNaN(s.x) || float.IsInfinity(s.x) || Mathf.Abs(s.x) < 0.05f || Mathf.Abs(s.x) > 20f) { bad = true; break; }
-                if ((mr.bounds.center - root).sqrMagnitude > 64f) { bad = true; break; }
-            }
-            if (parts == 0) bad = true;
-            if (!bad) return;
-            _rebuilds++;
-            SvrPlugin.Log.LogWarning("Surveyor suit was " + (parts == 0 ? "missing" : "out of place") + "; rebuilding it (" + _rebuilds + ").");
-            foreach (Transform t in GetComponentsInChildren<Transform>(true))
-                if (t && t != transform && (t.name.StartsWith("SvrPart_") || t.name == "SvrForegrip")) UnityEngine.Object.Destroy(t.gameObject);
-            StartCoroutine(RebuildNextFrame());
-        }
-
-        private bool _fellBack;
-
-        /// <summary>The suit could not be placed: show the plain body instead of nothing.</summary>
-        private void ShowFallback()
-        {
-            if (_fellBack) return;
-            _fellBack = true;
-            SvrPlugin.Log.LogWarning("Surveyor suit could not be placed; showing the base body so she is never invisible.");
-            foreach (Renderer r in GetComponentsInChildren<Renderer>(true))
-                if (r && !r.name.StartsWith("SvrPart_")) r.forceRenderingOff = false;
-        }
-
-        private System.Collections.IEnumerator RebuildNextFrame()
-        {
-            yield return null;          // let Destroy finish so the new parts are the only ones
-            Build();
+                if (smr.sharedMesh && smr.bones != null && smr.bones.Length > 0 && smr.sharedMesh.bindposes.Length > 0) return true;
+            return false;
         }
     }
 

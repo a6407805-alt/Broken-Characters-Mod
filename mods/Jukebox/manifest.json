@@ -1,6 +1,6 @@
 {
   "name": "Jukebox",
-  "version_number": "1.1.4",
+  "version_number": "1.1.3",
   "website_url": "",
   "description": "Plays the group's Suno songs in game with a song vote, vote-to-skip, keys 1 & 2 volume stepper/hold-ramp/preset toggle, and 150% Garage-Rock Boost gain ceiling. Personal use.",
   "dependencies": [
