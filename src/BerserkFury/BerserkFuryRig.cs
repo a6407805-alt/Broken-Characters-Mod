@@ -368,10 +368,11 @@ namespace BerserkFury
             // Tail: lagging wave, straightens and lifts when sprinting/thrusting, drops to the ground to anchor the CPC
             float lag1 = Mathf.Sin(_phase - 0.8f), lag2 = Mathf.Sin(_phase - 1.6f), lag3 = Mathf.Sin(_phase - 2.4f);
             float idle = Mathf.Sin(time * 1.1f);
-            float tailLift = -(m * 4f + _surge * 10f) + _brace * 18f;
+            // + pitch raises a backward-pointing tail: lift it straight when moving fast, plant it for the CPC
+            float tailLift = (m * 4f + _surge * 10f + (sprinting ? 4f : 0f)) - _brace * 16f;
             Rot(_t1, tailLift + impact * 4f * m, lag1 * 7f * m + idle * 3f * (1 - m) + _turn * 12f, 0f);
-            Rot(_t2, tailLift * 0.6f + _brace * 6f, lag2 * 10f * m + Mathf.Sin(time * 1.1f - 0.6f) * 5f * (1 - m) + _turn * 10f, 0f);
-            Rot(_t3, tailLift * 0.4f + _brace * 6f, lag3 * 14f * m + Mathf.Sin(time * 1.1f - 1.2f) * 7f * (1 - m) + _turn * 8f, 0f);
+            Rot(_t2, tailLift * 0.6f - _brace * 6f, lag2 * 10f * m + Mathf.Sin(time * 1.1f - 0.6f) * 5f * (1 - m) + _turn * 10f, 0f);
+            Rot(_t3, tailLift * 0.4f - _brace * 6f, lag3 * 14f * m + Mathf.Sin(time * 1.1f - 1.2f) * 7f * (1 - m) + _turn * 8f, 0f);
 
             // Head: counter-bob, looks around at idle, raises to aim the CPC
             float look = Mathf.Sin(time * 0.6f) * 8f * (1 - m) * (1 - _brace);
