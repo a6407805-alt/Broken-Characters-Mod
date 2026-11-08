@@ -5,7 +5,8 @@
 //   start                    lobby: start the run (pregame_start_run)
 //   skill <1-4> <secs>       hold primary/secondary/utility/special
 //   move <f|b|l|r> <secs>    walk relative to aim; sprint <secs>; jump
-//   turn <degrees>           rotate the aim (and the camera) left/right
+//   turn <degrees>           rotate the camera left/right; pitch <deg> = set camera pitch (+ = down)
+//   cursor 1|0               free the mouse cursor (so moving the real mouse doesn't swing the camera)
 //   god | spawn | kill | cd  same as F3 / F5 / F7 / F8
 //   cmd <console command>    run any console command
 //   dump                     log the player's model renderers (name, enabled, material, bounds)
@@ -145,7 +146,9 @@ namespace BCMDevTools
                 }
                 case "sprint": _sprintUntil = now + Secs(arg, 1f); break;
                 case "jump": _jumpUntil = now + 0.15f; break;
-                case "turn": _yaw += Secs(arg, 90f); TurnCamera(Secs(arg, 90f)); break;
+                case "turn": _yaw += Secs(arg, 90f); SetPitchYaw(null, Secs(arg, 90f)); break;
+                case "pitch": SetPitchYaw(Secs(arg, 10f), null); break;
+                case "cursor": SetMouseMode(arg != "0"); break;
                 case "god": _godMode = !_godMode; break;
                 case "spawn": SpawnEnemy(); break;
                 case "kill": KillAll(); break;
@@ -165,24 +168,32 @@ namespace BCMDevTools
             }
         }
 
-        static void TurnCamera(float deg)
+        /// <summary>Sets the camera pitch (absolute, + = look down) and/or adds yaw, by finding the PitchYawPair the camera mode keeps.</summary>
+        void SetPitchYaw(float? pitch, float? addYaw)
         {
             foreach (CameraRigController rig in CameraRigController.readOnlyInstancesList)
             {
                 if (!rig || rig.localUserViewer == null) continue;
-                try
+                bool done = false;
+                foreach (FieldInfo f in typeof(CameraRigController).GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
                 {
-                    // CameraModePlayerBasic keeps pitch/yaw in its per-rig instance data
-                    object inst = Traverse.Create(rig).Field("cameraModeInstanceData").GetValue();
-                    if (inst == null) { Debug.Log("[BCM driver] no cameraModeInstanceData"); return; }
-                    Traverse py = Traverse.Create(inst).Field("pitchYaw");
-                    if (!py.FieldExists()) { Debug.Log("[BCM driver] no pitchYaw"); return; }
-                    object v = py.GetValue();
-                    Traverse vt = Traverse.Create(v);
-                    vt.Field("yaw").SetValue(vt.Field("yaw").GetValue<float>() + deg);
-                    py.SetValue(v);
+                    object inst = f.GetValue(rig);
+                    if (inst == null || f.FieldType.IsPrimitive) continue;
+                    FieldInfo py = inst.GetType().GetField("pitchYaw", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (py == null) continue;
+                    object v = py.GetValue(inst);
+                    Type t = v.GetType();
+                    FieldInfo fp = t.GetField("pitch"), fy = t.GetField("yaw");
+                    float p0 = (float)fp.GetValue(v), y0 = (float)fy.GetValue(v);
+                    float p1 = pitch ?? p0, y1 = y0 + (addYaw ?? 0f);
+                    object nv = Activator.CreateInstance(t, p1, y1);
+                    py.SetValue(inst, nv);
+                    if (!inst.GetType().IsValueType) { } else f.SetValue(rig, inst);
+                    Logger.LogInfo($"Driver: camera {f.Name}.pitchYaw {p0:F0}/{y0:F0} -> {p1:F0}/{y1:F0}");
+                    done = true;
+                    break;
                 }
-                catch (Exception e) { Debug.Log("[BCM driver] turn: " + e.Message); }
+                if (!done) Logger.LogWarning("Driver: no pitchYaw on the camera rig");
                 return;
             }
         }
