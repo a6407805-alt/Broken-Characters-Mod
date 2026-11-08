@@ -49,13 +49,14 @@
 
             <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown" Margin="-28,0,-28,0" Height="44">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="28,0,0,0">
-                    <TextBlock Text="&#x1F514; MOD UPDATES" Foreground="White" FontSize="18" FontWeight="Black" />
-                    <TextBlock Text="  TO APPROVE" Foreground="{StaticResource Accent}" FontSize="18" FontWeight="Black" />
+                    <TextBlock Text="&#xEA8F;" FontFamily="Segoe MDL2 Assets" Foreground="White" FontSize="18" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBlock Text="MOD UPDATES" Foreground="White" FontSize="18" FontWeight="Black" />
+                    <TextBlock x:Name="TitleRest" Text="  TO APPROVE" Foreground="{StaticResource Accent}" FontSize="18" FontWeight="Black" />
                 </StackPanel>
                 <Button Content="&#x2715;" Style="{StaticResource TitleButton}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,10,0" Click="Close_Click" ToolTip="Close" />
             </Grid>
 
-            <TextBlock Grid.Row="1" Foreground="{StaticResource TextDim}" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,12"
+            <TextBlock Grid.Row="1" x:Name="IntroText" Foreground="{StaticResource TextDim}" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,12"
                        Text="Creators dropped these files into their game. Approve to put them in the pack for everyone (the build server publishes it in about 5 to 8 minutes), or Discard to throw the draft away." />
 
             <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
@@ -77,7 +78,7 @@
 
             <StackPanel Grid.Row="3" Margin="0,12,0,0">
                 <TextBlock x:Name="StatusLine" Foreground="White" FontSize="14" TextWrapping="Wrap" Text="Checking for mod updates..." />
-                <Border Background="#1AFFC928" BorderBrush="#60FFC928" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,12,0,0">
+                <Border x:Name="SharedKeyPanel" Background="#1AFFC928" BorderBrush="#60FFC928" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,12,0,0">
                     <StackPanel>
                         <TextBlock Text="FRIENDS' UPLOAD KEY" Foreground="{StaticResource Accent}" FontSize="12" FontWeight="Black" />
                         <TextBlock x:Name="SharedKeyText" Foreground="{StaticResource TextDim}" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,8"

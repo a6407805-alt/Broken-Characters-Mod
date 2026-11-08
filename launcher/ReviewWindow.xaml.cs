@@ -17,7 +17,7 @@ namespace BrokenCharactersLauncher
 {
     public partial class ReviewWindow : Window
     {
-        private readonly string _key;
+        private readonly string _key; // "" = no key (public read only)
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private bool _busy;
         private string _releaseSha = "";
@@ -32,10 +32,21 @@ namespace BrokenCharactersLauncher
         private static readonly Brush Dim = new SolidColorBrush(Color.FromRgb(0xC9, 0xD6, 0xEA));
         private static readonly Brush Red = new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x6B));
 
-        public ReviewWindow(string key)
+        private readonly bool _owner;
+
+        /// <summary>key = null for players without a creator key; owner = false shows only the RECENT UPLOADS list.</summary>
+        public ReviewWindow(string? key, bool owner = true)
         {
-            _key = key;
+            _key = key ?? "";
+            _owner = owner;
             InitializeComponent();
+            if (!owner)
+            {
+                TitleRest.Text = "  STATUS";
+                IntroText.Text = "Every update to the pack, newest first. LIVE means it's done: press PLAY (or CHECK FOR UPDATES) to get it.";
+                SharedKeyPanel.Visibility = Visibility.Collapsed;
+                StatusLine.Visibility = Visibility.Collapsed;
+            }
             Closed += (_, __) => { _cts.Cancel(); _uploadTimer.Stop(); };
             _uploadTimer.Tick += async (_, __) => await LoadUploadsAsync();
         }
@@ -98,8 +109,9 @@ namespace BrokenCharactersLauncher
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
+            if (!_owner) _uploadTimer.Interval = TimeSpan.FromSeconds(60); // no key: GitHub allows only 60 checks an hour
             _uploadTimer.Start();
-            await Task.WhenAll(LoadAsync(), LoadUploadsAsync());
+            await Task.WhenAll(_owner ? LoadAsync() : Task.CompletedTask, LoadUploadsAsync());
         }
 
         private async Task LoadAsync()
