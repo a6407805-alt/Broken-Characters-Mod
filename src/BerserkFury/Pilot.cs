@@ -15,40 +15,86 @@ using Path = System.IO.Path;
 namespace BerserkFury
 {
     /// <summary>
-    /// Battle Legends-style pilot comm window: a portrait box slides in from the left with the pilot's name and a typed
-    /// subtitle while the line plays. Only the player flying Berserk Fury sees/hears it.
+    /// Battle Legends-style comm chatter. The pilot (VEGA) trash-talks and reacts through the fight; some moments play a
+    /// short exchange with mission COMMAND. Each line slides in a portrait window with a typed subtitle and a radio voice.
+    /// Only the player flying Berserk Fury sees/hears it.
     ///
-    /// Voices: drop your own clips in plugins\BerserkFury\Pilot\&lt;event&gt;\*.wav (events: launch, cpc, drill, boost,
-    /// overdrive, hurt, kill, boss, levelup) and a portrait at Pilot\portrait.png. Without clips the line is spoken by
-    /// the Windows voice with a radio filter.
+    /// Real clips: plugins\BerserkFury\Pilot\&lt;event&gt;\*.wav replace the pilot's line for that event (see README).
     /// </summary>
     public class BerserkFuryPilot : MonoBehaviour
     {
-        // -------------------------------------------------------------- lines (original, game-style)
-        static readonly Dictionary<string, string[]> Lines = new Dictionary<string, string[]>
+        // "V:" = pilot, "C:" = command. One entry = one exchange. All lines are original.
+        static readonly Dictionary<string, string[][]> Script = new Dictionary<string, string[][]>
         {
-            ["launch"] = new[] { "Berserk Fury, launching.", "Organoid link stable. Let's begin.", "All systems green. Don't bore me." },
-            ["cpc"] = new[] { "Charged Particle Cannon. Fire!", "Anchors down. Disappear!", "Full power. Burn it all!" },
-            ["drill"] = new[] { "Buster Claws, pierce!", "Magneser drill!", "Too close." },
-            ["boost"] = new[] { "Ion boosters, full thrust!", "Can you keep up?" },
-            ["overdrive"] = new[] { "Organoid drive at maximum!", "Now I'm serious.", "Particle energy, overflowing!" },
-            ["hurt"] = new[] { "Armor critical. Not yet!", "Is that all you've got?", "You'll pay for that." },
-            ["kill"] = new[] { "Target down.", "Too slow.", "Next." },
-            ["boss"] = new[] { "Finally, a real opponent.", "That one was worth fighting." },
-            ["levelup"] = new[] { "Sync rate rising.", "Berserk Fury is adapting." },
+            ["launch"] = new[] {
+                new[] { "V:Berserk Fury, launching.", "C:Organoid link stable. You're cleared to engage.", "V:Finally." },
+                new[] { "V:All systems green. Don't bore me." },
+                new[] { "C:Vega, your sync rate is off the charts.", "V:Of course it is. Let's go, Fury." },
+                new[] { "V:Another planet full of insects. Fine." },
+            },
+            ["battle"] = new[] {
+                new[] { "C:Massive energy reading on the teleporter!", "V:Good. I was getting bored." },
+                new[] { "V:So this is the welcoming party?" },
+                new[] { "C:Multiple hostiles converging. Be careful.", "V:Careful is for people who lose." },
+                new[] { "V:Come on. Show me something worth fighting." },
+            },
+            ["tpdone"] = new[] {
+                new[] { "C:Teleporter charged. Nice work.", "V:That was barely a warm-up." },
+                new[] { "V:Done already? Next." },
+            },
+            ["cpc"] = new[] {
+                new[] { "V:Charged Particle Cannon. Fire!" },
+                new[] { "V:Anchors down. Disappear!" },
+                new[] { "V:Full power. Burn it all!" },
+                new[] { "V:Get out of my sight!" },
+            },
+            ["drill"] = new[] { new[] { "V:Buster Claws, pierce!" }, new[] { "V:Too close." }, new[] { "V:Magneser drill!" } },
+            ["boost"] = new[] { new[] { "V:Ion boosters, full thrust!" }, new[] { "V:Can you even keep up?" } },
+            ["overdrive"] = new[] {
+                new[] { "V:Organoid drive at maximum!", "C:Output's past the safety limit!", "V:Then stop watching and enjoy it." },
+                new[] { "V:Now I'm serious." },
+                new[] { "V:Particle energy, overflowing!" },
+            },
+            ["streak"] = new[] {
+                new[] { "V:Is that the best you've got?" }, new[] { "V:Pathetic." }, new[] { "V:Line up. I'll take you all." },
+                new[] { "V:Ha! Too slow!" }, new[] { "V:Fury, keep going. Don't let them breathe." },
+            },
+            ["bighit"] = new[] {
+                new[] { "V:Tch! Lucky shot." }, new[] { "V:You'll pay for that." },
+                new[] { "C:Heavy damage to the left flank!", "V:I felt it. Shut up." },
+            },
+            ["hurt"] = new[] {
+                new[] { "C:Armor critical! Pull back!", "V:Not yet! Fury can still fight!" },
+                new[] { "V:I won't lose. Not here." },
+                new[] { "V:Is that all you've got?" },
+            },
+            ["kill"] = new[] { new[] { "V:Target down." }, new[] { "V:Next." }, new[] { "V:Too slow." }, new[] { "V:Stay down." } },
+            ["boss"] = new[] {
+                new[] { "V:Finally, a real opponent.", "C:Target neutralized!", "V:It was fun while it lasted." },
+                new[] { "V:That one almost made me try." },
+            },
+            ["idle"] = new[] {
+                new[] { "V:Where are the strong ones hiding?" },
+                new[] { "C:Vega, check your heat levels.", "V:Fury's fine. Worry about them." },
+                new[] { "V:This planet is full of weaklings." },
+                new[] { "V:Stay sharp, Fury. Something's watching us." },
+                new[] { "V:Hmph. I expected more." },
+            },
+            ["levelup"] = new[] { new[] { "C:Sync rate rising.", "V:Fury is learning." }, new[] { "V:We're getting stronger." } },
+            ["ally"] = new[] { new[] { "C:We lost a teammate!", "V:Weak. I'll win this alone if I have to." }, new[] { "V:Get up. I'm not carrying you." } },
+            ["death"] = new[] { new[] { "V:No... Fury...!", "C:Vega! Vega, respond!" }, new[] { "V:This... isn't over..." } },
+            ["revive"] = new[] { new[] { "V:Did you miss me?" }, new[] { "C:Systems back online.", "V:Round two." } },
         };
         static readonly Dictionary<string, float> Cooldown = new Dictionary<string, float>
         {
-            ["launch"] = 0f, ["cpc"] = 6f, ["drill"] = 14f, ["boost"] = 16f, ["overdrive"] = 20f,
-            ["hurt"] = 25f, ["kill"] = 12f, ["boss"] = 5f, ["levelup"] = 10f,
+            ["launch"] = 0f, ["battle"] = 30f, ["tpdone"] = 30f, ["cpc"] = 6f, ["drill"] = 14f, ["boost"] = 16f, ["overdrive"] = 20f,
+            ["streak"] = 20f, ["bighit"] = 18f, ["hurt"] = 25f, ["kill"] = 14f, ["boss"] = 5f, ["idle"] = 0f, ["levelup"] = 12f,
+            ["ally"] = 15f, ["death"] = 0f, ["revive"] = 0f,
         };
         static readonly Dictionary<string, float> Chance = new Dictionary<string, float>
         {
-            ["drill"] = 0.35f, ["boost"] = 0.4f, ["kill"] = 0.3f,
+            ["drill"] = 0.35f, ["boost"] = 0.4f, ["kill"] = 0.3f, ["streak"] = 0.7f, ["bighit"] = 0.6f,
         };
-
-        public static string PilotName = "VEGA";
-        public static string ZoidName = "BERSERK FURY";
 
         CharacterBody _body;
         HealthComponent _hp;
@@ -57,14 +103,10 @@ namespace BerserkFury
         Type _lastWeapon, _lastBody;
         bool _wasOverdrive, _wasHurt;
         int _lastLevel;
-        float _lastAny = -99f;
+        float _lastAny = -99f, _nextIdle;
         readonly Dictionary<string, float> _lastAt = new Dictionary<string, float>();
-
-        // window
-        string _text = "";
-        float _shownAt = -99f, _holdUntil = -99f;
-        static Texture2D _portrait, _white;
-        static GUIStyle _name, _sub, _line;
+        readonly Queue<float> _hits = new Queue<float>();
+        static Stage _lastStage;
 
         bool Mine => _body && _body.hasEffectiveAuthority && _body.isPlayerControlled;
 
@@ -74,25 +116,56 @@ namespace BerserkFury
             _hp = GetComponent<HealthComponent>();
             _passive = GetComponent<BerserkFuryPassiveController>();
             _lastLevel = _body ? Mathf.FloorToInt(_body.level) : 1;
+            _nextIdle = Time.unscaledTime + Random.Range(40f, 70f);
             GlobalEventManager.onCharacterDeathGlobal += OnDeath;
-            Invoke(nameof(SayLaunch), 2.5f);
+            GlobalEventManager.onServerDamageDealt += OnDamage;
+            TeleporterInteraction.onTeleporterBeginChargingGlobal += OnTpStart;
+            TeleporterInteraction.onTeleporterChargedGlobal += OnTpDone;
+            // second spawn in the same stage = a revive
+            bool revived = Stage.instance && _lastStage == Stage.instance;
+            _lastStage = Stage.instance;
+            Invoke(revived ? nameof(SayRevive) : nameof(SayLaunch), 2.5f);
         }
 
-        void OnDestroy() { GlobalEventManager.onCharacterDeathGlobal -= OnDeath; }
+        void OnDestroy()
+        {
+            GlobalEventManager.onCharacterDeathGlobal -= OnDeath;
+            GlobalEventManager.onServerDamageDealt -= OnDamage;
+            TeleporterInteraction.onTeleporterBeginChargingGlobal -= OnTpStart;
+            TeleporterInteraction.onTeleporterChargedGlobal -= OnTpDone;
+        }
 
         void SayLaunch() => Say("launch", true);
+        void SayRevive() => Say("revive", true);
+        void OnTpStart(TeleporterInteraction t) => Say("battle", true);
+        void OnTpDone(TeleporterInteraction t) => Say("tpdone", true);
 
         void OnDeath(DamageReport r)
         {
-            if (r == null || !_body || r.attackerBody != _body) return;
+            if (r == null || !_body) return;
+            if (r.victimBody == _body) { Say("death", true); return; }
+            if (r.victimBody && r.victimBody.isPlayerControlled) { Say("ally", true); return; }
+            if (r.attackerBody != _body) return;
             if (r.victimIsBoss || (r.victimBody && r.victimBody.isChampion)) Say("boss", true);
             else if (r.victimIsElite) Say("kill");
+        }
+
+        void OnDamage(DamageReport r)
+        {
+            if (r == null || !_body || r.damageInfo == null) return;
+            if (r.attackerBody == _body)
+            {
+                float now = Time.unscaledTime;
+                _hits.Enqueue(now);
+                while (_hits.Count > 0 && now - _hits.Peek() > 2.5f) _hits.Dequeue();
+                if (_hits.Count >= 12) { _hits.Clear(); Say("streak"); }
+            }
+            else if (r.victimBody == _body && _hp && r.damageDealt > _hp.fullCombinedHealth * 0.18f) Say("bighit");
         }
 
         void Update()
         {
             if (!Mine) return;
-            BerserkFuryVoice.Pump();
 
             if (!_weapon) _weapon = EntityStateMachine.FindByCustomName(gameObject, "Weapon");
             if (!_bodyMachine) _bodyMachine = EntityStateMachine.FindByCustomName(gameObject, "Body");
@@ -117,68 +190,120 @@ namespace BerserkFury
             int lvl = Mathf.FloorToInt(_body.level);
             if (lvl > _lastLevel) Say("levelup");
             _lastLevel = lvl;
+
+            // banter during fights when nothing else has been said for a while
+            float now = Time.unscaledTime;
+            if (now > _nextIdle)
+            {
+                _nextIdle = now + Random.Range(45f, 80f);
+                if (now - _lastAny > 25f && _body.outOfCombatStopwatch < 4f) Say("idle", true);
+            }
         }
 
         public void Say(string evt, bool important = false)
         {
-            if (!Mine || !Lines.TryGetValue(evt, out string[] lines)) return;
+            if (!Mine || !Script.TryGetValue(evt, out string[][] options)) return;
             float now = Time.unscaledTime;
             if (_lastAt.TryGetValue(evt, out float last) && now - last < Cooldown[evt]) return;
-            if (!important && now - _lastAny < 5f) return;                       // don't chatter
+            if (!important && now - _lastAny < 6f) return;
+            if (BerserkFuryComms.Busy && !important) return;
             if (Chance.TryGetValue(evt, out float ch) && Random.value > ch) return;
             _lastAt[evt] = now; _lastAny = now;
+            BerserkFuryComms.Play(evt, options[Random.Range(0, options.Length)], evt == "cpc" || evt == "death");
+        }
+    }
 
-            string text = lines[Random.Range(0, lines.Length)];
-            BerserkFurySfx.Play("comm");
-            float secs = BerserkFuryVoice.Play(evt, text);
-            _text = text;
-            _shownAt = now;
-            _holdUntil = now + Mathf.Max(2.6f, secs + 0.6f, text.Length * 0.07f + 1.2f);
+    /// <summary>The comm window + line queue. One per game (survives the body dying so last words finish).</summary>
+    public class BerserkFuryComms : MonoBehaviour
+    {
+        public static string PilotName = "VEGA", CommandName = "COMMAND", ZoidName = "BERSERK FURY";
+
+        static BerserkFuryComms _inst;
+        readonly Queue<string> _queue = new Queue<string>();
+        string _evt, _text = "";
+        bool _pilot = true, _firstOfExchange;
+        float _shownAt = -99f, _holdUntil = -99f;
+        static Texture2D _portraitV, _portraitC, _white;
+        static GUIStyle _name, _sub, _line;
+
+        public static bool Busy => _inst && (_inst._queue.Count > 0 || Time.unscaledTime < _inst._holdUntil);
+
+        public static void Play(string evt, string[] lines, bool interrupt)
+        {
+            if (!_inst)
+            {
+                GameObject go = new GameObject("BerserkFuryComms");
+                DontDestroyOnLoad(go);
+                _inst = go.AddComponent<BerserkFuryComms>();
+            }
+            if (interrupt) { _inst._queue.Clear(); _inst._holdUntil = 0f; }
+            else if (_inst._queue.Count > 2) return;
+            _inst._evt = evt;
+            _inst._firstOfExchange = true;
+            foreach (string l in lines) _inst._queue.Enqueue(l);
         }
 
-        // -------------------------------------------------------------- comm window
+        void Update()
+        {
+            BerserkFuryVoice.Pump();
+            float now = Time.unscaledTime;
+            if (now < _holdUntil || _queue.Count == 0) return;
+            string l = _queue.Dequeue();
+            _pilot = !l.StartsWith("C:");
+            string text = l.Length > 2 && l[1] == ':' ? l.Substring(2) : l;
+            // the event's custom clip (if any) replaces the pilot's first line
+            string clipEvt = _pilot && _firstOfExchange ? _evt : null;
+            _firstOfExchange = false;
+            if (_shownAt < now - 1f) BerserkFurySfx.Play("comm");
+            float secs = BerserkFuryVoice.Play(clipEvt, text, _pilot);
+            bool continuing = now - _holdUntil < 0.5f;
+            _text = text;
+            if (!continuing) _shownAt = now;
+            _lineAt = now;
+            _holdUntil = now + Mathf.Max(1.8f, secs + 0.35f, text.Length * 0.06f + 0.9f);
+        }
+
+        float _lineAt;
+
         void OnGUI()
         {
-            if (!Mine) return;
             float now = Time.unscaledTime;
-            if (now > _holdUntil + 0.35f || string.IsNullOrEmpty(_text)) return;
+            if (string.IsNullOrEmpty(_text) || (now > _holdUntil + 0.35f && _queue.Count == 0)) return;
             EnsureStyles();
 
             float k = Screen.height / 1080f;
             float w = 560f * k, h = 150f * k;
-            float slideIn = Mathf.Clamp01((now - _shownAt) / 0.22f), slideOut = Mathf.Clamp01((now - _holdUntil) / 0.3f);
+            float slideIn = Mathf.Clamp01((now - _shownAt) / 0.22f);
+            float slideOut = _queue.Count == 0 ? Mathf.Clamp01((now - _holdUntil) / 0.3f) : 0f;
             float ease = 1f - Mathf.Pow(1f - slideIn, 3f);
             float x = Mathf.Lerp(-w, 24f * k, ease) - slideOut * (w + 30f * k);
             float y = Screen.height * 0.36f;
+            Color trim = _pilot ? new Color(0.95f, 0.2f, 0.85f) : new Color(0.25f, 0.85f, 1f);
             Color old = GUI.color;
 
-            // frame: dark panel, magenta trim, scanlines
             Fill(new Rect(x, y, w, h), new Color(0.05f, 0.02f, 0.08f, 0.88f));
-            Fill(new Rect(x, y, w, 3f * k), new Color(0.95f, 0.2f, 0.85f, 1f));
-            Fill(new Rect(x, y + h - 3f * k, w, 3f * k), new Color(0.95f, 0.2f, 0.85f, 1f));
-            Fill(new Rect(x, y, 6f * k, h), new Color(0.95f, 0.2f, 0.85f, 1f));
+            Fill(new Rect(x, y, w, 3f * k), trim);
+            Fill(new Rect(x, y + h - 3f * k, w, 3f * k), trim);
+            Fill(new Rect(x, y, 6f * k, h), trim);
 
-            // portrait with static flicker on open
             float ps = h - 22f * k;
             Rect pr = new Rect(x + 16f * k, y + 11f * k, ps, ps);
-            Fill(pr, new Color(0f, 0f, 0f, 1f));
-            float flicker = now - _shownAt < 0.3f ? Random.Range(0.3f, 1f) : 1f;
+            Fill(pr, Color.black);
+            float flicker = now - _lineAt < 0.25f ? Random.Range(0.3f, 1f) : 1f;
             GUI.color = new Color(1f, 1f, 1f, flicker);
-            GUI.DrawTexture(pr, Portrait(), ScaleMode.ScaleAndCrop);
+            GUI.DrawTexture(pr, _pilot ? PortraitV() : PortraitC(), ScaleMode.ScaleAndCrop);
             GUI.color = old;
             for (float sy = pr.y; sy < pr.yMax; sy += 4f * k) Fill(new Rect(pr.x, sy, pr.width, 1f * k), new Color(0f, 0f, 0f, 0.25f));
-            // "talking" bar under the portrait
-            float talk = now < _holdUntil - 0.4f ? 0.4f + 0.6f * Mathf.Abs(Mathf.Sin(now * 17f) * Mathf.Sin(now * 7.3f)) : 0f;
-            Fill(new Rect(pr.x, pr.yMax - 5f * k, pr.width * talk, 4f * k), new Color(0.3f, 0.95f, 1f, 0.9f));
+            float talk = now < _holdUntil - 0.3f ? 0.4f + 0.6f * Mathf.Abs(Mathf.Sin(now * 17f) * Mathf.Sin(now * 7.3f)) : 0f;
+            Fill(new Rect(pr.x, pr.yMax - 5f * k, pr.width * talk, 4f * k), new Color(trim.r, trim.g, trim.b, 0.9f));
 
-            // name + typed subtitle
             float tx = pr.xMax + 16f * k, tw = w - (tx - x) - 14f * k;
             _name.fontSize = Mathf.RoundToInt(26 * k); _sub.fontSize = Mathf.RoundToInt(15 * k); _line.fontSize = Mathf.RoundToInt(24 * k);
-            GUI.Label(new Rect(tx, y + 10f * k, tw, 32f * k), PilotName, _name);
-            GUI.Label(new Rect(tx, y + 40f * k, tw, 20f * k), ZoidName + "  ·  COMM", _sub);
-            int chars = Mathf.Clamp(Mathf.FloorToInt((now - _shownAt - 0.15f) * 45f), 0, _text.Length);
+            _name.normal.textColor = trim;
+            GUI.Label(new Rect(tx, y + 10f * k, tw, 32f * k), _pilot ? PilotName : CommandName, _name);
+            GUI.Label(new Rect(tx, y + 40f * k, tw, 20f * k), (_pilot ? ZoidName : "MISSION CONTROL") + "  ·  COMM", _sub);
+            int chars = Mathf.Clamp(Mathf.FloorToInt((now - _lineAt - 0.1f) * 45f), 0, _text.Length);
             GUI.Label(new Rect(tx, y + 64f * k, tw, h - 70f * k), _text.Substring(0, chars), _line);
-            GUI.color = old;
         }
 
         static void Fill(Rect r, Color c)
@@ -190,42 +315,48 @@ namespace BerserkFury
         static void EnsureStyles()
         {
             if (_name != null) return;
-            _name = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, normal = { textColor = new Color(1f, 0.35f, 0.9f) } };
+            _name = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
             _sub = new GUIStyle(GUI.skin.label) { normal = { textColor = new Color(0.55f, 0.9f, 1f) } };
             _line = new GUIStyle(GUI.skin.label) { wordWrap = true, normal = { textColor = Color.white } };
         }
 
-        /// <summary>Pilot\portrait.png if present, else a generated comm silhouette.</summary>
-        static Texture2D Portrait()
+        static Texture2D LoadPng(string name)
         {
-            if (_portrait) return _portrait;
             try
             {
-                string p = BerserkFuryModel.FindFile(Path.Combine("Pilot", "portrait.png"));
-                if (p != null)
-                {
-                    _portrait = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                    _portrait.LoadImage(File.ReadAllBytes(p));
-                    return _portrait;
-                }
+                string p = BerserkFuryModel.FindFile(Path.Combine("Pilot", name));
+                if (p == null) return null;
+                var t = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                t.LoadImage(File.ReadAllBytes(p));
+                return t;
             }
-            catch { }
+            catch { return null; }
+        }
+
+        static Texture2D PortraitV() => _portraitV ? _portraitV : (_portraitV = LoadPng("portrait.png") ?? Silhouette(new Color(0.35f, 0.06f, 0.4f), new Color(1f, 0.15f, 0.35f), false));
+        static Texture2D PortraitC() => _portraitC ? _portraitC : (_portraitC = LoadPng("command.png") ?? Silhouette(new Color(0.05f, 0.2f, 0.32f), new Color(0.3f, 0.9f, 1f), true));
+
+        /// <summary>Generated comm silhouette: helmeted pilot (visor) or operator (headset).</summary>
+        static Texture2D Silhouette(Color bg, Color accent, bool headset)
+        {
             const int S = 128;
-            _portrait = new Texture2D(S, S, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point };
+            var tex = new Texture2D(S, S, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point };
             for (int y = 0; y < S; y++)
                 for (int x = 0; x < S; x++)
                 {
                     float u = (x - S / 2f) / S, v = (float)y / S;
-                    Color c = Color.Lerp(new Color(0.12f, 0.03f, 0.18f), new Color(0.35f, 0.06f, 0.4f), v);
-                    bool head = (u * u) / 0.034f + ((v - 0.58f) * (v - 0.58f)) / 0.05f < 1f;          // helmet
-                    bool shoulders = v < 0.36f && Mathf.Abs(u) < 0.42f - v * 0.6f + 0.18f;
+                    Color c = Color.Lerp(bg * 0.4f, bg, v);
+                    bool head = (u * u) / 0.03f + ((v - 0.58f) * (v - 0.58f)) / 0.045f < 1f;
+                    bool shoulders = v < 0.36f && Mathf.Abs(u) < 0.6f - v * 0.6f;
                     if (head || shoulders) c = new Color(0.06f, 0.05f, 0.09f);
-                    if (head && v > 0.55f && v < 0.63f && Mathf.Abs(u) < 0.15f) c = new Color(1f, 0.15f, 0.35f);  // visor
-                    if (head && Mathf.Abs(v - 0.74f) < 0.01f) c = new Color(0.9f, 0.3f, 0.95f);              // helmet trim
-                    _portrait.SetPixel(x, y, c);
+                    if (!headset && head && v > 0.55f && v < 0.63f && Mathf.Abs(u) < 0.15f) c = accent;           // visor slit
+                    if (headset && Mathf.Abs(Mathf.Sqrt(u * u + (v - 0.6f) * (v - 0.6f)) - 0.2f) < 0.012f && v > 0.6f) c = accent; // headband
+                    if (headset && v > 0.47f && v < 0.6f && Mathf.Abs(Mathf.Abs(u) - 0.19f) < 0.03f) c = accent;   // ear cups
+                    if (headset && v > 0.46f && v < 0.48f && u > 0.0f && u < 0.19f) c = accent;                    // mic
+                    tex.SetPixel(x, y, c);
                 }
-            _portrait.Apply();
-            return _portrait;
+            tex.Apply();
+            return tex;
         }
     }
 
@@ -243,9 +374,9 @@ namespace BerserkFury
         static readonly ConcurrentQueue<string> Done = new ConcurrentQueue<string>();
 
         /// <summary>Starts the line; returns its length in seconds if known (custom clip), else an estimate.</summary>
-        public static float Play(string evt, string text)
+        public static float Play(string evt, string text, bool pilot = true)
         {
-            try
+            if (evt != null) try
             {
                 string folder = BerserkFuryModel.FindFile(Path.Combine("Pilot", evt));
                 if (folder == null)
@@ -261,11 +392,11 @@ namespace BerserkFury
                 }
             }
             catch (Exception e) { BerserkFuryPlugin.Log.LogDebug("Pilot clip: " + e.Message); }
-            Speak(text);
+            Speak(text, pilot);
             return text.Length * 0.065f + 0.5f;
         }
 
-        static void Speak(string text)
+        static void Speak(string text, bool pilot)
         {
             if (_broken || Application.platform != RuntimePlatform.WindowsPlayer) return;
             try
@@ -274,7 +405,7 @@ namespace BerserkFury
                 if (_proc == null || _proc.HasExited) { _broken = true; return; }
                 string path = Path.Combine(_dir, "p" + (_n++) + ".wav");
                 // cold, clipped delivery: a little faster and lower
-                string ssml = "<speak version=\"1.0\" xml:lang=\"en-US\"><prosody rate=\"+8%\" pitch=\"-12%\">" +
+                string ssml = "<speak version=\"1.0\" xml:lang=\"en-US\"><prosody rate=\"" + (pilot ? "+8%" : "+2%") + "\" pitch=\"" + (pilot ? "-12%" : "+14%") + "\">" +
                               System.Security.SecurityElement.Escape(text) + "</prosody></speak>";
                 _proc.StandardInput.WriteLine(path + "|" + Convert.ToBase64String(Encoding.UTF8.GetBytes(ssml)));
                 _proc.StandardInput.Flush();

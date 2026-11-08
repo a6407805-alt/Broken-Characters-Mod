@@ -12,5 +12,11 @@ A random clip from the folder plays; without clips the Windows voice reads the l
   kill\       killing an elite
   boss\       killing a boss
   levelup\    level up
+  battle\     teleporter starts      tpdone\  teleporter charged
+  streak\     12 hits in 2.5 s       bighit\  a big hit taken
+  idle\       banter mid-fight       ally\    teammate died
+  death\      you die                revive\  you come back
+
+command.png (square) replaces the generated COMMAND operator portrait.
 
 portrait.png (square) replaces the generated pilot silhouette.
