@@ -102,8 +102,11 @@ namespace BerserkFury
             if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", mainTex);
             if (mat.HasProperty("_SpecularStrength")) mat.SetFloat("_SpecularStrength", 0.65f);
             if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.5f);
-            if (mat.HasProperty("_EmColor")) mat.SetColor("_EmColor", new Color(0.8f, 0.2f, 1f));
-            if (mat.HasProperty("_EmPower")) mat.SetFloat("_EmPower", 1.2f);
+            // No _EmTex means the whole mesh emits, which blew the model out to flat magenta. Emission off.
+            if (mat.HasProperty("_EmTex")) mat.SetTexture("_EmTex", null);
+            if (mat.HasProperty("_EmColor")) mat.SetColor("_EmColor", Color.black);
+            if (mat.HasProperty("_EmPower")) mat.SetFloat("_EmPower", 0f);
+            if (mat.HasProperty("_RampInfo")) mat.SetFloat("_RampInfo", 1f);
             return mat;
         }
 

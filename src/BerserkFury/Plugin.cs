@@ -21,7 +21,7 @@ namespace BerserkFury
     {
         public const string PluginGUID = "com.bcm.berserkfury";
         public const string PluginName = "BerserkFury";
-        public const string PluginVersion = "0.1.0";
+        public const string PluginVersion = "0.1.1";
         public const string TokenPrefix = "BCM_BERSERKFURY_";
 
         public static ManualLogSource Log;

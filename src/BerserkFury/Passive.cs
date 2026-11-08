@@ -124,7 +124,7 @@ namespace BerserkFury
             mat.name = "matBerserkFuryEShield";
             if (mat.HasProperty("_Color")) mat.SetColor("_Color", new Color(0f, 0.9f, 1f, 0.45f));
             if (mat.HasProperty("_EmColor")) mat.SetColor("_EmColor", new Color(0f, 0.8f, 1f));
-            if (mat.HasProperty("_EmPower")) mat.SetFloat("_EmPower", 3f);
+            if (mat.HasProperty("_EmPower")) mat.SetFloat("_EmPower", 0.5f);
 
             var mr = _shieldVisual.GetComponent<MeshRenderer>();
             mr.material = mat;
