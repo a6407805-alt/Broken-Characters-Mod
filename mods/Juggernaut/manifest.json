@@ -1,6 +1,6 @@
 {
   "name": "Juggernaut",
-  "version_number": "1.0.2",
+  "version_number": "1.0.5",
   "website_url": "",
   "description": "Juggernaut: an original UES heavy assault mech (lore survivor). Damageable head, torso, arms and legs, heat and shutdown, lasers, autocannon, rockets, missiles, ram, Alpha Strike, Arm Guard and its own cockpit HUD. Personal use.",
   "dependencies": [

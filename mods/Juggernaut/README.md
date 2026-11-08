@@ -1,11 +1,11 @@
 # Juggernaut
 
-An original UES heavy assault frame, 4.6 m tall: the slowest, toughest thing on the field. Lore survivor. Skins:
+An original UES heavy assault frame, 9 m tall: the slowest, toughest thing on the field. Lore survivor. Skins:
 Garrison (olive), Dustwalker (sand + rust), Contact Light (UES white + blue). Personal use.
 
 ## Body parts (passive, your rules)
 
-- Its **600 health is split over its body**: torso 200, head 80, each arm 80, each leg 80 (they grow with level and
+- Its **1200 health is split over its body**: torso 400, head 160, each arm 160, each leg 160 (they grow with level and
   items; the health bar is their total).
 - Every hit damages the part it lands on. A destroyed part's later hits go to the torso.
 - It keeps fighting with **one leg** gone (-40% speed, no sprint) or **both arms** gone (their lasers are offline).
