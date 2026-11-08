@@ -187,9 +187,13 @@ internal static class HPContent
 		if (!left) left = childLocator.FindChild("Blade");
 		if (left)
 		{
+			// The hand bone's local units are scaled, so a local offset lands metres away. Keep the muzzle on the
+			// model root and follow the hand in world space every frame instead.
 			Transform m = new GameObject("MuzzleLeft").transform;
-			m.SetParent(left, false);
-			m.localPosition = new Vector3(0f, 0.3f, 0.3f);
+			m.SetParent(modelTransform, false);
+			LeftMuzzleFollow follow = m.gameObject.AddComponent<LeftMuzzleFollow>();
+			follow.hand = left;
+			follow.root = modelTransform;
 			pairs.Add(new ChildLocator.NameTransformPair { name = "MuzzleLeft", transform = m });
 		}
 		HPUtil.SetField(childLocator, "transformPairs", pairs.ToArray());
