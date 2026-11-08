@@ -259,7 +259,7 @@ namespace BerserkFury
     /// </summary>
     public class BerserkFuryLocomotion : MonoBehaviour
     {
-        const float StrideLength = 3.4f;   // metres per full cycle (two steps)
+        const float StrideLength = 3.9f;   // metres per full cycle (two steps)
 
         CharacterBody _body;
         EntityStateMachine _weapon, _body2;
@@ -357,7 +357,10 @@ namespace BerserkFury
             // Body: drops on each footfall, rolls over the planted leg, leans into speed and turns
             float impact = Mathf.Pow(Mathf.Abs(s), 6f);
             float breathe = Mathf.Sin(time * 1.6f) * 0.025f * (1f - m);
-            float bob = -impact * 0.16f * m + breathe - _brace * 0.35f + _surge * -0.1f;
+            // hips sink as the legs spread (keeps the planted foot on the ground) + a drop on each footfall
+            float spread = Mathf.Max(Mathf.Abs(legL), Mathf.Abs(legR)) * Mathf.Deg2Rad;
+            float sink = (1f - Mathf.Cos(spread)) * 1.35f;
+            float bob = -sink - impact * 0.12f * m + breathe - _brace * 0.35f + _surge * -0.1f;
             if (_bodyT)
             {
                 _bodyT.localPosition = _bodyRest + new Vector3(0f, bob, _recoil * -0.12f);
