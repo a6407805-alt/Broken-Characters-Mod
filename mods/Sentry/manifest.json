@@ -1,6 +1,6 @@
 {
   "name": "Sentry",
-  "version_number": "1.0.1",
+  "version_number": "1.0.2",
   "website_url": "",
   "description": "Sentry, the Nature Sentinel: a lore biome mech with a garden in a jar. Stonehide, Earthen Shot, Earth Wall, Gaia Shell, Nature's Vortex.",
   "dependencies": [

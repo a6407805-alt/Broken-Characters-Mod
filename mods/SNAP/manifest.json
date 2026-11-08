@@ -1,6 +1,6 @@
 {
   "name": "ShutterbugSNAP",
-  "version_number": "1.0.1",
+  "version_number": "1.0.2",
   "website_url": "",
   "description": "SNA-P \"Shutterbug\": an oversized investigator robot. Holoprinter lasers, a stunning Flash, Rewind Footage, and PRTSCR / CLPBRD pictures that turn kills and projectiles into holograms.",
   "dependencies": [

@@ -1,6 +1,6 @@
 {
   "name": "VendR",
-  "version_number": "1.0.1",
+  "version_number": "1.0.2",
   "website_url": "",
   "description": "VEND-R: a UES commissary vending machine that walked off the Contact Light (lore survivor). Free drinks, ricochet coins, Shake Well, Tip Over, Bulk Order / Exact Change. Personal use.",
   "dependencies": [
