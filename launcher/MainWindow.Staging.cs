@@ -27,7 +27,7 @@ namespace BrokenCharactersLauncher
         private async Task RunStagingAsync()
         {
             string? key = StagingSync.ReadCreatorKey();
-            if (string.IsNullOrEmpty(key)) { await StageWithSharedKeyAsync(); return; }
+            if (string.IsNullOrEmpty(key)) { await StageWithSharedKeyAsync(); ShowEveryoneBell(); return; }
             _stagingKey = key;
             try
             {
@@ -36,6 +36,7 @@ namespace BrokenCharactersLauncher
                 (string login, bool owner) = await StagingSync.WhoAmIAsync(key, cts.Token);
                 if (login.Length == 0) return;
                 if (owner) { _ = ShowOwnerReviewAsync(); return; }
+                ShowEveryoneBell();
 
                 DateTime installed = File.Exists(VersionFile) ? File.GetLastWriteTimeUtc(VersionFile) : DateTime.MinValue;
                 var progress = new Progress<string>(SetStatus);
@@ -77,6 +78,7 @@ namespace BrokenCharactersLauncher
         private async Task ShowOwnerReviewAsync()
         {
             if (_stagingKey == null) return;
+            _isOwner = true;
             ReviewBellButton.Visibility = Visibility.Visible;
             if (_bellTimer == null)
             {
@@ -116,8 +118,52 @@ namespace BrokenCharactersLauncher
                                      : "Mod uploads and updates";
         }
 
+        // ------------------------------------------------------------------ the bell for everyone else
+
+        private bool _isOwner;
+        private System.Windows.Threading.DispatcherTimer? _everyoneBellTimer;
+
+        /// <summary>Everyone (not the owner): the bell shows the pack's update status. It lights up yellow when a new
+        /// pack finished building since they last opened it. Uses release-info.json, which has no hourly limit.</summary>
+        private void ShowEveryoneBell()
+        {
+            ReviewBellButton.Visibility = Visibility.Visible;
+            if (_everyoneBellTimer != null) return;
+            _everyoneBellTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(3) };
+            _everyoneBellTimer.Tick += async (_, __) => await RefreshEveryoneBellAsync();
+            _everyoneBellTimer.Start();
+            _ = RefreshEveryoneBellAsync();
+        }
+
+        private async Task RefreshEveryoneBellAsync()
+        {
+            try
+            {
+                ReleaseInfo? r = await GetLatestReleaseFromInfoFileAsync();
+                if (r == null) return;
+                bool newSinceSeen = r.Published > StagingSync.BellSeen();
+                bool notInstalled = !string.Equals(r.Version, ReadLocalVersion(), StringComparison.OrdinalIgnoreCase);
+                bool lit = newSinceSeen || notInstalled;
+                ReviewBellButton.Tag = lit ? "!" : null;
+                ReviewBellButton.Background = new SolidColorBrush(lit ? Color.FromRgb(0xFF, 0xC9, 0x28) : Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
+                ReviewBellButton.Foreground = new SolidColorBrush(lit ? Color.FromRgb(0x10, 0x14, 0x20) : Colors.White);
+                ReviewBellButton.ToolTip = notInstalled ? "A new update is ready (" + r.Published.LocalDateTime.ToString("MMM d, h:mm tt") + "): press PLAY or CHECK FOR UPDATES"
+                                         : newSinceSeen ? "Update finished (" + r.Published.LocalDateTime.ToString("MMM d, h:mm tt") + ")"
+                                         : "Update status";
+            }
+            catch (Exception ex) { Debug.WriteLine("Bell check skipped: " + ex.Message); }
+        }
+
         private void ReviewBell_Click(object sender, RoutedEventArgs e)
         {
+            if (!_isOwner)
+            {
+                var status = new ReviewWindow(_stagingKey, owner: false) { Owner = this };
+                StagingSync.MarkBellSeen();
+                status.ShowDialog();
+                _ = RefreshEveryoneBellAsync();
+                return;
+            }
             if (_stagingKey == null) return;
             var w = new ReviewWindow(_stagingKey) { Owner = this };
             StagingSync.MarkBellSeen(); // opening it counts as seeing the new uploads

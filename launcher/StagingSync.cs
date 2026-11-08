@@ -96,7 +96,7 @@ namespace BrokenCharactersLauncher
         {
             string url = path.StartsWith("http", StringComparison.Ordinal) ? path : "https://api.github.com/repos/" + Repo + path;
             using var req = new HttpRequestMessage(method, url);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+            if (!string.IsNullOrEmpty(key)) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key); // no key: public read
             req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
             if (body != null) req.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
             using HttpResponseMessage r = await Http.SendAsync(req, ct);
@@ -204,13 +204,13 @@ namespace BrokenCharactersLauncher
         }
 
         /// <summary>The newest commits on main and how each one's build went (newest first).</summary>
-        public static async Task<List<UploadItem>> RecentUploadsAsync(string key, int count = 20, CancellationToken ct = default)
+        public static async Task<List<UploadItem>> RecentUploadsAsync(string? key, int count = 20, CancellationToken ct = default)
         {
-            JsonNode? commits = await CallAsync(key, HttpMethod.Get, "/commits?sha=" + Main + "&per_page=" + count, null, ct);
+            JsonNode? commits = await CallAsync(key ?? "", HttpMethod.Get, "/commits?sha=" + Main + "&per_page=" + count, null, ct);
             var runs = new Dictionary<string, (string Status, string Conclusion)>();
             try
             {
-                JsonNode? r = await CallAsync(key, HttpMethod.Get, "/actions/runs?branch=" + Main + "&per_page=50", null, ct);
+                JsonNode? r = await CallAsync(key ?? "", HttpMethod.Get, "/actions/runs?branch=" + Main + "&per_page=50", null, ct);
                 foreach (JsonNode? run in r?["workflow_runs"]?.AsArray() ?? new JsonArray())
                 {
                     string sha = run?["head_sha"]?.GetValue<string>() ?? "";
