@@ -196,7 +196,7 @@ namespace BerserkFury
             if (now > _nextIdle)
             {
                 _nextIdle = now + Random.Range(45f, 80f);
-                if (now - _lastAny > 25f && _body.outOfCombatStopwatch < 4f) Say("idle", true);
+                if (now - _lastAny > 25f && !_body.outOfCombat) Say("idle", true);
             }
         }
 

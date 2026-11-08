@@ -174,26 +174,44 @@ namespace BCMDevTools
             foreach (CameraRigController rig in CameraRigController.readOnlyInstancesList)
             {
                 if (!rig || rig.localUserViewer == null) continue;
-                bool done = false;
-                foreach (FieldInfo f in typeof(CameraRigController).GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+                // breadth-first through the rig's objects (camera mode, its per-rig instance data dictionaries...)
+                var seen = new HashSet<object>();
+                var queue = new Queue<KeyValuePair<object, int>>();
+                queue.Enqueue(new KeyValuePair<object, int>(rig, 0));
+                while (queue.Count > 0)
                 {
-                    object inst = f.GetValue(rig);
-                    if (inst == null || f.FieldType.IsPrimitive) continue;
-                    FieldInfo py = inst.GetType().GetField("pitchYaw", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                    if (py == null) continue;
-                    object v = py.GetValue(inst);
-                    Type t = v.GetType();
-                    FieldInfo fp = t.GetField("pitch"), fy = t.GetField("yaw");
-                    float p0 = (float)fp.GetValue(v), y0 = (float)fy.GetValue(v);
-                    float p1 = pitch ?? p0, y1 = y0 + (addYaw ?? 0f);
-                    object nv = Activator.CreateInstance(t, p1, y1);
-                    py.SetValue(inst, nv);
-                    if (!inst.GetType().IsValueType) { } else f.SetValue(rig, inst);
-                    Logger.LogInfo($"Driver: camera {f.Name}.pitchYaw {p0:F0}/{y0:F0} -> {p1:F0}/{y1:F0}");
-                    done = true;
-                    break;
+                    var item = queue.Dequeue();
+                    object o = item.Key;
+                    if (o == null || !seen.Add(o)) continue;
+                    Type t = o.GetType();
+                    FieldInfo py = t.GetField("pitchYaw", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (py != null && !t.IsValueType)
+                    {
+                        object v = py.GetValue(o);
+                        Type vt = v.GetType();
+                        float p0 = (float)vt.GetField("pitch").GetValue(v), y0 = (float)vt.GetField("yaw").GetValue(v);
+                        float p1 = pitch ?? p0, y1 = y0 + (addYaw ?? 0f);
+                        py.SetValue(o, Activator.CreateInstance(vt, p1, y1));
+                        Logger.LogInfo($"Driver: camera {t.Name}.pitchYaw {p0:F0}/{y0:F0} -> {p1:F0}/{y1:F0}");
+                        return;
+                    }
+                    if (item.Value >= 4) continue;
+                    if (o is System.Collections.IDictionary dict)
+                    {
+                        foreach (System.Collections.DictionaryEntry e in dict) queue.Enqueue(new KeyValuePair<object, int>(e.Value, item.Value + 1));
+                        continue;
+                    }
+                    if (o is UnityEngine.Object && !(o is CameraRigController) && !(o is ScriptableObject)) continue;
+                    for (Type tt = t; tt != null && tt != typeof(object) && tt != typeof(MonoBehaviour); tt = tt.BaseType)
+                        foreach (FieldInfo f in tt.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+                        {
+                            if (f.FieldType.IsPrimitive || f.FieldType.IsEnum || f.FieldType == typeof(string) || f.FieldType.IsValueType) continue;
+                            object v;
+                            try { v = f.GetValue(o); } catch { continue; }
+                            if (v != null) queue.Enqueue(new KeyValuePair<object, int>(v, item.Value + 1));
+                        }
                 }
-                if (!done) Logger.LogWarning("Driver: no pitchYaw on the camera rig");
+                Logger.LogWarning("Driver: no pitchYaw found under the camera rig");
                 return;
             }
         }

@@ -6,8 +6,8 @@
       "added": "2026-11-08T11:30:00-05:00",
       "accent": "#9C27B0",
       "status": "active",
-      "version": "0.2.1",
-      "note": "Active WIP (v0.2.1): E-Shield square removed; pilot banter + COMMAND exchanges, custom SFX slots, articulated Buster Claws, heavy T-rex walk;: Zoids Battle Legends port with Buster Claws, E-Shield, Magneser Drills, and Charged Particle Cannon (CPC)",
+      "version": "0.2.2",
+      "note": "Active WIP (v0.2.2): pilot comms crash fixed; E-Shield square removed; pilot banter + COMMAND exchanges, custom SFX slots, articulated Buster Claws, heavy T-rex walk;: Zoids Battle Legends port with Buster Claws, E-Shield, Magneser Drills, and Charged Particle Cannon (CPC)",
       "image": "Assets/Roster/BerserkFury.png"
     }
   ]
