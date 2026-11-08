@@ -216,6 +216,27 @@ namespace BerserkFury
             // HG Standard is a deferred, normal-mapped shader: without tangents it writes NaN pixels and bloom
             // spreads them into a white-out over the whole screen.
             mesh.RecalculateTangents();
+            // Zero-area UV triangles give NaN tangents; NaN in the G-buffer turns the whole screen white through bloom.
+            Vector4[] tan = mesh.tangents;
+            Vector3[] nrm = mesh.normals;
+            int fixedCount = 0;
+            for (int i = 0; i < tan.Length; i++)
+            {
+                Vector4 t = tan[i];
+                if (float.IsNaN(t.x) || float.IsNaN(t.y) || float.IsNaN(t.z) || float.IsNaN(t.w) || new Vector3(t.x, t.y, t.z).sqrMagnitude < 1e-8f)
+                {
+                    Vector3 n = i < nrm.Length ? nrm[i] : Vector3.up;
+                    Vector3 axis = Mathf.Abs(n.y) < 0.9f ? Vector3.up : Vector3.right;
+                    Vector3 tt = Vector3.Cross(axis, n).normalized;
+                    tan[i] = new Vector4(tt.x, tt.y, tt.z, 1f);
+                    fixedCount++;
+                }
+            }
+            for (int i = 0; i < nrm.Length; i++)
+                if (float.IsNaN(nrm[i].x) || nrm[i].sqrMagnitude < 1e-8f) { nrm[i] = Vector3.up; fixedCount++; }
+            mesh.normals = nrm;
+            mesh.tangents = tan;
+            if (fixedCount > 0) BerserkFuryPlugin.Log.LogInfo($"Mesh: repaired {fixedCount} bad normals/tangents");
             return mesh;
         }
 

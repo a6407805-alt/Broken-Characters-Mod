@@ -9,7 +9,9 @@
 //   god | spawn | kill | cd  same as F3 / F5 / F7 / F8
 //   cmd <console command>    run any console command
 //   dump                     log the player's model renderers (name, enabled, material, bounds)
-//   wait <secs> | waitlobby | waitbody   pause the queue (until time passes / character select / you have a body)
+//   wait <secs> | waitlobby | waitbody   pause the queue (until time passes / character select / you have a body; 180 s max)
+//   clear                    drop everything still queued (put it first in the file)
+//   shot <name>              save a screenshot to BepInEx\bcm_shots\<name>.png
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -49,6 +51,7 @@ namespace BCMDevTools
         readonly Queue<string> _driverQueue = new Queue<string>();
         float _driverWaitUntil;
         string _driverWaitFor;
+        float _driverWaitStarted;
 
         void DriverUpdate()
         {
@@ -62,6 +65,11 @@ namespace BCMDevTools
                     {
                         foreach (string raw in File.ReadAllLines(DriverFile))
                         {
+                            if (raw.Trim().ToLowerInvariant() == "clear")
+                            {
+                                _driverQueue.Clear(); _driverWaitFor = null; _driverWaitUntil = 0f;
+                                continue;
+                            }
                             string l = raw.Trim();
                             if (l.Length > 0 && !l.StartsWith("#")) _driverQueue.Enqueue(l);
                         }
@@ -74,8 +82,9 @@ namespace BCMDevTools
             while (_driverQueue.Count > 0)
             {
                 if (Time.unscaledTime < _driverWaitUntil) return;
-                if (_driverWaitFor == "lobby" && !PreGameController.instance) return;
-                if (_driverWaitFor == "body" && !Me) return;
+                bool timedOut = _driverWaitFor != null && Time.unscaledTime > _driverWaitStarted + 180f;
+                if (!timedOut && _driverWaitFor == "lobby" && !PreGameController.instance) return;
+                if (!timedOut && _driverWaitFor == "body" && !Me) return;
                 _driverWaitFor = null;
 
                 string line = _driverQueue.Dequeue();
@@ -86,8 +95,8 @@ namespace BCMDevTools
                     _driverWaitUntil = Time.unscaledTime + w;
                     continue;
                 }
-                if (low == "waitlobby") { _driverWaitFor = "lobby"; continue; }
-                if (low == "waitbody") { _driverWaitFor = "body"; continue; }
+                if (low == "waitlobby") { _driverWaitFor = "lobby"; _driverWaitStarted = Time.unscaledTime; continue; }
+                if (low == "waitbody") { _driverWaitFor = "body"; _driverWaitStarted = Time.unscaledTime; continue; }
                 try { RunDriver(line); }
                 catch (Exception e) { Logger.LogWarning("Driver '" + line + "': " + e.Message); }
             }
@@ -143,6 +152,15 @@ namespace BCMDevTools
                 case "cd": ResetCooldowns(); break;
                 case "cmd": RoR2.Console.instance.SubmitCmd(null, arg); break;
                 case "dump": DumpModel(); break;
+                case "shot":
+                {
+                    string dir = System.IO.Path.Combine(Paths.BepInExRootPath, "bcm_shots");
+                    Directory.CreateDirectory(dir);
+                    string name = string.IsNullOrEmpty(arg) ? DateTime.Now.ToString("HHmmss") : arg;
+                    ScreenCapture.CaptureScreenshot(System.IO.Path.Combine(dir, name + ".png"));
+                    break;
+                }
+                case "hud": RoR2.Console.instance.SubmitCmd(null, "hud_enable " + (arg == "0" ? "0" : "1")); break;
                 default: Logger.LogWarning("Driver: unknown command " + cmd); break;
             }
         }
