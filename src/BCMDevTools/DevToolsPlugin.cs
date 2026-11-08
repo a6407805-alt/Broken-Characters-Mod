@@ -26,7 +26,7 @@ using Path = System.IO.Path;
 
 namespace BCMDevTools
 {
-    [BepInPlugin(Guid, "BCM Dev Tools", "1.0.0")]
+    [BepInPlugin(Guid, "BCM Dev Tools", "1.0.1")]
     public partial class DevToolsPlugin : BaseUnityPlugin
     {
         public const string Guid = "com.a6407805.bcmdevtools";
@@ -87,6 +87,7 @@ namespace BCMDevTools
             MethodInfo wave = AccessTools.Method(typeof(InfiniteTowerRun), "BeginNextWave");
             if (wave != null) _harmony.Patch(wave, prefix: new HarmonyMethod(typeof(DevToolsPlugin), nameof(BlockWave)));
             else Logger.LogWarning("InfiniteTowerRun.BeginNextWave not found: Simulacrum waves can't be paused");
+            DriverAwake();
         }
 
         void OnDestroy()
@@ -349,6 +350,7 @@ namespace BCMDevTools
                 if (_flat) { Destroy(_flat); _flatTop = float.NaN; }
                 return;
             }
+            DriverUpdate();
 
             if (Input.GetKeyDown(_panelKey.Value)) { _panelOpen = !_panelOpen; if (!_panelOpen) SetMouseMode(false); }
             if (Input.GetKeyDown(KeyCode.F1)) { if (!_panelOpen) _panelOpen = true; SetMouseMode(!_mouseMode); }
