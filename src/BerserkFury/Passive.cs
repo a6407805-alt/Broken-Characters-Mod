@@ -24,7 +24,7 @@ namespace BerserkFury
         {
             _body = GetComponent<CharacterBody>();
             _health = GetComponent<HealthComponent>();
-            CreateShieldVisual();
+            // No placeholder quad: the Buster Claws open and spin to show the E-Shield (BerserkFuryLocomotion).
         }
 
         private void Start()

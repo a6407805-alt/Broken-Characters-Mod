@@ -531,7 +531,16 @@ namespace BerserkFury
                     foreach (string ext in new[] { ".wav", ".mp3" })
                     {
                         string p = System.IO.Path.Combine(dir, name + ext);
-                        if (System.IO.File.Exists(p)) { f = p; break; }
+                        if (System.IO.File.Exists(p))
+                        {
+                            // play a temp copy so the original is never locked (you can swap sounds while the game runs)
+                            string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "BerserkFurySfx");
+                            System.IO.Directory.CreateDirectory(tmp);
+                            string copy = System.IO.Path.Combine(tmp, name + "_" + System.IO.File.GetLastWriteTimeUtc(p).Ticks + ext);
+                            if (!System.IO.File.Exists(copy)) System.IO.File.Copy(p, copy, true);
+                            f = copy;
+                            break;
+                        }
                     }
                 }
             }
