@@ -196,7 +196,7 @@ namespace BerserkFury
                 _accentMat = BerserkFuryModel.SafeMaterial(tex, Color.Lerp(pal.Tint, Color.white, 0.25f), pal.Accent, 0f);
                 foreach (Renderer r in _bodyR) if (r) r.sharedMaterial = _bodyMat;
                 foreach (Renderer r in _accentR) if (r) r.sharedMaterial = _accentMat;
-                if (_trailMat) { foreach (var t in new[] { _trailL, _trailR }) if (t) { t.startColor = new Color(pal.Accent.r, pal.Accent.g, pal.Accent.b, 0.85f); t.endColor = new Color(1f, 1f, 1f, 0f); } }
+                if (_trailMat) { foreach (var tr in new[] { _trailL, _trailR }) if (tr) { tr.startColor = new Color(pal.Accent.r, pal.Accent.g, pal.Accent.b, 0.85f); tr.endColor = new Color(1f, 1f, 1f, 0f); } }
                 foreach (var l in new[] { _chest, _muzzleL, _muzzleR, _mouth }) if (l) l.color = pal.Accent;
             }
             // keep CharacterModel pointing at our materials (it re-applies defaultMaterial on overlay changes)
