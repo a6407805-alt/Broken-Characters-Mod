@@ -31,7 +31,7 @@ namespace BerserkFury
                 CheckMeleeClaw(aim);
             }
 
-            Util.PlaySound("Play_golem_laser_fire", gameObject);
+            if (!(isAuthority && BerserkFurySfx.Play("m1"))) Util.PlaySound("Play_golem_laser_fire", gameObject);
         }
 
         private void FireBusterShot(Ray aim, Vector3 offset)
@@ -111,8 +111,7 @@ namespace BerserkFury
                 characterMotor.velocity = aim.direction * 32f;
             }
 
-            Util.PlaySound("Play_loader_m2_charge", gameObject);
-            Util.PlaySound("Play_loader_m1_swing", gameObject);
+            if (!(isAuthority && BerserkFurySfx.Play("drill"))) { Util.PlaySound("Play_loader_m2_charge", gameObject); Util.PlaySound("Play_loader_m1_swing", gameObject); }
         }
 
         public override void FixedUpdate()
@@ -174,8 +173,7 @@ namespace BerserkFury
                 characterMotor.velocity = _dashDirection * 45f;
             }
 
-            Util.PlaySound("Play_commando_shift", gameObject);
-            Util.PlaySound("Play_mage_shift_wall_explode", gameObject);
+            if (!(isAuthority && BerserkFurySfx.Play("boost"))) { Util.PlaySound("Play_commando_shift", gameObject); Util.PlaySound("Play_mage_shift_wall_explode", gameObject); }
 
             if (NetworkServer.active)
             {
@@ -240,7 +238,7 @@ namespace BerserkFury
             var passive = GetComponent<BerserkFuryPassiveController>();
             if (passive) passive.IsChargingSpecial = true;
 
-            Util.PlaySound("Play_golem_laser_charge", gameObject);
+            if (!(isAuthority && BerserkFurySfx.Play("cpc_charge"))) Util.PlaySound("Play_golem_laser_charge", gameObject);
         }
 
         public override void OnExit()
@@ -267,7 +265,7 @@ namespace BerserkFury
             if (!_isFiring && fixedAge >= ChargeDuration)
             {
                 _isFiring = true;
-                Util.PlaySound("Play_titan_laser_fire", gameObject);
+                if (!(isAuthority && BerserkFurySfx.Play("cpc_fire"))) Util.PlaySound("Play_titan_laser_fire", gameObject);
             }
 
             if (_isFiring)

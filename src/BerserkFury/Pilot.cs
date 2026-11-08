@@ -107,7 +107,7 @@ namespace BerserkFury
             _lastWeapon = w; _lastBody = b;
 
             bool od = _passive && _passive.IsOverdrive;
-            if (od && !_wasOverdrive) Say("overdrive", true);
+            if (od && !_wasOverdrive) { BerserkFurySfx.Play("overdrive"); Say("overdrive", true); }
             _wasOverdrive = od;
 
             bool hurt = _hp && _hp.alive && _hp.combinedHealthFraction < 0.3f;
@@ -129,6 +129,7 @@ namespace BerserkFury
             _lastAt[evt] = now; _lastAny = now;
 
             string text = lines[Random.Range(0, lines.Length)];
+            BerserkFurySfx.Play("comm");
             float secs = BerserkFuryVoice.Play(evt, text);
             _text = text;
             _shownAt = now;
@@ -365,6 +366,68 @@ namespace BerserkFury
                 wav[o] = (byte)(v & 0xff); wav[o + 1] = (byte)((v >> 8) & 0xff);
             }
             File.WriteAllBytes(path, wav);
+        }
+    }
+}
+
+namespace BerserkFury
+{
+    /// <summary>
+    /// Optional custom sound effects: plugins\BerserkFury\Sfx\&lt;name&gt;.wav (m1, drill, boost, cpc_charge, cpc_fire,
+    /// overdrive, comm). If the file is there it plays (winmm, this PC only) instead of the vanilla sound.
+    /// </summary>
+    public static class BerserkFurySfx
+    {
+        [System.Runtime.InteropServices.DllImport("winmm.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, EntryPoint = "mciSendStringW")]
+        static extern int Mci(string command, System.Text.StringBuilder ret, int len, System.IntPtr hwnd);
+
+        static readonly System.Collections.Generic.Dictionary<string, string> Found = new System.Collections.Generic.Dictionary<string, string>();
+        static int _n;
+        static readonly string[] Pool = new string[8];
+
+        public static float Volume = 0.8f;
+
+        static string FileFor(string name)
+        {
+            if (Found.TryGetValue(name, out string f)) return f;
+            f = null;
+            try
+            {
+                string obj = BerserkFuryModel.FindFile("BerserkFury.obj");
+                if (obj != null)
+                {
+                    string dir = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(obj), "Sfx");
+                    foreach (string ext in new[] { ".wav", ".mp3" })
+                    {
+                        string p = System.IO.Path.Combine(dir, name + ext);
+                        if (System.IO.File.Exists(p)) { f = p; break; }
+                    }
+                }
+            }
+            catch { }
+            Found[name] = f;
+            return f;
+        }
+
+        /// <summary>True if a custom sound played (so the caller skips its vanilla sound).</summary>
+        public static bool Play(string name)
+        {
+            if (UnityEngine.Application.platform != UnityEngine.RuntimePlatform.WindowsPlayer) return false;
+            string f = FileFor(name);
+            if (f == null) return false;
+            try
+            {
+                int slot = _n++ % Pool.Length;
+                if (Pool[slot] != null) { Mci("close " + Pool[slot], null, 0, System.IntPtr.Zero); }
+                string alias = "bfsfx" + _n;
+                bool mp3 = f.EndsWith(".mp3", System.StringComparison.OrdinalIgnoreCase);
+                if (Mci("open \"" + f + "\" type " + (mp3 ? "mpegvideo" : "waveaudio") + " alias " + alias, null, 0, System.IntPtr.Zero) != 0) return false;
+                if (mp3) Mci("setaudio " + alias + " volume to " + (int)(Volume * 1000), null, 0, System.IntPtr.Zero);
+                Mci("play " + alias, null, 0, System.IntPtr.Zero);
+                Pool[slot] = alias;
+                return true;
+            }
+            catch { return false; }
         }
     }
 }
