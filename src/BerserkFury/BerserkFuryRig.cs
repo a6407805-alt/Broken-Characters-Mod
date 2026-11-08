@@ -265,7 +265,7 @@ namespace BerserkFury
         EntityStateMachine _weapon, _body2;
         Transform _bodyT, _thighL, _thighR, _shinL, _shinR, _t1, _t2, _t3, _head, _armL, _armR, _mountL, _mountR, _clawL, _clawR;
         BerserkFuryProng[] _prongsL, _prongsR;
-        float _spinL, _spinR, _open, _shield, _drillSpin;
+        float _spinL, _spinR, _open, _shield, _drillSpin, _slashTwist, _slashSlam;
         Vector3 _bodyRest;
         float _phase, _move, _lastYaw, _turn, _brace, _lunge, _surge, _recoil;
         bool _plantedL, _plantedR;
@@ -386,12 +386,13 @@ namespace BerserkFury
             Rot(_armR, -legR * 0.4f - _lunge * 55f, 0f, 0f);
 
             // ---- Buster Claws: boom swing, palm aim + spin, three prongs open/close ----
-            _shield = Mathf.MoveTowards(_shield, sprinting && grounded && _brace < 0.1f ? 1f : 0f, dt * 4f);
+            _shield = 0f;   // running keeps the claws shut (owner's call)
             bool firing = state.Contains("Blaster");
             float openTarget = 0.12f + Mathf.Sin(time * 1.3f) * 0.05f;               // idle: breathing
             if (firing) openTarget = 0.55f;
             if (_shield > 0.5f) openTarget = 0.75f;
             if (_brace > 0.5f) openTarget = 1f;
+            if (sprinting) openTarget = -0.1f;
             if (_lunge > 0.3f || _surge > 0.3f) openTarget = -0.15f;                // clamp shut to drill / streamline
             _open = Mathf.MoveTowards(_open, openTarget, dt * 3.5f);
 
@@ -409,10 +410,44 @@ namespace BerserkFury
             float boomYaw = _brace * 32f + _shield * 12f - _lunge * 10f + Mathf.Sin(time * 0.9f) * 2f * (1 - m);
             float kickL = firing && Mathf.Sin(time * 12f) > 0f ? _recoil : 0f;
             float kickR = firing && Mathf.Sin(time * 12f) <= 0f ? _recoil : 0f;
-            Rot(_mountL, boomPitch - kickL * 10f + lag1 * 2f * m, -boomYaw, 0f);
-            Rot(_mountR, boomPitch - kickR * 10f - lag1 * 2f * m, boomYaw, 0f);
-            Rot(_clawL, -kickL * 14f - _brace * 6f, -_shield * 8f, _spinL);
-            Rot(_clawR, -kickR * 14f - _brace * 6f, _shield * 8f, _spinR);
+            // ---- Buster Claw Slash: wind out, sweep across the front with the prongs folded into a blade ----
+            float sPitchL = 0f, sPitchR = 0f, sYawL = 0f, sYawR = 0f, sRollL = 0f, sRollR = 0f;
+            var slash = _weapon ? _weapon.state as BusterClawSlashState : null;
+            if (slash != null)
+            {
+                float p = slash.Progress;
+                float wind = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, 0.35f, p));
+                float swing = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.35f, 0.6f, p));
+                float back = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.7f, 1f, p));
+                if (slash.Strike < 2)
+                {
+                    // yaw: out 55 behind the shoulder -> across the front to -35 -> home
+                    float yaw = Mathf.Lerp(Mathf.Lerp(0f, 55f, wind), -35f, swing) * (1f - back);
+                    float pit = (Mathf.Lerp(-12f * wind, 22f, swing)) * (1f - back);
+                    float roll = 90f * Mathf.Max(wind, swing) * (1f - back);
+                    if (slash.Strike == 0) { sYawL = yaw; sPitchL = pit; sRollL = -roll; }
+                    else { sYawR = yaw; sPitchR = pit; sRollR = roll; }
+                    _slashTwist = Mathf.Lerp(Mathf.Lerp(0f, -14f, wind), 18f, swing) * (1f - back) * (slash.Strike == 0 ? 1f : -1f);
+                }
+                else
+                {
+                    // twin slam: both claws rear up high, then hammer down in front
+                    float pit = Mathf.Lerp(Mathf.Lerp(0f, -50f, wind), 48f, swing) * (1f - back);
+                    sPitchL = sPitchR = pit;
+                    sYawL = sYawR = -10f * Mathf.Max(wind, swing) * (1f - back);
+                    _slashTwist = 0f;
+                    _slashSlam = Mathf.Max(0f, swing - back);
+                }
+                _open = Mathf.MoveTowards(_open, -0.2f, dt * 8f);   // prongs fold together into a blade
+            }
+            else { _slashTwist = Mathf.MoveTowards(_slashTwist, 0f, dt * 60f); _slashSlam = Mathf.MoveTowards(_slashSlam, 0f, dt * 3f); }
+            if (_bodyT && (Mathf.Abs(_slashTwist) > 0.01f || _slashSlam > 0.01f))
+                _bodyT.localRotation = _bodyT.localRotation * Quaternion.Euler(_slashSlam * 10f, _slashTwist, 0f);
+
+            Rot(_mountL, boomPitch - kickL * 10f + lag1 * 2f * m + sPitchL, -boomYaw - sYawL, 0f);
+            Rot(_mountR, boomPitch - kickR * 10f - lag1 * 2f * m + sPitchR, boomYaw + sYawR, 0f);
+            Rot(_clawL, -kickL * 14f - _brace * 6f, -_shield * 8f, _spinL + sRollL);
+            Rot(_clawR, -kickR * 14f - _brace * 6f, _shield * 8f, _spinR + sRollR);
             float openDeg = _open * 38f;
             foreach (BerserkFuryProng pr in _prongsL) OpenProng(pr, openDeg);
             foreach (BerserkFuryProng pr in _prongsR) OpenProng(pr, openDeg);

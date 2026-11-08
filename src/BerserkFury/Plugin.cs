@@ -21,7 +21,7 @@ namespace BerserkFury
     {
         public const string PluginGUID = "com.bcm.berserkfury";
         public const string PluginName = "BerserkFury";
-        public const string PluginVersion = "0.2.4";
+        public const string PluginVersion = "0.2.5";
         public const string TokenPrefix = "BCM_BERSERKFURY_";
 
         public static ManualLogSource Log;
@@ -143,6 +143,7 @@ namespace BerserkFury
             ContentAddition.AddEntityState<BusterBlasterState>(out _);
             ContentAddition.AddEntityState<MagneserDrillState>(out _);
             ContentAddition.AddEntityState<IonThrusterSurgeState>(out _);
+            ContentAddition.AddEntityState<BusterClawSlashState>(out _);
             ContentAddition.AddEntityState<ChargedParticleCannonState>(out _);
 
             SkillLocator sl = BodyPrefab.GetComponent<SkillLocator>();
@@ -160,10 +161,10 @@ namespace BerserkFury
             // Primary, Secondary, Utility, Special
             SkillDef primary = MakeSkill("PRIMARY", typeof(BusterBlasterState), "Weapon", 0f, false, true, InterruptPriority.Any, "primary");
             SkillDef secondary = MakeSkill("SECONDARY", typeof(MagneserDrillState), "Weapon", 4.0f, false, true, InterruptPriority.Skill, "secondary");
-            SkillDef utility = MakeSkill("UTILITY", typeof(IonThrusterSurgeState), "Body", 5.0f, true, false, InterruptPriority.PrioritySkill, "utility");
+            SkillDef utility = MakeSkill("UTILITY", typeof(BusterClawSlashState), "Weapon", 4.0f, true, true, InterruptPriority.PrioritySkill, "utility");
             SkillDef special = MakeSkill("SPECIAL", typeof(ChargedParticleCannonState), "Weapon", 10.0f, true, true, InterruptPriority.Death, "special");
 
-            utility.cancelSprintingOnActivation = false;
+            utility.cancelSprintingOnActivation = true;
 
             sl.primary = RegisterSlot("BerserkFuryPrimary", primary);
             sl.secondary = RegisterSlot("BerserkFurySecondary", secondary);
@@ -253,7 +254,7 @@ namespace BerserkFury
                 "<color=#E040FB>[PASSIVE] Organoid Drive & E-Shield:</color> Dealing damage accumulates <color=#E040FB>Particle Energy</color>. At 100%, enter Overdrive for +25% attack speed and +20% move speed. Sprinting deploys an <color=#00E5FF>E-Shield</color> deflecting incoming projectiles.\n" +
                 "<color=#E040FB>[M1] Twin Buster Blaster:</color> Fire alternating particle beams for <style=cIsDamage>320% damage</style>. Close-range strikes inflict bleed.\n" +
                 "<color=#E040FB>[M2] Magneser Drill Thrust:</color> Thrust spinning drill claws forward, shredding enemies for <style=cIsDamage>7x85% damage</style>.\n" +
-                "<color=#E040FB>[SHIFT] Ion Thruster Surge:</color> Engage high-output rocket thrusters, rocketing forward and releasing a <style=cIsDamage>450% concussive blast</style>.\n" +
+                "<color=#E040FB>[SHIFT] Buster Claw Slash:</color> The back claws fold into blades and swing forward: left slash, right slash, then a twin overhead slam. Hold to chain the combo. <style=cIsDamage>320% / 320% / 600% + stun</style>.\n" +
                 "<color=#E040FB>[R] Charged Particle Cannon (CPC):</color> Anchor into the ground and discharge a screen-clearing particle mega-beam for <style=cIsDamage>3000%+ total damage</style>.");
 
             LanguageAPI.Add(TokenPrefix + "OUTRO", "...and so the Ultimate Zoid roared into the cosmos, unchallenged.");
@@ -268,8 +269,8 @@ namespace BerserkFury
             LanguageAPI.Add(TokenPrefix + "SECONDARY_NAME", "Magneser Drill Thrust");
             LanguageAPI.Add(TokenPrefix + "SECONDARY_DESC", "Lunge forward with dual spinning magneser drills, piercing enemies for <style=cIsDamage>7x85% damage</style>.");
 
-            LanguageAPI.Add(TokenPrefix + "UTILITY_NAME", "Ion Thruster Surge");
-            LanguageAPI.Add(TokenPrefix + "UTILITY_DESC", "Rocket forward with high-output ion thrusters. Detonates a <style=cIsDamage>450% stun shockwave</style> on completion.");
+            LanguageAPI.Add(TokenPrefix + "UTILITY_NAME", "Buster Claw Slash");
+            LanguageAPI.Add(TokenPrefix + "UTILITY_DESC", "Fold the Buster Claws into blades and slash: <style=cIsDamage>320%</style> left, <style=cIsDamage>320%</style> right, then a twin overhead slam for <style=cIsDamage>600%</style> that <style=cIsUtility>stuns</style>. Tap for one slash, hold to chain.");
 
             LanguageAPI.Add(TokenPrefix + "SPECIAL_NAME", "Charged Particle Cannon (CPC)");
             LanguageAPI.Add(TokenPrefix + "SPECIAL_DESC", "Anchor into the ground and charge a massive particle vortex, then fire an immense continuous mega-beam dealing <style=cIsDamage>3000%+ total damage</style>.");

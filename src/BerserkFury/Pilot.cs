@@ -49,7 +49,7 @@ namespace BerserkFury
                 new[] { "V:Get out of my sight!" },
             },
             ["drill"] = new[] { new[] { "V:Buster Claws, pierce!" }, new[] { "V:Too close." }, new[] { "V:Magneser drill!" } },
-            ["boost"] = new[] { new[] { "V:Ion boosters, full thrust!" }, new[] { "V:Can you even keep up?" } },
+            ["slash"] = new[] { new[] { "V:Buster Claws, blade mode!" }, new[] { "V:I'll tear you apart!" }, new[] { "V:Too slow to dodge this!" }, new[] { "V:Get in my way and you're scrap." } },
             ["overdrive"] = new[] {
                 new[] { "V:Organoid drive at maximum!", "C:Output's past the safety limit!", "V:Then stop watching and enjoy it." },
                 new[] { "V:Now I'm serious." },
@@ -87,13 +87,13 @@ namespace BerserkFury
         };
         static readonly Dictionary<string, float> Cooldown = new Dictionary<string, float>
         {
-            ["launch"] = 0f, ["battle"] = 30f, ["tpdone"] = 30f, ["cpc"] = 6f, ["drill"] = 14f, ["boost"] = 16f, ["overdrive"] = 20f,
+            ["launch"] = 0f, ["battle"] = 30f, ["tpdone"] = 30f, ["cpc"] = 6f, ["drill"] = 14f, ["slash"] = 12f, ["overdrive"] = 20f,
             ["streak"] = 20f, ["bighit"] = 18f, ["hurt"] = 25f, ["kill"] = 14f, ["boss"] = 5f, ["idle"] = 0f, ["levelup"] = 12f,
             ["ally"] = 15f, ["death"] = 0f, ["revive"] = 0f,
         };
         static readonly Dictionary<string, float> Chance = new Dictionary<string, float>
         {
-            ["drill"] = 0.35f, ["boost"] = 0.4f, ["kill"] = 0.3f, ["streak"] = 0.7f, ["bighit"] = 0.6f,
+            ["drill"] = 0.35f, ["slash"] = 0.4f, ["kill"] = 0.3f, ["streak"] = 0.7f, ["bighit"] = 0.6f,
         };
 
         CharacterBody _body;
@@ -176,7 +176,7 @@ namespace BerserkFury
                 if (w == typeof(ChargedParticleCannonState)) Say("cpc", true);
                 else if (w == typeof(MagneserDrillState)) Say("drill");
             }
-            if (b != _lastBody && b == typeof(IonThrusterSurgeState)) Say("boost");
+            if (w != _lastWeapon && w == typeof(BusterClawSlashState)) Say("slash");
             _lastWeapon = w; _lastBody = b;
 
             bool od = _passive && _passive.IsOverdrive;
