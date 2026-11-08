@@ -20,7 +20,7 @@ public class HPPlugin : BaseUnityPlugin
 
 	public const string NAME = "Hardpoint NEXT";
 
-	public const string VERSION = "0.2.1";
+	public const string VERSION = "0.2.2";
 
 	internal static ManualLogSource Log;
 
@@ -30,6 +30,7 @@ public class HPPlugin : BaseUnityPlugin
 		HPConfig.Init(base.Config);
 		NextConfig.Init(base.Config);
 		HPAssets.Init();
+		GunFx.Init();
 		string directoryName = System.IO.Path.GetDirectoryName(base.Info.Location);
 		HPAssets.LoadIcons(directoryName);
 		CustomModel.Init(directoryName);

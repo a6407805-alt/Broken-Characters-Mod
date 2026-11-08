@@ -55,7 +55,16 @@ internal static class HPContent
 			typeof(AssaultArmor),
 			typeof(OveredBoost),
 			typeof(FireShotgun),
-			typeof(FireLinear)
+			typeof(FireLinear),
+			typeof(FireAssaultRifle),
+			typeof(FireSmg),
+			typeof(FirePulseGun),
+			typeof(FireBazooka),
+			typeof(FireGatling),
+			typeof(FireHandgun),
+			typeof(PileBunker),
+			typeof(FireGrenadeCannon),
+			typeof(ChargeLaserCannon)
 		};
 		for (int i = 0; i < array.Length; i++)
 		{
@@ -153,6 +162,9 @@ internal static class HPContent
 		BodyPrefab.AddComponent<HPStatus>();
 		BodyPrefab.AddComponent<NextPilot>();
 		BodyPrefab.AddComponent<PaField>();
+		BodyPrefab.AddComponent<BoosterFx>();
+		CharacterMotor motor = BodyPrefab.GetComponent<CharacterMotor>();
+		if (motor) motor.airControl = NextConfig.AirControl.Value;
 		ContentAddition.AddBody(BodyPrefab);
 	}
 

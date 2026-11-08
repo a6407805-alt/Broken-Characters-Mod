@@ -25,3 +25,12 @@ All numbers: `BepInEx/config/com.ahren.HardpointNext.cfg` (sections N1-N5 are th
 - **Back units:** R = right back, G = left back: Missile Salvo 22, Grenade Cannon 40, Laser Cannon 32, Assault Armor 18.
 - **Max load:** Light 90, Middle 120, Heavy 160. Over it: -0.8% speed, quick boost distance and EN recovery per
   point (max -50%). HUD and T screen show `LOAD x / y`.
+
+## Feel (v0.2.2)
+
+- **Floaty, not flying:** hold Jump in the air = vertical booster (builds up speed, keeps momentum when you let go).
+  Coming down is slow (45% gravity, capped fall). With no input you drift; hold Sprint in the air to glide and steer
+  (costs EN). Big landings thud. Booster flame, glow and trail on the back while boosting. Config: `N8`.
+- **Guns:** Assault Rifle blooms the longer you hold; SMG is a hose with wild spread; Shotgun kicks hard and shoves
+  you back in the air; Linear Rifle charges (hold, release); Pulse Gun fires visible energy bolts; Bazooka shoves you
+  back; Gatling spins up with gold tracers and slows you.

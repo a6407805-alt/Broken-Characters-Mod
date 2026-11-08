@@ -34,11 +34,11 @@ internal static class Tokens
 		Part("FRAME", "HEAVY", "Heavyweight Frame", $"<style=cIsHealth>+35% AP</style>, <style=cIsUtility>+25 armor</style>, <style=cIsUtility>+50% PA</style>. -15% speed, quick boosts shorter and pricier. Load {NextConfig.LoadHeavy.Value}.");
 		LanguageAPI.Add("BCM_NEXT_GARAGE_LBACK", "Left Back");
 		W("BURSTRIFLE", "Burst Rifle", $"Wt 12. {HPConfig.RifleBurst.Value}-round bursts, <style=cIsDamage>{Pct(HPConfig.RifleDamage.Value)}</style> per round. {HPConfig.RifleMagazine.Value}-round magazine.");
-		W("ASSAULTRIFLE", "Assault Rifle", $"Wt 14. Full-auto, <style=cIsDamage>{Pct(NextConfig.AssaultRifleDamage.Value)}</style> per round.");
-		W("SMG", "SMG", $"Wt 8. Very fast, <style=cIsDamage>{Pct(NextConfig.SmgDamage.Value)}</style> per round, short range.");
-		W("SHOTGUN", "Shotgun", $"Wt 16. {NextConfig.ShotgunPellets.Value} pellets x <style=cIsDamage>{Pct(NextConfig.ShotgunDamage.Value)}</style>. Big stagger up close.");
-		W("LINEAR", "Linear Rifle", $"Wt 20. One piercing round, <style=cIsDamage>{Pct(NextConfig.LinearDamage.Value)}</style>.");
-		W("PULSEGUN", "Pulse Gun", $"Wt 10. Energy weapon: no ammo, <style=cIsDamage>{Pct(NextConfig.PulseGunDamage.Value)}</style> per shot, {NextConfig.PulseGunEn.Value:0} EN each.");
+		W("ASSAULTRIFLE", "Assault Rifle", $"Wt 14. Full-auto, <style=cIsDamage>{Pct(NextConfig.AssaultRifleDamage.Value)}</style> per round. Spread opens up the longer you hold it.");
+		W("SMG", "SMG", $"Wt 8. A bullet hose: <style=cIsDamage>{Pct(NextConfig.SmgDamage.Value)}</style> per round, wild spread, short range.");
+		W("SHOTGUN", "Shotgun", $"Wt 16. {NextConfig.ShotgunPellets.Value} pellets x <style=cIsDamage>{Pct(NextConfig.ShotgunDamage.Value)}</style>. Blows enemies back; kicks you back in the air.");
+		W("LINEAR", "Linear Rifle", $"Wt 20. Hold to charge, release to fire a piercing rail shot: <style=cIsDamage>{Pct(NextConfig.LinearDamage.Value * 0.6f)}-{Pct(NextConfig.LinearDamage.Value * 2.5f)}</style>.");
+		W("PULSEGUN", "Pulse Gun", $"Wt 10. Fires energy bolts: <style=cIsDamage>{Pct(NextConfig.PulseGunDamage.Value)}</style> each. No ammo, {NextConfig.PulseGunEn.Value:0} EN per shot.");
 		W("BAZOOKA", "Bazooka", $"Wt 30. Slow shell, <style=cIsDamage>{Pct(NextConfig.BazookaDamage.Value)}</style> in {NextConfig.BazookaRadius.Value:0} m. Huge stagger.");
 		W("GATLING", "Gatling Gun", $"Wt 34. Spins up while held, <style=cIsDamage>{Pct(NextConfig.GatlingDamage.Value)}</style> per round. Slows you while firing.");
 		W("MISSILES", "Missile Salvo", $"Wt 22. Hold to lock up to {HPConfig.MissileMaxLocks.Value} targets, release for {HPConfig.MissileCount.Value} homing missiles x <style=cIsDamage>{Pct(HPConfig.MissileDamage.Value)}</style>.");

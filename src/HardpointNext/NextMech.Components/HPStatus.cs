@@ -16,6 +16,10 @@ public class HPStatus : MonoBehaviour
 
 	public float gatlingSlowUntil = -99f;
 
+	public bool thrusting;
+
+	public float bloomR, bloomL, bloomShotR = -99f, bloomShotL = -99f;
+
 	public float gatlingSpinR, gatlingSpinL, gatlingLastR = -99f, gatlingLastL = -99f;
 
 	public readonly List<HurtBox> locksL = new List<HurtBox>();
@@ -90,6 +94,9 @@ public class HPStatus : MonoBehaviour
 
 	private void FixedUpdate()
 	{
+		// spread bloom recovers once you stop firing
+		if (Time.time - bloomShotR > 0.25f) bloomR = Mathf.MoveTowards(bloomR, 0f, 8f * Time.fixedDeltaTime);
+		if (Time.time - bloomShotL > 0.25f) bloomL = Mathf.MoveTowards(bloomL, 0f, 8f * Time.fixedDeltaTime);
 		float value = Capacity;
 		en = Mathf.Min(en, value);
 		if (Time.time - lastSpend > HPConfig.EnRegenDelay.Value)

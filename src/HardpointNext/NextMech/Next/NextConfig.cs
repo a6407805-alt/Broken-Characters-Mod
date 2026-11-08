@@ -54,6 +54,16 @@ public static class NextConfig
 	public static ConfigEntry<int> LoadMiddle;
 	public static ConfigEntry<int> LoadHeavy;
 
+	public static ConfigEntry<float> AirGravity;
+	public static ConfigEntry<float> FallCap;
+	public static ConfigEntry<float> RiseSpeed;
+	public static ConfigEntry<float> VerticalThrust;
+	public static ConfigEntry<float> AirControl;
+	public static ConfigEntry<float> AirBoostSpeed;
+	public static ConfigEntry<float> AirBoostAccel;
+	public static ConfigEntry<float> AirBoostCost;
+	public static ConfigEntry<float> HeavyLandingSpeed;
+
 	public static ConfigEntry<KeyboardShortcut> TuneKey;
 	public static ConfigEntry<float> TunePointsPerLevel;
 	public static ConfigEntry<float> TunePerPoint;
@@ -108,6 +118,15 @@ public static class NextConfig
 		GrenadeRadius = cfg.Bind("N6. Arsenal", "Grenade Cannon Radius", 10f, "");
 		LaserDamage = cfg.Bind("N6. Arsenal", "Laser Cannon Damage", 20f, "");
 		LaserEnCost = cfg.Bind("N6. Arsenal", "Laser Cannon EN Cost", 30f, "");
+		AirGravity = cfg.Bind("N8. Floaty Movement (AC4)", "Air Gravity", 0.45f, "Fraction of normal gravity in the air (1 = vanilla).");
+		FallCap = cfg.Bind("N8. Floaty Movement (AC4)", "Max Fall Speed", 16f, "Metres per second.");
+		RiseSpeed = cfg.Bind("N8. Floaty Movement (AC4)", "Vertical Boost Speed", 11f, "Top climb speed holding Jump in the air.");
+		VerticalThrust = cfg.Bind("N8. Floaty Movement (AC4)", "Vertical Boost Thrust", 38f, "How fast it reaches that speed. Let go and you keep the momentum.");
+		AirControl = cfg.Bind("N8. Floaty Movement (AC4)", "Air Control", 0.12f, "Steering without boosting (vanilla 0.25). Lower = more drift.");
+		AirBoostSpeed = cfg.Bind("N8. Floaty Movement (AC4)", "Air Boost Speed", 1.35f, "Hold Sprint in the air: glide at this many times your speed.");
+		AirBoostAccel = cfg.Bind("N8. Floaty Movement (AC4)", "Air Boost Steering", 30f, "");
+		AirBoostCost = cfg.Bind("N8. Floaty Movement (AC4)", "Air Boost EN Cost", 12f, "EN per second.");
+		HeavyLandingSpeed = cfg.Bind("N8. Floaty Movement (AC4)", "Heavy Landing Speed", 12f, "Landing faster than this thuds.");
 		TuneKey = cfg.Bind("N5. Tuning", "Key", new KeyboardShortcut(KeyCode.T), "Open the tuning screen (FRS points).");
 		TunePointsPerLevel = cfg.Bind("N5. Tuning", "Points Per Level", 1f, "");
 		TunePerPoint = cfg.Bind("N5. Tuning", "Boost Per Point", 0.05f, "+5% per point.");

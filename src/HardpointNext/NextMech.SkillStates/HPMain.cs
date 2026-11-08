@@ -39,6 +39,13 @@ public class HPMain : GenericCharacterMain
 		}
 	}
 
+	private float lastVy;
+
+	private bool wasAirborne;
+
+	// AC4 movement: a NEXT doesn't fly, it floats. Low gravity in the air, a vertical booster (hold Jump) that
+	// pushes you up with momentum instead of a flat hover, a slow capped fall, and air drift: with no input you
+	// keep sliding; hold Sprint (boost) in the air to glide and steer.
 	public override void FixedUpdate()
 	{
 		base.FixedUpdate();
@@ -46,20 +53,56 @@ public class HPMain : GenericCharacterMain
 		{
 			return;
 		}
+		float dt = Time.fixedDeltaTime;
+		HPStatus st = HPStatus.Of(base.characterBody);
 		if (base.characterMotor.isGrounded)
 		{
+			if (wasAirborne && lastVy < -NextConfig.HeavyLandingSpeed.Value)
+			{
+				CustomAudio.PlayNear(CustomAudio.Clip.Stomp, base.transform.position, 50f);
+				if (HPAssets.Slam) HPUtil.SpawnLocalEffect(HPAssets.Slam, base.characterBody.footPosition, 0.6f);
+			}
+			wasAirborne = false;
 			airTime = 0f;
+			if (st) st.thrusting = false;
 			return;
 		}
-		airTime += Time.fixedDeltaTime;
-		HPStatus hPStatus = HPStatus.Of(base.characterBody);
-		if ((bool)hPStatus && base.inputBank.jump.down && !(airTime < 0.3f) && hPStatus.CanSpend(0.5f))
+		wasAirborne = true;
+		airTime += dt;
+		Vector3 v = base.characterMotor.velocity;
+		bool thrust = false;
+
+		// 1. floaty descent: once you're coming down, give back part of the gravity the motor applies
+		//    (jumps keep normal gravity going up, so a hop is still a hop)
+		if (v.y < 0.5f) v.y += -Physics.gravity.y * (1f - NextConfig.AirGravity.Value) * dt;
+
+		// 2. vertical booster: accelerate up, keep the momentum when you let go
+		if (st && base.inputBank.jump.down && airTime >= 0.18f && st.CanSpend(0.5f))
 		{
-			float fixedDeltaTime = Time.fixedDeltaTime;
-			hPStatus.Spend(HPConfig.HoverCost.Value * Garage.HoverCost(base.characterBody) * fixedDeltaTime);
-			Vector3 velocity = base.characterMotor.velocity;
-			velocity.y = Mathf.MoveTowards(Mathf.Max(velocity.y, -2f), HPConfig.HoverRise.Value, 30f * fixedDeltaTime);
-			base.characterMotor.velocity = velocity;
+			st.Spend(HPConfig.HoverCost.Value * Garage.HoverCost(base.characterBody) * dt);
+			float rise = NextConfig.RiseSpeed.Value * Tuning.Mult(Tuning.Stat.MainBooster);
+			if (v.y < rise) v.y = Mathf.Min(rise, v.y + NextConfig.VerticalThrust.Value * dt);
+			thrust = true;
 		}
+
+		// 3. air boost: hold Sprint in the air to glide/steer; without it you drift on your momentum
+		Vector3 move = base.inputBank.moveVector;
+		move.y = 0f;
+		if (st && base.inputBank.sprint.down && move.sqrMagnitude > 0.01f && st.CanSpend(0.5f))
+		{
+			Vector3 h = new Vector3(v.x, 0f, v.z);
+			Vector3 target = move.normalized * base.characterBody.moveSpeed * NextConfig.AirBoostSpeed.Value;
+			h = Vector3.MoveTowards(h, target, NextConfig.AirBoostAccel.Value * dt);
+			v.x = h.x;
+			v.z = h.z;
+			st.Spend(NextConfig.AirBoostCost.Value * dt);
+			thrust = true;
+		}
+
+		// 4. slow, capped fall
+		v.y = Mathf.Max(v.y, -NextConfig.FallCap.Value);
+		base.characterMotor.velocity = v;
+		lastVy = v.y;
+		if (st) st.thrusting = thrust;
 	}
 }
