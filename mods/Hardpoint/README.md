@@ -1,6 +1,6 @@
 # Hardpoint
 
-A UES heavy combat frame, Armored Core 6 style: a 3 m bipedal mech with a burst rifle on the right arm, a pulse blade on
+A UES heavy combat frame, Armored Core 6 style: a 4 m bipedal mech with a burst rifle on the right arm, a pulse blade on
 the left, shoulder missile pods and a big booster. Lore survivor. Three skins: UES Standard, Rustbelt, Nightfall.
 Personal use.
 
@@ -15,7 +15,7 @@ Personal use.
 
 ## Burst Rifle (primary)
 
-- 3-round bursts, **90%** per round, 30-round magazine with an automatic 1.3 s reload.
+- 3-round bursts, **90%** per round, 50-round magazine with an automatic 1.3 s reload.
 
 ## Pulse Blade (secondary, 4 s)
 
@@ -29,7 +29,7 @@ Personal use.
 
 ## Missile Salvo (special, 10 s) / Assault Armor (alt, 30 s)
 
-- Missile Salvo: hold to lock up to **6 targets** (0.25 s each, 90 m), release for **12 homing missiles x 250%**.
+- Missile Salvo: hold to lock up to **8 targets** (0.25 s each, 90 m), release for **2 homing missiles per lock (at least 12) x 250%**.
 - Assault Armor: charge (+100 armor), then a pulse explosion: **2500%** within **15 m**. Breaks stagger instantly.
 
 ## AC HUD

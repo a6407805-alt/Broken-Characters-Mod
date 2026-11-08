@@ -20,8 +20,8 @@ McDonald's characters).
   drops to 0 for 10 s** (no damage). "Nice to meet ya."
 - **Rumba** (utility, 10 s): they dance the rumba for **8 s**: **+50% movement speed** and everything within 7 m is
   **set on fire** (60% every 0.5 s). "Rumba Tyme!"
-- **Drop It Like It's Hot** (special, 40 s): GrimVince grows to **2x** and spins her by the hips for **14 s** (you can
-  drift around): **700% + stun** every second to everything within 6 m, while she throws **hot burgers** all around
+- **Drop It Like It's Hot** (special, 40 s): GrimVince grows to **2x** and holds her out by the hips and spins for **14 s**
+  with **+1000 armor** (you can drift around): **700% + stun** every second to everything within 6 m, while she throws **hot burgers** all around
   (**450%**, ignite, 5 a second). Then both shout "Drop it!" and he slams her down: **11,000% in 25 m**.
 
 ## GrimVince
@@ -31,10 +31,9 @@ McDonald's characters).
 - **Hash Toss** (secondary): a hash brown boomerang that pierces: **400% out, 800% back**. **No cooldown, one out at a
   time** (Backup Magazines give more). When he catches it he eats it: **heal 20% + 5% per enemy it hit**.
 - **Takes Two to Tango** (utility, 6 s after it ends): **GrimVince can't sprint.** Instead they tango forward on their
-  own (steer with the camera, jump still works) to a tango song. A beat bar shows the timing: **tap Sprint on the
-  beat** (every second beat, ~1 s). Each good tap hits everything within **45 m** for **100% (+25% per beat in a
-  row)**, adds **+12% speed** (no cap) and they strike a pose. A missed or early tap, or losing **10% of your health**,
-  ends it.
+  own (steer with the camera, jump still works) to a tango song. Every second beat (~1 s) a pulse hits everything within
+  **45 m** for **300% (+50% per kill stack)**. It lasts **10 s**, but **every kill while tangoing resets the timer** and
+  adds a stack (**+12% speed** and damage, no cap), so it can run on indefinitely. Losing **15% of your health** ends it.
 - **You Got Good Head on Your Shoulders** (special, 80 s, **starts every stage on cooldown**): **25 s** as a giant purple
   gorilla with her on his shoulder firing the **Grimace shake cannon** at the nearest enemy within 15 m (**369% a
   shot**, ~6 a second). **Left click**: two swipes, **700%** each. **Right click** (4 s): chest beat and roar, **400% +
@@ -42,7 +41,7 @@ McDonald's characters).
   the roof, leaps off and lands for **40,000% to every enemy within 150 m** (no fall damage).
 
 All numbers are in the config (`BepInEx/config/com.VincentMacaluso.HamburgalDuo.cfg`): the Hot Swap key, every damage
-number, the tango timing window, cinematic camera on/off, and one Volume setting (75). Voice lines and sounds are Windows
+number, the tango timer, cinematic camera on/off, and one Volume setting (75). Voice lines and sounds are Windows
 only (like the other survivors).
 
 ## Install

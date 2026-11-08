@@ -1,6 +1,6 @@
 {
   "name": "Hardpoint",
-  "version_number": "1.0.3",
+  "version_number": "1.0.7",
   "website_url": "",
   "description": "Hardpoint: an Armored Core 6-style combat frame (lore survivor). EN and ACS stagger, Burst Rifle, Pulse Blade, Quick Boost / Assault Boost + Boost Kick, Missile Salvo / Assault Armor, and its own AC-style HUD. Personal use.",
   "dependencies": [
