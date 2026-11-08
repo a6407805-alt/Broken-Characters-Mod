@@ -57,6 +57,7 @@ namespace BerserkFury
                 _cachedTexture = LoadTexture(pngPath);
                 _cachedMaterial = CreateMaterial(_cachedTexture);
                 _cachedMesh = LoadObj(objPath, ModelScale);
+                BerserkFuryRig.Build(objPath, ModelScale);
 
                 BerserkFuryPlugin.Log.LogInfo($"Successfully loaded Berserk Fury 3D model ({_cachedMesh.vertexCount} verts, {_cachedMesh.triangles.Length / 3} tris).");
             }
@@ -299,23 +300,18 @@ namespace BerserkFury
             visualObj.transform.localRotation = Quaternion.identity;
             visualObj.transform.localScale = Vector3.one;
 
-            MeshFilter filter = visualObj.AddComponent<MeshFilter>();
-            filter.sharedMesh = _cachedMesh;
-
-            MeshRenderer renderer = visualObj.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = _cachedMaterial;
-            renderer.shadowCastingMode = ShadowCastingMode.On;
-            renderer.receiveShadows = true;
+            List<Renderer> parts = BerserkFuryRig.Instantiate(visualObj.transform, _cachedMaterial);
 
             // Register into CharacterModel renderer list for RoR2 lighting & item overlays
             var list = new List<CharacterModel.RendererInfo>(model.baseRendererInfos ?? new CharacterModel.RendererInfo[0]);
-            list.Add(new CharacterModel.RendererInfo
-            {
-                renderer = renderer,
-                defaultMaterial = _cachedMaterial,
-                defaultShadowCastingMode = ShadowCastingMode.On,
-                ignoreOverlays = false
-            });
+            foreach (Renderer r in parts)
+                list.Add(new CharacterModel.RendererInfo
+                {
+                    renderer = r,
+                    defaultMaterial = _cachedMaterial,
+                    defaultShadowCastingMode = ShadowCastingMode.On,
+                    ignoreOverlays = false
+                });
             model.baseRendererInfos = list.ToArray();
 
             // Add dynamic idle / locomotion anim component
@@ -324,124 +320,50 @@ namespace BerserkFury
             // forceRenderingOff is not saved on prefabs, so Commando reappeared in game. Keep him hidden at runtime.
             BerserkFuryHideBase hider = characterModelRoot.GetComponent<BerserkFuryHideBase>();
             if (!hider) hider = characterModelRoot.AddComponent<BerserkFuryHideBase>();
-            hider.Keep = renderer;
+            hider.Visual = visualObj.transform;
         }
     }
 
-    /// <summary>Hides the cloned Commando meshes every frame; item displays (Display*) stay visible.</summary>
+    /// <summary>Hides the cloned Commando meshes every frame and keeps every Berserk Fury part listed + visible.</summary>
     public class BerserkFuryHideBase : MonoBehaviour
     {
-        public Renderer Keep;
+        public Transform Visual;
         private CharacterModel _model;
-
         private bool _logged;
 
         private void LateUpdate()
         {
             if (!_model) _model = GetComponent<CharacterModel>();
             if (!_model || _model.baseRendererInfos == null) return;
-            if (!Keep)
+            if (!Visual)
             {
-                Transform v = transform.Find("BerserkFuryVisual");
-                if (v) Keep = v.GetComponent<Renderer>();
-                else
+                Visual = transform.Find("BerserkFuryVisual");
+                if (!Visual) { BerserkFuryModel.Attach(gameObject); Visual = transform.Find("BerserkFuryVisual"); }
+                if (!Visual) return;
+            }
+
+            Renderer[] mine = Visual.GetComponentsInChildren<Renderer>(true);
+            var listed = new HashSet<Renderer>();
+            foreach (var info in _model.baseRendererInfos) if (info.renderer) listed.Add(info.renderer);
+            List<CharacterModel.RendererInfo> add = null;
+            foreach (Renderer r in mine)
+            {
+                if (!r.enabled) r.enabled = true;
+                if (r.forceRenderingOff) r.forceRenderingOff = false;
+                if (!listed.Contains(r))
                 {
-                    // Visual missing on this instance: rebuild it here.
-                    BerserkFuryModel.Attach(gameObject);
-                    v = transform.Find("BerserkFuryVisual");
-                    if (v) Keep = v.GetComponent<Renderer>();
+                    if (add == null) add = new List<CharacterModel.RendererInfo>(_model.baseRendererInfos);
+                    add.Add(new CharacterModel.RendererInfo { renderer = r, defaultMaterial = r.sharedMaterial, defaultShadowCastingMode = ShadowCastingMode.On, ignoreOverlays = false });
                 }
             }
-            if (Keep)
-            {
-                // The skin replaces baseRendererInfos at spawn (dropping ours) and can turn renderers off.
-                if (!Keep.gameObject.activeSelf) Keep.gameObject.SetActive(true);
-                if (!Keep.enabled) Keep.enabled = true;
-                if (Keep.forceRenderingOff) Keep.forceRenderingOff = false;
-                bool listed = false;
-                foreach (var info in _model.baseRendererInfos) if (info.renderer == Keep) { listed = true; break; }
-                if (!listed)
-                {
-                    var list = new System.Collections.Generic.List<CharacterModel.RendererInfo>(_model.baseRendererInfos);
-                    list.Add(new CharacterModel.RendererInfo
-                    {
-                        renderer = Keep,
-                        defaultMaterial = Keep.sharedMaterial,
-                        defaultShadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On,
-                        ignoreOverlays = false
-                    });
-                    _model.baseRendererInfos = list.ToArray();
-                }
-                if (!_logged)
-                {
-                    _logged = true;
-                    var mf = Keep.GetComponent<MeshFilter>();
-                    BerserkFuryPlugin.Log.LogInfo($"[Visual] {name}: listed={listed} mesh={(mf && mf.sharedMesh ? mf.sharedMesh.vertexCount.ToString() : "NONE")} mat={(Keep.sharedMaterial ? Keep.sharedMaterial.shader.name : "NONE")} bounds={Keep.bounds.size} scale={Keep.transform.lossyScale}");
-                }
-            }
+            if (add != null) _model.baseRendererInfos = add.ToArray();
+            if (!_logged) { _logged = true; BerserkFuryPlugin.Log.LogInfo($"[Visual] {name}: {mine.Length} parts, re-listed={(add != null)}"); }
+
             foreach (var info in _model.baseRendererInfos)
             {
                 Renderer r = info.renderer;
-                if (!r || r == Keep || r.name.StartsWith("Display")) continue;
+                if (!r || r.name.StartsWith("Display") || r.transform.IsChildOf(Visual)) continue;
                 if (!r.forceRenderingOff) r.forceRenderingOff = true;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Animates Berserk Fury with dynamic T-Rex gait, weapon recoil, and idle breathing.
-    /// </summary>
-    public class BerserkFuryLocomotion : MonoBehaviour
-    {
-        private CharacterBody _body;
-        private float _walkCycle;
-        private Vector3 _basePos;
-        private Quaternion _baseRot;
-
-        private void Start()
-        {
-            _basePos = transform.localPosition;
-            _baseRot = transform.localRotation;
-            _body = GetComponentInParent<CharacterBody>();
-        }
-
-        private void Update()
-        {
-            if (!_body)
-            {
-                _body = GetComponentInParent<CharacterBody>();
-                // In character display preview
-                if (!_body)
-                {
-                    float idle = Mathf.Sin(Time.time * 1.5f) * 0.03f;
-                    transform.localPosition = _basePos + new Vector3(0, idle, 0);
-                    return;
-                }
-            }
-
-            Vector3 velocity = _body.characterMotor ? _body.characterMotor.velocity : Vector3.zero;
-            float horizontalSpeed = new Vector2(velocity.x, velocity.z).magnitude;
-
-            if (horizontalSpeed > 0.5f)
-            {
-                // Walking / running T-Rex dinosaur gait (head bobbing, slight tail swaying)
-                float freq = Mathf.Min(horizontalSpeed * 0.7f, 6f);
-                _walkCycle += Time.deltaTime * freq;
-
-                float bobY = Mathf.Abs(Mathf.Sin(_walkCycle)) * 0.08f;
-                float swayZ = Mathf.Sin(_walkCycle * 0.5f) * 2.5f;
-                float tiltPitch = Mathf.Sin(_walkCycle) * 1.8f;
-
-                transform.localPosition = _basePos + new Vector3(0, bobY, 0);
-                transform.localRotation = _baseRot * Quaternion.Euler(tiltPitch, 0, swayZ);
-            }
-            else
-            {
-                // Idle breathing
-                float breath = Mathf.Sin(Time.time * 1.8f) * 0.025f;
-                float pitch = Mathf.Sin(Time.time * 1.2f) * 0.8f;
-                transform.localPosition = _basePos + new Vector3(0, breath, 0);
-                transform.localRotation = _baseRot * Quaternion.Euler(pitch, 0, 0);
             }
         }
     }

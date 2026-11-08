@@ -21,7 +21,7 @@ namespace BerserkFury
     {
         public const string PluginGUID = "com.bcm.berserkfury";
         public const string PluginName = "BerserkFury";
-        public const string PluginVersion = "0.1.5";
+        public const string PluginVersion = "0.1.6";
         public const string TokenPrefix = "BCM_BERSERKFURY_";
 
         public static ManualLogSource Log;
@@ -86,6 +86,7 @@ namespace BerserkFury
             body.levelDamage = 2.8f;
             body.baseArmor = 20f;
             body.baseMoveSpeed = 7.5f;
+            body.baseAcceleration = 32f;   // heavy: slower to start and stop (Commando = 80)
 
             Texture portraitTex = LoadTexture("portrait");
             if (portraitTex) body.portraitIcon = portraitTex;

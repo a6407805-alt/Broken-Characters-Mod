@@ -143,8 +143,8 @@
         "berserk",
         "zoid"
       ],
-      "version": "0.1.5",
-      "note": "Active WIP (v0.1.5): white-out hunt (mesh NaN repair), play-testing visuals;: Zoids Battle Legends port with Buster Claws, E-Shield, Magneser Drills, and Charged Particle Cannon (CPC)"
+      "version": "0.1.6",
+      "note": "Active WIP (v0.1.6): rigged model + heavy T-rex walk (stomps, tail, head, skill poses);: Zoids Battle Legends port with Buster Claws, E-Shield, Magneser Drills, and Charged Particle Cannon (CPC)"
     }
   ]
 }
