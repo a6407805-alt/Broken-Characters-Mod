@@ -6,8 +6,8 @@
       "added": "2026-11-07T21:00:00-05:00",
       "accent": "#59E5FF",
       "status": "active",
-      "version": "0.2.3",
-      "note": "Active WIP (v0.2.3): left-arm gun muzzle fixed (flash/tracer now come from the left hand); v0.2.2 floaty boosters + per-gun feel",
+      "version": "0.2.4",
+      "note": "Active WIP (v0.2.4): Blender-made 3D models for every gun and back cannon (src/HardpointNext/Blender/build_weapons.py), held in the hands / on the shoulders and aimed; shots, flashes and tracers come from each gun's barrel; built-in rifle/blade/pods hidden when replaced",
       "image": "Assets/Roster/HardpointNext.png"
     }
   ]

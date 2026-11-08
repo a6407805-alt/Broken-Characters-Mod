@@ -163,6 +163,7 @@ internal static class HPContent
 		BodyPrefab.AddComponent<NextPilot>();
 		BodyPrefab.AddComponent<PaField>();
 		BodyPrefab.AddComponent<BoosterFx>();
+		BodyPrefab.AddComponent<GunMount>();
 		CharacterMotor motor = BodyPrefab.GetComponent<CharacterMotor>();
 		if (motor) motor.airControl = NextConfig.AirControl.Value;
 		ContentAddition.AddBody(BodyPrefab);
@@ -182,19 +183,12 @@ internal static class HPContent
 			m.localPosition = new Vector3(0f, 1.38f, 0.12f);
 			pairs.Add(new ChildLocator.NameTransformPair { name = "MuzzleRifle", transform = m });
 		}
-		// Left arm guns fire from the left hand (the model only has a blade there).
-		Transform left = childLocator.FindChild("HandL");
-		if (!left) left = childLocator.FindChild("Blade");
-		if (left)
+		// Muzzle points for the four mounts; GunMount moves them to each weapon model's barrel tip every frame.
+		foreach (string name in new[] { "MuzzleRight", "MuzzleLeft", "MuzzleBackR", "MuzzleBackL" })
 		{
-			// The hand bone's local units are scaled, so a local offset lands metres away. Keep the muzzle on the
-			// model root and follow the hand in world space every frame instead.
-			Transform m = new GameObject("MuzzleLeft").transform;
+			Transform m = new GameObject(name).transform;
 			m.SetParent(modelTransform, false);
-			LeftMuzzleFollow follow = m.gameObject.AddComponent<LeftMuzzleFollow>();
-			follow.hand = left;
-			follow.root = modelTransform;
-			pairs.Add(new ChildLocator.NameTransformPair { name = "MuzzleLeft", transform = m });
+			pairs.Add(new ChildLocator.NameTransformPair { name = name, transform = m });
 		}
 		HPUtil.SetField(childLocator, "transformPairs", pairs.ToArray());
 	}

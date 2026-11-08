@@ -64,6 +64,8 @@ public static class NextConfig
 	public static ConfigEntry<float> AirBoostCost;
 	public static ConfigEntry<float> HeavyLandingSpeed;
 
+	public static ConfigEntry<float> GunScale;
+
 	public static ConfigEntry<KeyboardShortcut> TuneKey;
 	public static ConfigEntry<float> TunePointsPerLevel;
 	public static ConfigEntry<float> TunePerPoint;
@@ -127,6 +129,7 @@ public static class NextConfig
 		AirBoostAccel = cfg.Bind("N8. Floaty Movement (AC4)", "Air Boost Steering", 30f, "");
 		AirBoostCost = cfg.Bind("N8. Floaty Movement (AC4)", "Air Boost EN Cost", 12f, "EN per second.");
 		HeavyLandingSpeed = cfg.Bind("N8. Floaty Movement (AC4)", "Heavy Landing Speed", 12f, "Landing faster than this thuds.");
+		GunScale = cfg.Bind("N6. Arsenal", "Weapon Model Scale", 1f, "Size of the Blender weapon models.");
 		TuneKey = cfg.Bind("N5. Tuning", "Key", new KeyboardShortcut(KeyCode.T), "Open the tuning screen (FRS points).");
 		TunePointsPerLevel = cfg.Bind("N5. Tuning", "Points Per Level", 1f, "");
 		TunePerPoint = cfg.Bind("N5. Tuning", "Boost Per Point", 0.05f, "+5% per point.");

@@ -189,9 +189,9 @@ public static class Arsenal
 		switch (MountOf(s))
 		{
 			case Mount.LeftArm: return "MuzzleLeft";
-			case Mount.RightBack: return "PodR";
-			case Mount.LeftBack: return "PodL";
-			default: return "MuzzleRifle";
+			case Mount.RightBack: return "MuzzleBackR";
+			case Mount.LeftBack: return "MuzzleBackL";
+			default: return "MuzzleRight";
 		}
 	}
 
