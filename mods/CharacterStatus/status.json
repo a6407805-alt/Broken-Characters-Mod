@@ -15,7 +15,7 @@
         "auditechnician",
         "auditech"
       ],
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "name": "BILLY BIGSUITS",
@@ -24,7 +24,7 @@
         "billybigsuits",
         "billy"
       ],
-      "version": "1.0.2"
+      "version": "1.0.3"
     },
     {
       "name": "WILBUR",
@@ -41,7 +41,7 @@
         "oatsbrother",
         "brother"
       ],
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "name": "ASHWING DRAKE",
@@ -49,7 +49,7 @@
       "match": [
         "ashwing"
       ],
-      "version": "1.8.4"
+      "version": "1.8.6"
     },
     {
       "name": "NIDUS",
@@ -57,7 +57,7 @@
       "match": [
         "nidus"
       ],
-      "version": "1.0.11"
+      "version": "1.0.12"
     },
     {
       "name": "PHANTOM ASSASSIN",
@@ -66,7 +66,7 @@
         "phantomassassin",
         "phantom"
       ],
-      "version": "1.0.3"
+      "version": "1.0.4"
     },
     {
       "name": "INFESTED GENERAL",
@@ -74,7 +74,7 @@
       "match": [
         "infestedgeneral"
       ],
-      "version": "1.1.13"
+      "version": "1.1.14"
     },
     {
       "name": "GRAVITOS",
@@ -82,7 +82,7 @@
       "match": [
         "gravitos"
       ],
-      "version": "1.2.0"
+      "version": "1.2.1"
     },
     {
       "name": "CLAY REBEL",
@@ -91,7 +91,7 @@
         "clayrebel",
         "rebel"
       ],
-      "version": "1.0.1"
+      "version": "1.0.3"
     },
     {
       "name": "EMBERWARDEN",
@@ -110,11 +110,11 @@
     {
       "name": "THE DUELIST",
       "status": "active",
-      "note": "Removed the collar that clipped like a hat; no deck-out loss in duels",
       "match": [
         "duelist"
       ],
-      "version": "1.1.1"
+      "version": "1.1.1",
+      "note": "Removed the collar that clipped like a hat; no deck-out loss in duels"
     },
     {
       "name": "THE SURVEYOR",
@@ -132,16 +132,7 @@
         "mommymilkers",
         "mommy"
       ],
-      "version": "1.0.0"
-    },
-    {
-      "name": "HARDPOINT NEXT",
-      "status": "active",
-      "match": [
-        "hardpointnext"
-      ],
-      "version": "0.2.4",
-      "note": "Active WIP (v0.2.4): Blender-made 3D models for every gun and back cannon (src/HardpointNext/Blender/build_weapons.py), held in the hands / on the shoulders and aimed; shots, flashes and tracers come from each gun's barrel; built-in rifle/blade/pods hidden when replaced"
+      "version": "1.0.1"
     },
     {
       "name": "GRAVITOS NEXT",
@@ -151,6 +142,15 @@
       ],
       "version": "0.1.0",
       "note": "Active WIP (v0.1.0): new original Blender model (Lodestar) on the Engineer rig, orbiting rings + hand shards; kit still Gravitos 1.2.1"
+    },
+    {
+      "name": "HARDPOINT NEXT",
+      "status": "active",
+      "match": [
+        "hardpointnext"
+      ],
+      "version": "0.2.4",
+      "note": "Active WIP (v0.2.4): Blender-made 3D models for every gun and back cannon (src/HardpointNext/Blender/build_weapons.py), held in the hands / on the shoulders and aimed; shots, flashes and tracers come from each gun's barrel; built-in rifle/blade/pods hidden when replaced"
     }
   ]
 }
