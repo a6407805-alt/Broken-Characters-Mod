@@ -142,6 +142,15 @@
       ],
       "version": "0.2.1",
       "note": "Active WIP (v0.2.1): shorter loadout (arms, boost, 2 back units, frame), M1/M2 same 8-gun list (Burst, Assault, SMG, Shotgun, Linear, Pulse Gun, Bazooka, Gatling), hanger removed, booster/generator moved to the T screen, lighter weight limits, faster base speed"
+    },
+    {
+      "name": "GRAVITOS NEXT",
+      "status": "active",
+      "match": [
+        "gravitosnext"
+      ],
+      "version": "0.1.0",
+      "note": "Active WIP (v0.1.0): new original Blender model (Lodestar) on the Engineer rig, orbiting rings + hand shards; kit still Gravitos 1.2.1"
     }
   ]
 }

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <NoWarn>NU1701;CS0618;CS8632;CS0162</NoWarn>
+    <AssemblyName>GravitosNext</AssemblyName>
+    <RootNamespace>GravitosNext</RootNamespace>
+  </PropertyGroup>
+
+  <!-- NEXT: the owner's take on Vince's Gravitos (source decompiled from Gravitos 1.2.1).
+       New original model "Lodestar" (Blender/build_lodestar.py -> lodestar_model.bin + lodestar_fx.bin,
+       shipped in mods/GravitosNext/). Leave Vince's mods/Gravitos untouched. -->
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" />
+    <PackageReference Include="UnityEngine.Modules" Version="2021.3.33" IncludeAssets="compile" />
+    <PackageReference Include="RiskOfRain2.GameLibs" Version="1.4.1-r.0" />
+    <PackageReference Include="MMHOOK.RoR2" Version="2025.11.19" />
+    <PackageReference Include="RoR2BepInExPack" Version="1.41.0" />
+    <PackageReference Include="R2API.Core" Version="5.*" />
+    <PackageReference Include="R2API.ContentManagement" Version="1.0.11" />
+    <PackageReference Include="R2API.Language" Version="1.*" />
+    <PackageReference Include="R2API.Prefab" Version="1.*" />
+    <PackageReference Include="R2API.Networking" Version="1.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Blender\**" />
+  </ItemGroup>
+
+</Project>
