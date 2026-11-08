@@ -1,6 +1,6 @@
 {
   "name": "HardpointNext",
-  "version_number": "0.1.0",
+  "version_number": "0.2.0",
   "website_url": "",
   "description": "Hardpoint NEXT: an Armored Core 4 / For Answer take on Vince's Hardpoint. Chainable quick boost + second stage, Primal Armor, Overed Boost with km/h speedometer, hanger weapon swap, garage parts (frame/booster/generator/hanger) and FRS tuning points.",
   "dependencies": [

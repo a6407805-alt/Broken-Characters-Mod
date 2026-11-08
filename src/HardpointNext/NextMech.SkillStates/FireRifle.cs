@@ -19,11 +19,20 @@ public class FireRifle : BaseSkillState
 
 	private HPStatus status;
 
+	private bool left;
+
+	private int Mag
+	{
+		get => left ? status.magazineL : status.magazine;
+		set { if (left) status.magazineL = value; else status.magazine = value; }
+	}
+
 	public override void OnEnter()
 	{
 		base.OnEnter();
 		status = HPStatus.Of(base.characterBody);
-		if ((bool)status && status.magazine <= 0)
+		left = Arsenal.IsLeft(this);
+		if ((bool)status && Mag <= 0)
 		{
 			reload = true;
 			return;
@@ -32,7 +41,7 @@ public class FireRifle : BaseSkillState
 		gap = HPConfig.RifleShotGap.Value / attackSpeedStat;
 		duration = gap * (float)(burst - 1) + HPConfig.RifleBurstGap.Value / attackSpeedStat;
 		base.characterBody.SetAimTimer(2f);
-		Anim.Play(GetModelAnimator(), "Gesture, Override", "FireRifle", 0.8f / Mathf.Max(0.3f, duration + 0.2f));
+		if (!left) Anim.Play(GetModelAnimator(), "Gesture, Override", "FireRifle", 0.8f / Mathf.Max(0.3f, duration + 0.2f));
 		Shoot();
 	}
 
@@ -41,12 +50,12 @@ public class FireRifle : BaseSkillState
 		fired++;
 		if ((bool)status)
 		{
-			status.magazine--;
+			Mag--;
 		}
 		CustomAudio.PlayNear(CustomAudio.Clip.Rifle, base.transform.position, 70f);
 		if ((bool)HPAssets.MuzzleFlash)
 		{
-			EffectManager.SimpleMuzzleFlash(HPAssets.MuzzleFlash, base.gameObject, "MuzzleRifle", transmit: false);
+			EffectManager.SimpleMuzzleFlash(HPAssets.MuzzleFlash, base.gameObject, Arsenal.Muzzle(this), transmit: false);
 		}
 		if (base.isAuthority)
 		{
@@ -67,7 +76,7 @@ public class FireRifle : BaseSkillState
 			bulletAttack.maxDistance = HPConfig.RifleRange.Value;
 			bulletAttack.radius = 0.2f;
 			bulletAttack.isCrit = RollCrit();
-			bulletAttack.muzzleName = "MuzzleRifle";
+			bulletAttack.muzzleName = Arsenal.Muzzle(this);
 			bulletAttack.tracerEffectPrefab = HPAssets.Tracer;
 			bulletAttack.hitEffectPrefab = HPAssets.HitSpark;
 			bulletAttack.smartCollision = true;
@@ -86,7 +95,7 @@ public class FireRifle : BaseSkillState
 			}
 			return;
 		}
-		while (fired < burst && base.fixedAge >= (float)fired * gap && (!status || status.magazine > 0))
+		while (fired < burst && base.fixedAge >= (float)fired * gap && (!status || Mag > 0))
 		{
 			Shoot();
 		}

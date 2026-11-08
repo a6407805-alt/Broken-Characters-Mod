@@ -132,6 +132,8 @@ internal static class HPContent
 		}
 		AddMachine("Boost");
 		AddMachine("Pods");
+		AddMachine("LeftArm");
+		AddMachine("Pods2");
 		CameraTargetParams component2 = BodyPrefab.GetComponent<CameraTargetParams>();
 		if ((bool)component2 && (bool)component2.cameraParams)
 		{
@@ -158,22 +160,27 @@ internal static class HPContent
 	{
 		Transform modelTransform = BodyPrefab.GetComponent<ModelLocator>().modelTransform;
 		ChildLocator childLocator = (modelTransform ? modelTransform.GetComponent<ChildLocator>() : null);
-		Transform transform = (childLocator ? childLocator.FindChild("Rifle") : null);
-		if ((bool)transform)
+		if (!childLocator) return;
+		var pairs = new List<ChildLocator.NameTransformPair>(HPUtil.GetField<ChildLocator.NameTransformPair[]>(childLocator, "transformPairs") ?? new ChildLocator.NameTransformPair[0]);
+		Transform rifle = childLocator.FindChild("Rifle");
+		if (rifle)
 		{
-			Transform transform2 = new GameObject("MuzzleRifle").transform;
-			transform2.SetParent(transform, worldPositionStays: false);
-			transform2.localPosition = new Vector3(0f, 1.38f, 0.12f);
-			ChildLocator.NameTransformPair[] array = HPUtil.GetField<ChildLocator.NameTransformPair[]>(childLocator, "transformPairs") ?? new ChildLocator.NameTransformPair[0];
-			HPUtil.SetField(childLocator, "transformPairs", Enumerable.ToArray<ChildLocator.NameTransformPair>(Enumerable.Concat<ChildLocator.NameTransformPair>((IEnumerable<ChildLocator.NameTransformPair>)array, (IEnumerable<ChildLocator.NameTransformPair>)new ChildLocator.NameTransformPair[1]
-			{
-				new ChildLocator.NameTransformPair
-				{
-					name = "MuzzleRifle",
-					transform = transform2
-				}
-			})));
+			Transform m = new GameObject("MuzzleRifle").transform;
+			m.SetParent(rifle, false);
+			m.localPosition = new Vector3(0f, 1.38f, 0.12f);
+			pairs.Add(new ChildLocator.NameTransformPair { name = "MuzzleRifle", transform = m });
 		}
+		// Left arm guns fire from the left hand (the model only has a blade there).
+		Transform left = childLocator.FindChild("HandL");
+		if (!left) left = childLocator.FindChild("Blade");
+		if (left)
+		{
+			Transform m = new GameObject("MuzzleLeft").transform;
+			m.SetParent(left, false);
+			m.localPosition = new Vector3(0f, 0.3f, 0.3f);
+			pairs.Add(new ChildLocator.NameTransformPair { name = "MuzzleLeft", transform = m });
+		}
+		HPUtil.SetField(childLocator, "transformPairs", pairs.ToArray());
 	}
 
 	private static void AddMachine(string name)
@@ -257,10 +264,6 @@ internal static class HPContent
 			skillDescriptionToken = "BCM_NEXT_PASSIVE_DESCRIPTION",
 			icon = HPAssets.PassiveIcon
 		};
-		SkillDef skillDef = MakeSkill<SkillDef>("BurstRifle", "PRIMARY", HPAssets.PrimaryIcon, typeof(FireRifle), 0f, "Weapon", InterruptPriority.Any);
-		skillDef.mustKeyPress = false;
-		skillDef.cancelSprintingOnActivation = false;
-		SkillDef skillDef2 = MakeSkill<SkillDef>("PulseBlade", "SECONDARY", HPAssets.SecondaryIcon, typeof(PulseBlade), HPConfig.BladeCooldown.Value, "Body", InterruptPriority.Skill);
 		ENSkillDef eNSkillDef = MakeSkill<ENSkillDef>("QuickBoost", "UTILITY", HPAssets.UtilityIcon, typeof(QuickBoost), NextConfig.QbInterval.Value, "Boost", InterruptPriority.Skill);
 		eNSkillDef.baseMaxStock = 1;
 		eNSkillDef.enCost = NextConfig.QbCost.Value;
@@ -270,21 +273,18 @@ internal static class HPContent
 		eNSkillDef2.enCost = 15f;
 		eNSkillDef2.cancelSprintingOnActivation = false;
 		eNSkillDef2.isCombatSkill = false;
-		SkillDef skillDef3 = MakeSkill<SkillDef>("MissileSalvo", "SPECIAL", HPAssets.SpecialIcon, typeof(MissileLock), HPConfig.MissileCooldown.Value, "Pods", InterruptPriority.Skill);
-		skillDef3.cancelSprintingOnActivation = false;
-		SkillDef skillDef4 = MakeSkill<SkillDef>("AssaultArmor", "SPECIAL2", HPAssets.Special2Icon, typeof(AssaultArmor), HPConfig.ArmorCooldown.Value, "Body", InterruptPriority.PrioritySkill);
-		component.primary = AddSkillSlot(BodyPrefab, "Primary", skillDef);
-		component.secondary = AddSkillSlot(BodyPrefab, "Secondary", skillDef2);
+		// Arsenal: both arms take any arm weapon; two back units.
+		Arsenal.Define();
+		component.primary = AddSkillSlot(BodyPrefab, "Primary", Arsenal.DefsFor(Mount.RightArm, "BURSTRIFLE"));
+		component.secondary = AddSkillSlot(BodyPrefab, "Secondary", Arsenal.DefsFor(Mount.LeftArm, "PULSEBLADE"));
 		component.utility = AddSkillSlot(BodyPrefab, "Utility", eNSkillDef, eNSkillDef2);
-		component.special = AddSkillSlot(BodyPrefab, "Special", skillDef3, skillDef4);
+		component.special = AddSkillSlot(BodyPrefab, "Special", Arsenal.DefsFor(Mount.RightBack, "MISSILES"));
+		GenericSkill backLeft = AddSkillSlot(BodyPrefab, "BackLeft", Arsenal.DefsFor(Mount.LeftBack, "LASERCANNON"));
+		backLeft.loadoutTitleToken = "BCM_NEXT_GARAGE_LBACK";
+		backLeft.hideInCharacterSelect = false;
 		// Hanger weapons (swapped onto the right arm with the Hanger key) and the garage rows.
-		SkillDef shotgun = MakeSkill<SkillDef>("HangerShotgun", "HANGER_SHOTGUN", HPAssets.PrimaryIcon, typeof(FireShotgun), 0f, "Weapon", InterruptPriority.Any);
-		shotgun.mustKeyPress = false;
-		shotgun.cancelSprintingOnActivation = false;
-		SkillDef linear = MakeSkill<SkillDef>("HangerLinear", "HANGER_LINEAR", HPAssets.PrimaryIcon, typeof(FireLinear), 0f, "Weapon", InterruptPriority.Any);
-		linear.mustKeyPress = false;
-		linear.cancelSprintingOnActivation = false;
-		Garage.Hangers = new SkillDef[] { shotgun, linear };
+		Garage.Hangers = new SkillDef[] { Arsenal.RightArmDefs["SHOTGUN"], Arsenal.RightArmDefs["LINEAR"] };
+		FireGrenadeCannon.CreateShell();
 		Garage.CreateSlots(BodyPrefab);
 		BodyPrefab.AddComponent<NextParts>();
 	}

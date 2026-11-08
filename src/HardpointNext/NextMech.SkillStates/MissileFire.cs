@@ -25,7 +25,7 @@ public class MissileFire : BaseSkillState
 	{
 		base.OnEnter();
 		HPStatus hPStatus = HPStatus.Of(base.characterBody);
-		targets = (hPStatus ? Enumerable.ToList<HurtBox>(Enumerable.Where<HurtBox>((IEnumerable<HurtBox>)hPStatus.locks, (Func<HurtBox, bool>)((HurtBox h) => h))) : new List<HurtBox>());
+		targets = (hPStatus ? Enumerable.ToList<HurtBox>(Enumerable.Where<HurtBox>((IEnumerable<HurtBox>)hPStatus.LocksFor(Arsenal.IsLeft(this)), (Func<HurtBox, bool>)((HurtBox h) => h))) : new List<HurtBox>());
 		Anim.Play(GetModelAnimator(), "Gesture, Override", "Missiles");
 		CustomAudio.PlayNear(CustomAudio.Clip.MissilesVoice, base.transform.position, 40f);
 	}
@@ -44,7 +44,7 @@ public class MissileFire : BaseSkillState
 			HPStatus hPStatus = HPStatus.Of(base.characterBody);
 			if ((bool)hPStatus)
 			{
-				hPStatus.locks.Clear();
+				hPStatus.LocksFor(Arsenal.IsLeft(this)).Clear();
 			}
 			if (base.isAuthority)
 			{
@@ -59,7 +59,7 @@ public class MissileFire : BaseSkillState
 		if (base.isAuthority && (bool)HPContent.MissileProjectile)
 		{
 			ChildLocator modelChildLocator = GetModelChildLocator();
-			Transform transform = (modelChildLocator ? modelChildLocator.FindChild((index % 2 == 0) ? "PodL" : "PodR") : null);
+			Transform transform = (modelChildLocator ? modelChildLocator.FindChild(Arsenal.IsLeft(this) ? "PodL" : "PodR") : null);
 			Vector3 position = (transform ? (transform.position + Vector3.up * 0.6f) : (base.characterBody.corePosition + Vector3.up * 2f));
 			Vector3 normalized = (GetAimRay().direction + Vector3.up * 0.9f + UnityEngine.Random.insideUnitSphere * 0.35f).normalized;
 			GameObject target = ((targets.Count > 0 && (bool)targets[index % targets.Count]) ? targets[index % targets.Count].gameObject : null);

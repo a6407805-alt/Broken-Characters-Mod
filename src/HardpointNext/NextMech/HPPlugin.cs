@@ -20,7 +20,7 @@ public class HPPlugin : BaseUnityPlugin
 
 	public const string NAME = "Hardpoint NEXT";
 
-	public const string VERSION = "0.1.0";
+	public const string VERSION = "0.2.0";
 
 	internal static ManualLogSource Log;
 

@@ -140,8 +140,8 @@
       "match": [
         "hardpointnext"
       ],
-      "version": "0.1.0",
-      "note": "Active WIP (v0.1.0): AC4 take on Hardpoint: chainable QB + 2nd stage, Primal Armor, Overed Boost + km/h, hanger swap, garage parts, FRS tuning"
+      "version": "0.2.0",
+      "note": "Active WIP (v0.2.0): AC arsenal: any arm weapon on M1 or M2 (fire independently), two back units (R + G), 13 weapons with weights, frame load limits + overweight penalty, LOAD meter on HUD"
     }
   ]
 }

@@ -12,6 +12,14 @@ public class HPStatus : MonoBehaviour
 
 	public int magazine;
 
+	public int magazineL;
+
+	public float gatlingSpinR, gatlingSpinL, gatlingLastR = -99f, gatlingLastL = -99f;
+
+	public readonly List<HurtBox> locksL = new List<HurtBox>();
+
+	public List<HurtBox> LocksFor(bool left) => left ? locksL : locks;
+
 	public readonly List<HurtBox> locks = new List<HurtBox>();
 
 	private float lastSpend = -99f;
@@ -38,6 +46,7 @@ public class HPStatus : MonoBehaviour
 		body = GetComponent<CharacterBody>();
 		en = HPConfig.EnCapacity.Value;
 		magazine = HPConfig.RifleMagazine.Value;
+		magazineL = HPConfig.RifleMagazine.Value;
 	}
 
 	public bool CanSpend(float amount)
@@ -88,6 +97,10 @@ public class HPStatus : MonoBehaviour
 		if (redline && en >= value * HPConfig.RedlineRecover.Value)
 		{
 			redline = false;
+		}
+		for (int n = locksL.Count - 1; n >= 0; n--)
+		{
+			if (!locksL[n] || !locksL[n].healthComponent || !locksL[n].healthComponent.alive) locksL.RemoveAt(n);
 		}
 		for (int num = locks.Count - 1; num >= 0; num--)
 		{

@@ -34,6 +34,21 @@ public static class NextConfig
 	public static ConfigEntry<float> LinearDamage;
 	public static ConfigEntry<float> LinearInterval;
 
+	public static ConfigEntry<KeyboardShortcut> LeftBackKey;
+	public static ConfigEntry<float> OverweightPenalty;
+	public static ConfigEntry<float> AssaultRifleDamage;
+	public static ConfigEntry<float> SmgDamage;
+	public static ConfigEntry<float> HandgunDamage;
+	public static ConfigEntry<float> GatlingDamage;
+	public static ConfigEntry<float> PileBunkerDamage;
+	public static ConfigEntry<float> GrenadeDamage;
+	public static ConfigEntry<float> GrenadeRadius;
+	public static ConfigEntry<float> LaserDamage;
+	public static ConfigEntry<float> LaserEnCost;
+	public static ConfigEntry<int> LoadLight;
+	public static ConfigEntry<int> LoadMiddle;
+	public static ConfigEntry<int> LoadHeavy;
+
 	public static ConfigEntry<KeyboardShortcut> TuneKey;
 	public static ConfigEntry<float> TunePointsPerLevel;
 	public static ConfigEntry<float> TunePerPoint;
@@ -69,6 +84,20 @@ public static class NextConfig
 		LinearDamage = cfg.Bind("N4. Hanger", "Linear Rifle Damage", 3f, "Per shot (300%), pierces.");
 		LinearInterval = cfg.Bind("N4. Hanger", "Linear Rifle Interval", 0.7f, "Seconds between shots.");
 
+		LeftBackKey = cfg.Bind("N6. Arsenal", "Left Back Key", new KeyboardShortcut(KeyCode.G), "Fires the left back unit (R fires the right one).");
+		LoadLight = cfg.Bind("N6. Arsenal", "Load Light", 70, "Max weapon load on the Light frame.");
+		LoadMiddle = cfg.Bind("N6. Arsenal", "Load Middle", 100, "Max weapon load on the Middle frame.");
+		LoadHeavy = cfg.Bind("N6. Arsenal", "Load Heavy", 140, "Max weapon load on the Heavy frame.");
+		OverweightPenalty = cfg.Bind("N6. Arsenal", "Overweight Penalty", 0.012f, "Per point over the load: -1.2% speed, quick boost distance and EN recovery (max -60%).");
+		AssaultRifleDamage = cfg.Bind("N6. Arsenal", "Assault Rifle Damage", 0.75f, "");
+		SmgDamage = cfg.Bind("N6. Arsenal", "SMG Damage", 0.4f, "");
+		HandgunDamage = cfg.Bind("N6. Arsenal", "Handgun Damage", 1.8f, "");
+		GatlingDamage = cfg.Bind("N6. Arsenal", "Gatling Damage", 0.5f, "");
+		PileBunkerDamage = cfg.Bind("N6. Arsenal", "Pile Bunker Damage", 14f, "Doubled on an ACS-overloaded target.");
+		GrenadeDamage = cfg.Bind("N6. Arsenal", "Grenade Cannon Damage", 12f, "");
+		GrenadeRadius = cfg.Bind("N6. Arsenal", "Grenade Cannon Radius", 10f, "");
+		LaserDamage = cfg.Bind("N6. Arsenal", "Laser Cannon Damage", 20f, "");
+		LaserEnCost = cfg.Bind("N6. Arsenal", "Laser Cannon EN Cost", 30f, "");
 		TuneKey = cfg.Bind("N5. Tuning", "Key", new KeyboardShortcut(KeyCode.T), "Open the tuning screen (FRS points).");
 		TunePointsPerLevel = cfg.Bind("N5. Tuning", "Points Per Level", 1f, "");
 		TunePerPoint = cfg.Bind("N5. Tuning", "Boost Per Point", 0.05f, "+5% per point.");

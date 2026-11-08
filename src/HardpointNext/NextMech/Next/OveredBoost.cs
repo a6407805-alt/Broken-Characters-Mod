@@ -91,10 +91,10 @@ public class FireShotgun : BaseSkillState
 		base.OnEnter();
 		duration = NextConfig.ShotgunInterval.Value / attackSpeedStat;
 		characterBody.SetAimTimer(2f);
-		Anim.Play(GetModelAnimator(), "Gesture, Override", "FireRifle", 1f);
+		if (!Arsenal.IsLeft(this)) Anim.Play(GetModelAnimator(), "Gesture, Override", "FireRifle", 1f);
 		CustomAudio.PlayNear(CustomAudio.Clip.Stomp, transform.position, 70f);
 		CustomAudio.PlayNear(CustomAudio.Clip.Rifle, transform.position, 70f);
-		if (HPAssets.MuzzleFlash) EffectManager.SimpleMuzzleFlash(HPAssets.MuzzleFlash, gameObject, "MuzzleRifle", false);
+		if (HPAssets.MuzzleFlash) EffectManager.SimpleMuzzleFlash(HPAssets.MuzzleFlash, gameObject, Arsenal.Muzzle(this), false);
 		if (isAuthority)
 		{
 			Ray aim = GetAimRay();
@@ -115,7 +115,7 @@ public class FireShotgun : BaseSkillState
 				maxDistance = 70f,
 				radius = 0.4f,
 				isCrit = RollCrit(),
-				muzzleName = "MuzzleRifle",
+				muzzleName = Arsenal.Muzzle(this),
 				tracerEffectPrefab = HPAssets.Tracer,
 				hitEffectPrefab = HPAssets.HitSpark,
 				smartCollision = true,
@@ -142,10 +142,10 @@ public class FireLinear : BaseSkillState
 		base.OnEnter();
 		duration = NextConfig.LinearInterval.Value / attackSpeedStat;
 		characterBody.SetAimTimer(2f);
-		Anim.Play(GetModelAnimator(), "Gesture, Override", "FireRifle", 0.7f);
+		if (!Arsenal.IsLeft(this)) Anim.Play(GetModelAnimator(), "Gesture, Override", "FireRifle", 0.7f);
 		CustomAudio.PlayNear(CustomAudio.Clip.Rifle, transform.position, 80f);
 		CustomAudio.PlayNear(CustomAudio.Clip.MissileHit, transform.position, 40f);
-		if (HPAssets.MuzzleFlash) EffectManager.SimpleMuzzleFlash(HPAssets.MuzzleFlash, gameObject, "MuzzleRifle", false);
+		if (HPAssets.MuzzleFlash) EffectManager.SimpleMuzzleFlash(HPAssets.MuzzleFlash, gameObject, Arsenal.Muzzle(this), false);
 		if (isAuthority)
 		{
 			Ray aim = GetAimRay();
@@ -166,7 +166,7 @@ public class FireLinear : BaseSkillState
 				maxDistance = 300f,
 				radius = 0.6f,
 				isCrit = RollCrit(),
-				muzzleName = "MuzzleRifle",
+				muzzleName = Arsenal.Muzzle(this),
 				tracerEffectPrefab = HPAssets.Tracer,
 				hitEffectPrefab = HPAssets.Spark ? HPAssets.Spark : HPAssets.HitSpark,
 				stopperMask = LayerIndex.world.mask,

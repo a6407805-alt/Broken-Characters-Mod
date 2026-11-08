@@ -360,7 +360,7 @@ public class ACHud : MonoBehaviour
 		}
 		if ((bool)hPStatus)
 		{
-			foreach (HurtBox @lock in hPStatus.locks)
+			foreach (HurtBox @lock in System.Linq.Enumerable.Concat(hPStatus.locks, hPStatus.locksL))
 			{
 				if ((bool)@lock)
 				{
@@ -371,9 +371,10 @@ public class ACHud : MonoBehaviour
 					}
 				}
 			}
-			if (hPStatus.locks.Count > 0)
+			int lockCount = Mathf.Max(hPStatus.locks.Count, hPStatus.locksL.Count);
+			if (lockCount > 0)
 			{
-				Text(num3, num4 - num9 - 40f, $"MISSILE LOCK  {hPStatus.locks.Count}/{HPConfig.MissileMaxLocks.Value}", 20, Red, TextAnchor.UpperCenter);
+				Text(num3, num4 - num9 - 40f, $"MISSILE LOCK  {lockCount}/{HPConfig.MissileMaxLocks.Value}", 20, Red, TextAnchor.UpperCenter);
 			}
 		}
 		for (int j = 0; j < 2; j++)
@@ -473,13 +474,23 @@ public class ACHud : MonoBehaviour
 			Text(num3 + 25f * (float)genericSkill.maxStock + 10f, num27 - 41f, "QB", 16, Cyan, TextAnchor.UpperLeft);
 		}
 		float x2 = num - 560f;
-		float num30 = num2 - 310f;
+		float num30 = num2 - 370f;
 		SkillLocator skillLocator = body.skillLocator;
 		bool hanger = (bool)pilot && pilot.hangerOut;
 		Slot(x2, num30, hanger ? "R-ARM · HANGER" : "R-ARM", skillLocator ? skillLocator.primary : null, "M1", hanger ? "" : (hPStatus ? hPStatus.magazine.ToString() : ""), hanger ? null : $"/ {HPConfig.RifleMagazine.Value}");
-		Slot(x2, num30 + 64f, "L-ARM", skillLocator ? skillLocator.secondary : null, "M2", "", null);
+		GenericSkill lArm = skillLocator ? skillLocator.secondary : null;
+		bool lRifle = (bool)lArm && Arsenal.Of(lArm.skillDef)?.id == "BURSTRIFLE";
+		Slot(x2, num30 + 64f, "L-ARM", lArm, "M2", lRifle && hPStatus ? hPStatus.magazineL.ToString() : "", lRifle ? $"/ {HPConfig.RifleMagazine.Value}" : null);
 		Slot(x2, num30 + 128f, "BOOSTER", skillLocator ? skillLocator.utility : null, "SHIFT", "", null);
-		Slot(x2, num30 + 192f, "BACK / CORE", skillLocator ? skillLocator.special : null, "R", "", null);
+		Slot(x2, num30 + 192f, "R-BACK", skillLocator ? skillLocator.special : null, "R", "", null);
+		Slot(x2, num30 + 256f, "L-BACK", NextPilot.BackLeftSlot(body), NextConfig.LeftBackKey.Value.MainKey.ToString(), "", null);
+		int load = Garage.Load(body), maxLoad = Garage.MaxLoad(body);
+		bool heavy = load > maxLoad;
+		Text(x2, num30 - 34f, $"LOAD {load} / {maxLoad}", 18, heavy ? Red : Dim, TextAnchor.UpperLeft, mono);
+		if (heavy)
+		{
+			Text(x2 + 200f, num30 - 34f, "OVERWEIGHT", 18, Red, TextAnchor.UpperLeft);
+		}
 		float num31 = 28f;
 		Corner(num31, num31, 1, 1);
 		Corner(num - num31, num31, -1, 1);

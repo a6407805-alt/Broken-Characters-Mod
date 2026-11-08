@@ -50,7 +50,7 @@ public class PulseBlade : BaseSkillState
 			}
 			if ((bool)base.inputBank)
 			{
-				if (!base.inputBank.skill2.down)
+				if (!Arsenal.Held(this))
 				{
 					released = true;
 				}

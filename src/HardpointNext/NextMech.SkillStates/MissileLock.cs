@@ -14,13 +14,18 @@ public class MissileLock : BaseSkillState
 
 	private HPStatus status;
 
+	private bool left;
+
+	private System.Collections.Generic.List<HurtBox> Locks => status.LocksFor(left);
+
 	public override void OnEnter()
 	{
 		base.OnEnter();
 		status = HPStatus.Of(base.characterBody);
+		left = Arsenal.IsLeft(this);
 		if ((bool)status)
 		{
-			status.locks.Clear();
+			Locks.Clear();
 		}
 	}
 
@@ -35,7 +40,7 @@ public class MissileLock : BaseSkillState
 				timer = 0f;
 				Lock();
 			}
-			if (!base.inputBank || !base.inputBank.skill4.down || base.fixedAge >= HPConfig.MissileMaxHold.Value)
+			if (!base.inputBank || !Arsenal.Held(this) || base.fixedAge >= HPConfig.MissileMaxHold.Value)
 			{
 				outer.SetNextState(new MissileFire());
 			}
@@ -44,7 +49,7 @@ public class MissileLock : BaseSkillState
 
 	private void Lock()
 	{
-		if (!status || status.locks.Count >= HPConfig.MissileMaxLocks.Value)
+		if (!status || Locks.Count >= HPConfig.MissileMaxLocks.Value)
 		{
 			return;
 		}
@@ -63,8 +68,8 @@ public class MissileLock : BaseSkillState
 		{
 			return;
 		}
-		HurtBox item = Enumerable.FirstOrDefault<HurtBox>((IEnumerable<HurtBox>)list, (Func<HurtBox, bool>)((HurtBox h) => !Enumerable.Any<HurtBox>((IEnumerable<HurtBox>)status.locks, (Func<HurtBox, bool>)((HurtBox l) => (bool)l && l.healthComponent == h.healthComponent)))) ?? list[0];
-		status.locks.Add(item);
+		HurtBox item = Enumerable.FirstOrDefault<HurtBox>((IEnumerable<HurtBox>)list, (Func<HurtBox, bool>)((HurtBox h) => !Enumerable.Any<HurtBox>((IEnumerable<HurtBox>)Locks, (Func<HurtBox, bool>)((HurtBox l) => (bool)l && l.healthComponent == h.healthComponent)))) ?? list[0];
+		Locks.Add(item);
 		CustomAudio.Play(CustomAudio.Clip.Lock);
 	}
 

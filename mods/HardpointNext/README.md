@@ -19,3 +19,24 @@ from `plugins/Hardpoint/` (reused if Hardpoint already loaded it), so keep Hardp
   generator output, generator capacity. Kept for the run.
 
 All numbers: `BepInEx/config/com.ahren.HardpointNext.cfg` (sections N1-N5 are the new systems).
+
+## Arsenal (v0.2)
+
+- **Arms:** both M1 (right arm) and M2 (left arm) pick from the same list and fire on their own.
+- **Back units:** R fires the right back, **G** fires the left back.
+- **Weights (load):** Light 70, Middle 100, Heavy 140. Over the limit = overweight: -1.2% speed, quick boost
+  distance and EN recovery per point over (max -60%). HUD shows `LOAD x / y`.
+
+| Arm weapon | Wt | | Back unit | Wt |
+|---|---|---|---|---|
+| Burst Rifle | 12 | | Missile Salvo | 22 |
+| Assault Rifle | 14 | | Grenade Cannon | 40 |
+| SMG | 8 | | Laser Cannon | 32 |
+| Shotgun | 16 | | Assault Armor | 18 |
+| Linear Rifle | 20 | | | |
+| Gatling | 34 | | | |
+| Handgun | 8 | | | |
+| Pulse Blade | 10 | | | |
+| Pile Bunker | 24 | | | |
+
+The hanger weapon counts toward the load too.

@@ -22,7 +22,8 @@ public class ReloadRifle : BaseSkillState
 			HPStatus hPStatus = HPStatus.Of(base.characterBody);
 			if ((bool)hPStatus)
 			{
-				hPStatus.magazine = HPConfig.RifleMagazine.Value;
+				if (Arsenal.IsLeft(this)) hPStatus.magazineL = HPConfig.RifleMagazine.Value;
+				else hPStatus.magazine = HPConfig.RifleMagazine.Value;
 			}
 			if (base.isAuthority)
 			{

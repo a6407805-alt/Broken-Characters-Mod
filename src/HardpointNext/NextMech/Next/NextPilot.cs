@@ -15,6 +15,23 @@ public class NextPilot : MonoBehaviour
 	public bool obStopRequested;
 	public float lastQbTime = -99f;
 	public bool lastQbWasSecond;
+	public bool leftBackHeld;
+	private GenericSkill backLeft;
+
+	// The left back unit's skill slot (not one of the four vanilla slots; fired with G).
+	public static GenericSkill BackLeftSlot(CharacterBody b)
+	{
+		NextPilot p = Of(b);
+		if (!p) return null;
+		if (!p.backLeft)
+		{
+			foreach (GenericSkill gs in p.GetComponents<GenericSkill>())
+			{
+				if (gs && gs.skillName == "BackLeft") { p.backLeft = gs; break; }
+			}
+		}
+		return p.backLeft;
+	}
 
 	private CharacterBody body;
 	private EntityStateMachine boostMachine;
@@ -45,7 +62,18 @@ public class NextPilot : MonoBehaviour
 
 	private void Update()
 	{
-		if (!IsLocalPilot()) return;
+		if (!IsLocalPilot())
+		{
+			leftBackHeld = false;
+			return;
+		}
+		KeyCode lb = NextConfig.LeftBackKey.Value.MainKey;
+		leftBackHeld = lb != KeyCode.None && Input.GetKey(lb);
+		if (KeyDown(NextConfig.LeftBackKey.Value))
+		{
+			GenericSkill slot = BackLeftSlot(body);
+			if (slot) slot.ExecuteIfReady();
+		}
 		if (KeyDown(NextConfig.ObKey.Value)) ToggleOveredBoost();
 		if (KeyDown(NextConfig.HangerKey.Value)) SwapHanger();
 	}
@@ -71,6 +99,7 @@ public class NextPilot : MonoBehaviour
 		if (!primary) return;
 		HangerPart part = Garage.Hanger(body);
 		SkillDef def = part == HangerPart.None ? null : Garage.Hangers[(int)part];
+		if (!hangerOut && def && primary.baseSkill == def) return;
 		if (hangerOut)
 		{
 			foreach (SkillDef d in Garage.Hangers) if (d) primary.UnsetSkillOverride(this, d, GenericSkill.SkillOverridePriority.Replacement);

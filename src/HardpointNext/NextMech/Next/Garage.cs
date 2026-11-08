@@ -109,6 +109,37 @@ public static class Garage
 	public static GeneratorPart Generator(CharacterBody b) => (GeneratorPart)Get(b, "Generator");
 	public static HangerPart Hanger(CharacterBody b) => (HangerPart)Get(b, "Hanger");
 
+	// ---- weapon load (AC weight limits) ----
+
+	public static int MaxLoad(CharacterBody b)
+	{
+		switch (Frame(b))
+		{
+			case FramePart.Light: return NextConfig.LoadLight.Value;
+			case FramePart.Heavy: return NextConfig.LoadHeavy.Value;
+			default: return NextConfig.LoadMiddle.Value;
+		}
+	}
+
+	public static int Load(CharacterBody b)
+	{
+		NextParts parts = b ? b.GetComponent<NextParts>() : null;
+		if (!parts) return 0;
+		int load = Arsenal.WeightOf(parts.Slot("Primary")) + Arsenal.WeightOf(parts.Slot("Secondary"))
+			+ Arsenal.WeightOf(parts.Slot("Special")) + Arsenal.WeightOf(parts.Slot("BackLeft"));
+		switch (Hanger(b))
+		{
+			case HangerPart.Shotgun: load += Arsenal.Arms.Find(w => w.id == "SHOTGUN")?.weight ?? 0; break;
+			case HangerPart.LinearRifle: load += Arsenal.Arms.Find(w => w.id == "LINEAR")?.weight ?? 0; break;
+		}
+		return load;
+	}
+
+	public static int Overweight(CharacterBody b) => Mathf.Max(0, Load(b) - MaxLoad(b));
+
+	// 1 = no penalty; drops per point over the load, down to 0.4.
+	public static float WeightFactor(CharacterBody b) => 1f - Mathf.Min(0.6f, Overweight(b) * NextConfig.OverweightPenalty.Value);
+
 	// ---- what the parts do (multipliers; 1 = Hardpoint's numbers) ----
 
 	public static float QbDistance(CharacterBody b)
@@ -116,7 +147,7 @@ public static class Garage
 		float m = 1f;
 		switch (Frame(b)) { case FramePart.Light: m *= 1.15f; break; case FramePart.Heavy: m *= 0.85f; break; }
 		switch (Booster(b)) { case BoosterPart.QuickType: m *= 1.25f; break; case BoosterPart.OverType: m *= 0.85f; break; }
-		return m * Tuning.Mult(Tuning.Stat.QuickBoost);
+		return m * Tuning.Mult(Tuning.Stat.QuickBoost) * WeightFactor(b);
 	}
 
 	public static float QbCost(CharacterBody b)
@@ -153,7 +184,7 @@ public static class Garage
 		float m = 1f;
 		switch (Generator(b)) { case GeneratorPart.HighOutput: m *= 1.4f; break; case GeneratorPart.HighCapacity: m *= 0.85f; break; case GeneratorPart.Kojima: m *= 0.85f; break; }
 		if (Frame(b) == FramePart.Heavy) m *= 0.9f;
-		return m * Tuning.Mult(Tuning.Stat.Output);
+		return m * Tuning.Mult(Tuning.Stat.Output) * WeightFactor(b);
 	}
 
 	public static float HoverCost(CharacterBody b)
@@ -178,6 +209,7 @@ public static class Garage
 	internal static void Stats(CharacterBody body, RecalculateStatsAPI.StatHookEventArgs args)
 	{
 		if (!body || !HPUtil.IsMine(body)) return;
+		args.moveSpeedMultAdd -= 1f - WeightFactor(body);
 		switch (Frame(body))
 		{
 			case FramePart.Light:
@@ -206,6 +238,21 @@ public class NextParts : MonoBehaviour
 		foreach (GenericSkill gs in GetComponents<GenericSkill>())
 		{
 			if (gs && !string.IsNullOrEmpty(gs.skillName)) slots[gs.skillName] = gs;
+		}
+	}
+
+	public GenericSkill Slot(string slot) => slots.TryGetValue(slot, out GenericSkill gs) ? gs : null;
+
+	private int lastLoad = -1;
+
+	private void FixedUpdate()
+	{
+		// weapon swaps between stages change the load: refresh the speed penalty
+		int load = Garage.Load(body);
+		if (load != lastLoad)
+		{
+			lastLoad = load;
+			if (body) body.MarkAllStatsDirty();
 		}
 	}
 
