@@ -10,6 +10,7 @@ using RoR2;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 using Random = UnityEngine.Random;
+using Path = System.IO.Path;
 
 namespace BerserkFury
 {
