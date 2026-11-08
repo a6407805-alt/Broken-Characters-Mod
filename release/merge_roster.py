@@ -101,7 +101,10 @@ for char in data.get("characters", []):
 NOT_CHARACTERS = {
     "BCMDevTools", "CharacterStatus", "DropPodRevive", "EffectBudgetFix", "Jukebox", "MoreEnemiesMod",
     "ScrollableLobby", "winhttp", "LocustHorde", "SpecialForces", "AudiWPB",
+    # libraries / fixes / QoL (not characters)
+    "score-MiscFixes", "pseudopulse-SeekersPatcher", "MMHOOK", "CorpseRemover", "VincesQualityOfLife",
 }
+LIBRARY_PREFIXES = ("RiskofThunder-",)
 REPO = "a6407805-alt/Broken-Characters-Mod"
 GENERATE = os.environ.get("BCM_CARD_IMAGES_DIR")  # set on the publish job: where to write card-<Mod>.png
 
@@ -161,7 +164,7 @@ known_folders = set(MOD_FOLDER.values()) | {p.stem for p in cards_dir.glob("*.js
 known_names = {str(c.get("name", "")).strip().upper() for c in data["characters"]}
 for mod_dir in sorted((root / "mods").iterdir()) if (root / "mods").is_dir() else []:
     folder = mod_dir.name
-    if folder in NOT_CHARACTERS or folder in known_folders or not any(mod_dir.glob("*.dll")):
+    if folder in NOT_CHARACTERS or folder.startswith(LIBRARY_PREFIXES) or folder in known_folders or not any(mod_dir.glob("*.dll")):
         continue
     try:
         manifest = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8-sig"))
