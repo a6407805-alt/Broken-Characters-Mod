@@ -1,0 +1,228 @@
+using System;
+using System.Collections.Generic;
+using EntityStates;
+using R2API;
+using RoR2;
+using RoR2.Skills;
+using UnityEngine;
+
+namespace NextMech;
+
+public enum FramePart { Middle, Light, Heavy }
+public enum BoosterPart { Standard, QuickType, OverType }
+public enum GeneratorPart { Standard, HighOutput, HighCapacity, Kojima }
+public enum HangerPart { Shotgun, LinearRifle, None }
+
+// The garage: extra loadout rows (FRAME / BOOSTER / GENERATOR / HANGER) on the character select screen.
+// They are never activated as skills; the chosen variant is read back as a part. The loadout is networked,
+// so every machine knows each NEXT's parts.
+public static class Garage
+{
+	private static readonly Dictionary<SkillDef, int> partIndex = new Dictionary<SkillDef, int>();
+
+	public static SkillDef[] Hangers = new SkillDef[2];
+
+	public static void CreateSlots(GameObject body)
+	{
+		Row(body, "Frame", "FRAME", new[] { "MIDDLE", "LIGHT", "HEAVY" },
+			new[] { new Color(0.55f, 0.6f, 0.65f), new Color(0.35f, 0.85f, 1f), new Color(0.85f, 0.55f, 0.2f) });
+		Row(body, "Booster", "BOOSTER", new[] { "STANDARD", "QUICK", "OVERED" },
+			new[] { new Color(0.55f, 0.6f, 0.65f), new Color(0.3f, 1f, 0.6f), new Color(1f, 0.4f, 0.25f) });
+		Row(body, "Generator", "GENERATOR", new[] { "STANDARD", "OUTPUT", "CAPACITY", "KOJIMA" },
+			new[] { new Color(0.55f, 0.6f, 0.65f), new Color(1f, 0.85f, 0.25f), new Color(0.35f, 0.55f, 1f), new Color(0.3f, 1f, 0.85f) });
+		Row(body, "Hanger", "HANGER", new[] { "SHOTGUN", "LINEAR", "NONE" },
+			new[] { new Color(1f, 0.6f, 0.3f), new Color(0.6f, 0.4f, 1f), new Color(0.3f, 0.3f, 0.3f) });
+	}
+
+	private static void Row(GameObject body, string slot, string token, string[] variants, Color[] colors)
+	{
+		var defs = new SkillDef[variants.Length];
+		for (int i = 0; i < variants.Length; i++)
+		{
+			SkillDef def = ScriptableObject.CreateInstance<SkillDef>();
+			def.skillName = "HardpointNext" + slot + variants[i];
+			((UnityEngine.Object)def).name = def.skillName;
+			def.skillNameToken = "BCM_NEXT_" + token + "_" + variants[i] + "_NAME";
+			def.skillDescriptionToken = "BCM_NEXT_" + token + "_" + variants[i] + "_DESCRIPTION";
+			def.icon = PartIcon(colors[i], i, variants.Length);
+			def.activationState = new SerializableEntityStateType(typeof(Idle));
+			def.activationStateMachineName = "Body";
+			def.baseRechargeInterval = 0f;
+			def.baseMaxStock = 0;
+			def.rechargeStock = 0;
+			def.requiredStock = 1;
+			def.isCombatSkill = false;
+			ContentAddition.AddSkillDef(def);
+			defs[i] = def;
+			partIndex[def] = i;
+		}
+		GenericSkill gs = HPContent.AddSkillSlot(body, slot, defs);
+		gs.loadoutTitleToken = "BCM_NEXT_GARAGE_" + token;
+		gs.hideInCharacterSelect = false;
+	}
+
+	// Plain procedural icon: coloured plate with N bars (which variant it is).
+	private static Sprite PartIcon(Color c, int index, int count)
+	{
+		const int S = 128;
+		var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+		var px = new Color[S * S];
+		Color bg = new Color(0.07f, 0.08f, 0.1f);
+		for (int y = 0; y < S; y++)
+		{
+			for (int x = 0; x < S; x++)
+			{
+				Color p = bg;
+				bool border = x < 6 || y < 6 || x >= S - 6 || y >= S - 6;
+				if (border) p = c * 0.8f;
+				// diagonal hazard stripe in the corner
+				if (x + y < 40 && ((x + y) / 6) % 2 == 0) p = c;
+				// bars
+				int bars = index + 1;
+				for (int b = 0; b < bars; b++)
+				{
+					int bx = 34 + b * 22;
+					if (x >= bx && x < bx + 14 && y >= 34 && y < 94) p = c;
+				}
+				p.a = 1f;
+				px[y * S + x] = p;
+			}
+		}
+		tex.SetPixels(px);
+		tex.Apply();
+		return Sprite.Create(tex, new Rect(0, 0, S, S), new Vector2(0.5f, 0.5f));
+	}
+
+	public static int Get(CharacterBody body, string slot)
+	{
+		NextParts parts = body ? body.GetComponent<NextParts>() : null;
+		return parts ? parts.Get(slot) : 0;
+	}
+
+	internal static int IndexOf(SkillDef def)
+	{
+		return def && partIndex.TryGetValue(def, out int i) ? i : 0;
+	}
+
+	public static FramePart Frame(CharacterBody b) => (FramePart)Get(b, "Frame");
+	public static BoosterPart Booster(CharacterBody b) => (BoosterPart)Get(b, "Booster");
+	public static GeneratorPart Generator(CharacterBody b) => (GeneratorPart)Get(b, "Generator");
+	public static HangerPart Hanger(CharacterBody b) => (HangerPart)Get(b, "Hanger");
+
+	// ---- what the parts do (multipliers; 1 = Hardpoint's numbers) ----
+
+	public static float QbDistance(CharacterBody b)
+	{
+		float m = 1f;
+		switch (Frame(b)) { case FramePart.Light: m *= 1.15f; break; case FramePart.Heavy: m *= 0.85f; break; }
+		switch (Booster(b)) { case BoosterPart.QuickType: m *= 1.25f; break; case BoosterPart.OverType: m *= 0.85f; break; }
+		return m * Tuning.Mult(Tuning.Stat.QuickBoost);
+	}
+
+	public static float QbCost(CharacterBody b)
+	{
+		float m = 1f;
+		switch (Frame(b)) { case FramePart.Light: m *= 0.85f; break; case FramePart.Heavy: m *= 1.3f; break; }
+		if (Booster(b) == BoosterPart.QuickType) m *= 1.15f;
+		return m;
+	}
+
+	public static float ObSpeed(CharacterBody b)
+	{
+		float m = 1f;
+		switch (Booster(b)) { case BoosterPart.QuickType: m *= 0.85f; break; case BoosterPart.OverType: m *= 1.35f; break; }
+		if (Frame(b) == FramePart.Light) m *= 1.1f;
+		if (Frame(b) == FramePart.Heavy) m *= 0.9f;
+		return m * Tuning.Mult(Tuning.Stat.OveredBoost);
+	}
+
+	public static float ObCost(CharacterBody b)
+	{
+		return Booster(b) == BoosterPart.OverType ? 0.8f : 1f;
+	}
+
+	public static float EnCapacity(CharacterBody b)
+	{
+		float m = 1f;
+		switch (Generator(b)) { case GeneratorPart.HighOutput: m *= 0.8f; break; case GeneratorPart.HighCapacity: m *= 1.5f; break; case GeneratorPart.Kojima: m *= 0.9f; break; }
+		return m * Tuning.Mult(Tuning.Stat.Capacity);
+	}
+
+	public static float EnRegen(CharacterBody b)
+	{
+		float m = 1f;
+		switch (Generator(b)) { case GeneratorPart.HighOutput: m *= 1.4f; break; case GeneratorPart.HighCapacity: m *= 0.85f; break; case GeneratorPart.Kojima: m *= 0.85f; break; }
+		if (Frame(b) == FramePart.Heavy) m *= 0.9f;
+		return m * Tuning.Mult(Tuning.Stat.Output);
+	}
+
+	public static float HoverCost(CharacterBody b)
+	{
+		return 1f / Tuning.Mult(Tuning.Stat.MainBooster);
+	}
+
+	// PA parts are read on the server (no tuning: tuning is per player and only known on their own machine).
+	public static float PaMax(CharacterBody b)
+	{
+		float m = 1f;
+		switch (Frame(b)) { case FramePart.Light: m *= 0.6f; break; case FramePart.Heavy: m *= 1.5f; break; }
+		if (Generator(b) == GeneratorPart.Kojima) m *= 1.2f;
+		return m;
+	}
+
+	public static float PaRegen(CharacterBody b)
+	{
+		return Generator(b) == GeneratorPart.Kojima ? 1.6f : 1f;
+	}
+
+	internal static void Stats(CharacterBody body, RecalculateStatsAPI.StatHookEventArgs args)
+	{
+		if (!body || !HPUtil.IsMine(body)) return;
+		switch (Frame(body))
+		{
+			case FramePart.Light:
+				args.healthMultAdd -= 0.3f;
+				args.moveSpeedMultAdd += 0.2f;
+				break;
+			case FramePart.Heavy:
+				args.healthMultAdd += 0.35f;
+				args.armorAdd += 25f;
+				args.moveSpeedMultAdd -= 0.15f;
+				break;
+		}
+	}
+}
+
+// Caches the body's chosen parts (read from its loadout rows).
+public class NextParts : MonoBehaviour
+{
+	private readonly Dictionary<string, GenericSkill> slots = new Dictionary<string, GenericSkill>();
+	private readonly Dictionary<string, int> last = new Dictionary<string, int>();
+	private CharacterBody body;
+
+	private void Awake()
+	{
+		body = GetComponent<CharacterBody>();
+		foreach (GenericSkill gs in GetComponents<GenericSkill>())
+		{
+			if (gs && !string.IsNullOrEmpty(gs.skillName)) slots[gs.skillName] = gs;
+		}
+	}
+
+	public int Get(string slot)
+	{
+		if (!slots.TryGetValue(slot, out GenericSkill gs) || !gs) return 0;
+		int i = Garage.IndexOf(gs.baseSkill ? gs.baseSkill : gs.skillDef);
+		if (!last.TryGetValue(slot, out int old) || old != i)
+		{
+			last[slot] = i;
+			if (body) body.MarkAllStatsDirty();
+		}
+		return i;
+	}
+
+	private void Start()
+	{
+		if (body) body.MarkAllStatsDirty();
+	}
+}

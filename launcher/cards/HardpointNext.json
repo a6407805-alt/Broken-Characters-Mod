@@ -1,0 +1,14 @@
+{
+  "characters": [
+    {
+      "name": "HARDPOINT NEXT",
+      "tagline": "Hardpoint, For Answer style. Quick boost, Primal Armor, overed boost.",
+      "added": "2026-11-07T21:00:00-05:00",
+      "accent": "#59E5FF",
+      "status": "active",
+      "version": "0.1.0",
+      "note": "Active WIP (v0.1.0): AC4 take on Hardpoint: chainable QB + 2nd stage, Primal Armor, Overed Boost (V) + km/h, hanger swap (F), garage parts in the loadout, FRS tuning (T)",
+      "image": "Assets/Roster/HardpointNext.png"
+    }
+  ]
+}

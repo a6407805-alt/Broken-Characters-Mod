@@ -133,6 +133,15 @@
         "mommy"
       ],
       "version": "1.0.0"
+    },
+    {
+      "name": "HARDPOINT NEXT",
+      "status": "active",
+      "match": [
+        "hardpointnext"
+      ],
+      "version": "0.1.0",
+      "note": "Active WIP (v0.1.0): AC4 take on Hardpoint: chainable QB + 2nd stage, Primal Armor, Overed Boost + km/h, hanger swap, garage parts, FRS tuning"
     }
   ]
 }
