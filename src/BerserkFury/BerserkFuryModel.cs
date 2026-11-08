@@ -292,6 +292,8 @@ namespace BerserkFury
         public Renderer Keep;
         private CharacterModel _model;
 
+        private bool _logged;
+
         private void LateUpdate()
         {
             if (!_model) _model = GetComponent<CharacterModel>();
@@ -300,6 +302,40 @@ namespace BerserkFury
             {
                 Transform v = transform.Find("BerserkFuryVisual");
                 if (v) Keep = v.GetComponent<Renderer>();
+                else
+                {
+                    // Visual missing on this instance: rebuild it here.
+                    BerserkFuryModel.Attach(gameObject);
+                    v = transform.Find("BerserkFuryVisual");
+                    if (v) Keep = v.GetComponent<Renderer>();
+                }
+            }
+            if (Keep)
+            {
+                // The skin replaces baseRendererInfos at spawn (dropping ours) and can turn renderers off.
+                if (!Keep.gameObject.activeSelf) Keep.gameObject.SetActive(true);
+                if (!Keep.enabled) Keep.enabled = true;
+                if (Keep.forceRenderingOff) Keep.forceRenderingOff = false;
+                bool listed = false;
+                foreach (var info in _model.baseRendererInfos) if (info.renderer == Keep) { listed = true; break; }
+                if (!listed)
+                {
+                    var list = new System.Collections.Generic.List<CharacterModel.RendererInfo>(_model.baseRendererInfos);
+                    list.Add(new CharacterModel.RendererInfo
+                    {
+                        renderer = Keep,
+                        defaultMaterial = Keep.sharedMaterial,
+                        defaultShadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On,
+                        ignoreOverlays = false
+                    });
+                    _model.baseRendererInfos = list.ToArray();
+                }
+                if (!_logged)
+                {
+                    _logged = true;
+                    var mf = Keep.GetComponent<MeshFilter>();
+                    BerserkFuryPlugin.Log.LogInfo($"[Visual] {name}: listed={listed} mesh={(mf && mf.sharedMesh ? mf.sharedMesh.vertexCount.ToString() : "NONE")} mat={(Keep.sharedMaterial ? Keep.sharedMaterial.shader.name : "NONE")} bounds={Keep.bounds.size} scale={Keep.transform.lossyScale}");
+                }
             }
             foreach (var info in _model.baseRendererInfos)
             {

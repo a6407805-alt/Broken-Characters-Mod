@@ -23,7 +23,7 @@ namespace BerserkFury
             StartAimMode(aim, 2f, false);
 
             _alternateSide = !_alternateSide;
-            Vector3 sideOffset = characterBody.transform.right * (_alternateSide ? 0.9f : -0.9f) + Vector3.up * 1.5f;
+            Vector3 sideOffset = characterBody.gameObject.transform.right * (_alternateSide ? 0.9f : -0.9f) + Vector3.up * 1.5f;
 
             if (isAuthority)
             {
