@@ -229,7 +229,6 @@ namespace BCMDevTools
                 if (ctp)
                 {
                     Logger.LogInfo($"Dump: cam params={(ctp.cameraParams ? ctp.cameraParams.name : "null")} ideal={(ctp.cameraParams ? ctp.cameraParams.data.idealLocalCameraPos.value.ToString() : "-")} pivotOff={(ctp.cameraParams ? ctp.cameraParams.data.pivotVerticalOffset.value.ToString() : "-")} pivot={(ctp.cameraPivotTransform ? ctp.cameraPivotTransform.position.ToString() : "null")}");
-                    Logger.LogInfo("Dump: cam current " + Traverse.Create(ctp).Property("currentCameraParamsData").GetValue()?.ToString());
                 }
                 foreach (CameraRigController rig in CameraRigController.readOnlyInstancesList)
                     if (rig && rig.sceneCam) Logger.LogInfo($"Dump: camera pos={rig.sceneCam.transform.position} fwd={rig.sceneCam.transform.forward} dist={(rig.sceneCam.transform.position - me.corePosition).magnitude:F1}");

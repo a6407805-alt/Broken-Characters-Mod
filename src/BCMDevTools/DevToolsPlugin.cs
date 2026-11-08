@@ -26,7 +26,7 @@ using Path = System.IO.Path;
 
 namespace BCMDevTools
 {
-    [BepInPlugin(Guid, "BCM Dev Tools", "1.0.3")]
+    [BepInPlugin(Guid, "BCM Dev Tools", "1.0.4")]
     public partial class DevToolsPlugin : BaseUnityPlugin
     {
         public const string Guid = "com.a6407805.bcmdevtools";
