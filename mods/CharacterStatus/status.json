@@ -142,6 +142,15 @@
       ],
       "version": "0.2.2",
       "note": "Active WIP (v0.2.2): AC4 floaty movement (vertical booster with momentum, slow capped fall, air drift + Sprint air glide, heavy landings), booster flame/glow/trail, every gun has its own feel (tracers, flashes, bloom, recoil, knockback; linear charges, pulse gun fires bolts)"
+    },
+    {
+      "name": "GRAVITOS NEXT",
+      "status": "active",
+      "match": [
+        "gravitosnext"
+      ],
+      "version": "0.1.0",
+      "note": "Active WIP (v0.1.0): new original Blender model (Lodestar) on the Engineer rig, orbiting rings + hand shards; kit still Gravitos 1.2.1"
     }
   ]
 }
