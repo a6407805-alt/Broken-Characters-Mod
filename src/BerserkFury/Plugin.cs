@@ -21,7 +21,7 @@ namespace BerserkFury
     {
         public const string PluginGUID = "com.bcm.berserkfury";
         public const string PluginName = "BerserkFury";
-        public const string PluginVersion = "0.1.3";
+        public const string PluginVersion = "0.1.4";
         public const string TokenPrefix = "BCM_BERSERKFURY_";
 
         public static ManualLogSource Log;
@@ -89,6 +89,21 @@ namespace BerserkFury
 
             Texture portraitTex = LoadTexture("portrait");
             if (portraitTex) body.portraitIcon = portraitTex;
+
+            // Camera: this Zoid is ~3x Commando's size, so pull the camera back and up.
+            try
+            {
+                CameraTargetParams ctp = BodyPrefab.GetComponent<CameraTargetParams>();
+                if (ctp && ctp.cameraParams)
+                {
+                    CharacterCameraParams ccp = UnityEngine.Object.Instantiate(ctp.cameraParams);
+                    ccp.name = "ccpBerserkFury";
+                    ccp.data.idealLocalCameraPos = new Vector3(0f, 1.2f, -13f);
+                    ccp.data.pivotVerticalOffset = 1.6f;
+                    ctp.cameraParams = ccp;
+                }
+            }
+            catch (System.Exception e) { Log.LogWarning("Camera params: " + e.Message); }
 
             // Attach passive controller
             BodyPrefab.AddComponent<BerserkFuryPassiveController>();

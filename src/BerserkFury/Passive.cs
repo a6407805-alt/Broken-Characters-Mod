@@ -117,14 +117,8 @@ namespace BerserkFury
             Destroy(_shieldVisual.GetComponent<Collider>());
             _shieldVisual.transform.localScale = new Vector3(3f, 3f, 1f);
 
-            Shader hgStandard = Shader.Find("Hopoo Games/Deferred/Standard");
-            if (!hgStandard) hgStandard = LegacyResourcesAPI.Load<Shader>("Shaders/Deferred/HGStandard");
-
-            Material mat = new Material(hgStandard ? hgStandard : Shader.Find("Standard"));
+            Material mat = BerserkFuryModel.SafeMaterial(null, new Color(0.2f, 0.8f, 1f), new Color(0f, 0.7f, 1f), 0.4f);
             mat.name = "matBerserkFuryEShield";
-            if (mat.HasProperty("_Color")) mat.SetColor("_Color", new Color(0f, 0.9f, 1f, 0.45f));
-            if (mat.HasProperty("_EmColor")) mat.SetColor("_EmColor", new Color(0f, 0.8f, 1f));
-            if (mat.HasProperty("_EmPower")) mat.SetFloat("_EmPower", 0.5f);
 
             var mr = _shieldVisual.GetComponent<MeshRenderer>();
             mr.material = mat;

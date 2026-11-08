@@ -78,37 +78,58 @@ namespace BerserkFury
             return tex;
         }
 
-        private static Material CreateMaterial(Texture2D mainTex)
+        private static Material CreateMaterial(Texture2D mainTex) => SafeMaterial(mainTex, Color.white, Color.black, 0f);
+
+        public static Material SafeMaterial(Texture mainTex, Color color, Color em, float emPower)
         {
-            Shader hgStandard = Shader.Find("Hopoo Games/Deferred/Standard");
-            if (!hgStandard) hgStandard = LegacyResourcesAPI.Load<Shader>("Shaders/Deferred/HGStandard");
+            // Start from Commando's real material (all Hopoo properties sane) instead of a blank HG Standard:
+            // blank defaults (spec exponent 0, fresnel, flowmap) produced NaN/over-bright pixels and bloom whited out the screen.
+            Material baseMat = null;
+            try
+            {
+                GameObject commando = LegacyResourcesAPI.Load<GameObject>("Prefabs/CharacterBodies/CommandoBody");
+                CharacterModel cm = commando ? commando.GetComponentInChildren<CharacterModel>(true) : null;
+                if (cm && cm.baseRendererInfos != null)
+                    foreach (var info in cm.baseRendererInfos)
+                        if (info.defaultMaterial && info.defaultMaterial.shader && info.defaultMaterial.shader.name.Contains("Hopoo")) { baseMat = info.defaultMaterial; break; }
+            }
+            catch (Exception e) { BerserkFuryPlugin.Log.LogWarning("Commando material: " + e.Message); }
 
             Material mat;
-            if (hgStandard)
-            {
-                mat = new Material(hgStandard);
-            }
+            if (baseMat) mat = new Material(baseMat);
             else
             {
-                // Fall back to borrowing Commando's material
-                GameObject commando = LegacyResourcesAPI.Load<GameObject>("Prefabs/CharacterBodies/CommandoBody");
-                Renderer cr = commando ? commando.GetComponentInChildren<Renderer>(true) : null;
-                mat = cr && cr.sharedMaterial ? new Material(cr.sharedMaterial) : new Material(Shader.Find("Standard"));
+                Shader hg = null;
+                try { hg = LegacyResourcesAPI.Load<Shader>("Shaders/Deferred/HGStandard"); } catch { }
+                mat = new Material(hg ? hg : Shader.Find("Hopoo Games/Deferred/Standard"));
             }
 
             mat.name = "matBerserkFury";
-            mat.mainTexture = mainTex;
-            if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
-            if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", mainTex);
-            if (mat.HasProperty("_SpecularStrength")) mat.SetFloat("_SpecularStrength", 0.65f);
-            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.5f);
-            // No _EmTex means the whole mesh emits, which blew the model out to flat magenta. Emission off.
-            if (mat.HasProperty("_EmTex")) mat.SetTexture("_EmTex", null);
-            if (mat.HasProperty("_EmColor")) mat.SetColor("_EmColor", Color.black);
-            if (mat.HasProperty("_EmPower")) mat.SetFloat("_EmPower", 0f);
-            if (mat.HasProperty("_RampInfo")) mat.SetFloat("_RampInfo", 1f);
+            SetTex(mat, "_MainTex", mainTex ? mainTex : Texture2D.whiteTexture);
+            SetColor(mat, "_Color", color);
+            SetTex(mat, "_NormalTex", null);
+            SetFloat(mat, "_NormalStrength", 0f);
+            SetTex(mat, "_EmTex", null);
+            SetColor(mat, "_EmColor", em);
+            SetFloat(mat, "_EmPower", emPower);
+            SetFloat(mat, "_RampInfo", 0f);
+            SetFloat(mat, "_SpecularStrength", 0.1f);
+            SetFloat(mat, "_SpecularExponent", 4f);
+            SetFloat(mat, "_FresnelBoost", 0f);
+            SetFloat(mat, "_FlowmapOn", 0f);
+            SetFloat(mat, "_LimbRemovalOn", 0f);
+            SetFloat(mat, "_DitherOn", 0f);
+            SetFloat(mat, "_Fade", 1f);
+            SetFloat(mat, "_FEON", 0f);
+            foreach (string k in new[] { "DITHER", "LIMBREMOVAL", "FORCE_SPEC", "FRESNEL_EMISSION" }) mat.DisableKeyword(k);
+            mat.renderQueue = 2000;
+            SetFloat(mat, "_Cull", (float)CullMode.Off);
             return mat;
         }
+
+        private static void SetTex(Material m, string p, Texture t) { if (m.HasProperty(p)) m.SetTexture(p, t); }
+        private static void SetFloat(Material m, string p, float v) { if (m.HasProperty(p)) m.SetFloat(p, v); }
+        private static void SetColor(Material m, string p, Color c) { if (m.HasProperty(p)) m.SetColor(p, c); }
 
         private struct VertexKey : IEquatable<VertexKey>
         {
