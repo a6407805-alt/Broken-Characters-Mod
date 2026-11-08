@@ -143,8 +143,8 @@
         "berserk",
         "zoid"
       ],
-      "version": "0.1.1",
-      "note": "Active WIP (v0.1.1): glow fix (emission off, model shading visible);: Zoids Battle Legends port with Buster Claws, E-Shield, Magneser Drills, and Charged Particle Cannon (CPC)"
+      "version": "0.1.2",
+      "note": "Active WIP (v0.1.2): white-screen fix (mesh tangents), Commando hidden in game;: Zoids Battle Legends port with Buster Claws, E-Shield, Magneser Drills, and Charged Particle Cannon (CPC)"
     }
   ]
 }

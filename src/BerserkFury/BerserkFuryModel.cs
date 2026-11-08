@@ -191,7 +191,10 @@ namespace BerserkFury
             if (outNormals.Count == outPositions.Count) mesh.SetNormals(outNormals);
             mesh.SetTriangles(outTriangles, 0);
             mesh.RecalculateBounds();
-            if (outNormals.Count == 0) mesh.RecalculateNormals();
+            if (outNormals.Count != outPositions.Count) mesh.RecalculateNormals();
+            // HG Standard is a deferred, normal-mapped shader: without tangents it writes NaN pixels and bloom
+            // spreads them into a white-out over the whole screen.
+            mesh.RecalculateTangents();
             return mesh;
         }
 
@@ -275,6 +278,35 @@ namespace BerserkFury
 
             // Add dynamic idle / locomotion anim component
             visualObj.AddComponent<BerserkFuryLocomotion>();
+
+            // forceRenderingOff is not saved on prefabs, so Commando reappeared in game. Keep him hidden at runtime.
+            BerserkFuryHideBase hider = characterModelRoot.GetComponent<BerserkFuryHideBase>();
+            if (!hider) hider = characterModelRoot.AddComponent<BerserkFuryHideBase>();
+            hider.Keep = renderer;
+        }
+    }
+
+    /// <summary>Hides the cloned Commando meshes every frame; item displays (Display*) stay visible.</summary>
+    public class BerserkFuryHideBase : MonoBehaviour
+    {
+        public Renderer Keep;
+        private CharacterModel _model;
+
+        private void LateUpdate()
+        {
+            if (!_model) _model = GetComponent<CharacterModel>();
+            if (!_model || _model.baseRendererInfos == null) return;
+            if (!Keep)
+            {
+                Transform v = transform.Find("BerserkFuryVisual");
+                if (v) Keep = v.GetComponent<Renderer>();
+            }
+            foreach (var info in _model.baseRendererInfos)
+            {
+                Renderer r = info.renderer;
+                if (!r || r == Keep || r.name.StartsWith("Display")) continue;
+                if (!r.forceRenderingOff) r.forceRenderingOff = true;
+            }
         }
     }
 
