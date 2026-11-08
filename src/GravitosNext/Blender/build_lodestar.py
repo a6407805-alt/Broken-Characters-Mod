@@ -78,9 +78,9 @@ M = {
     "cloth":  toon("LS_Cloth",    (0.11, 0.06, 0.2)),
     "iron":   toon("LS_Iron",     (0.2, 0.18, 0.2), shade=0.45, hi=1.5),
     "dome":   toon("LS_Dome",     (0.33, 0.34, 0.4), shade=0.45, hi=1.8),
-    "violet": toon("LS_Violet",   (0.42, 0.33, 1.0), emit=5.0),
-    "cyan":   toon("LS_Cyan",     (0.25, 0.9, 1.0), emit=3.0),
-    "shard":  toon("LS_Shard",    (0.55, 0.45, 1.0), emit=2.5),
+    "violet": toon("LS_Violet",   (0.42, 0.3, 1.0), emit=1.4),
+    "cyan":   toon("LS_Cyan",     (0.25, 0.9, 1.0), emit=1.2),
+    "shard":  toon("LS_Shard",    (0.5, 0.4, 1.0), emit=1.1),
 }
 OUTLINE = bpy.data.materials.get("LS_Outline") or bpy.data.materials.new("LS_Outline")
 try:
@@ -356,10 +356,10 @@ mirror(leg)
 # Three iron rings orbiting the torso. Each ring is built flat around the origin with notches + a violet
 # inlay; the pivot (where the game places it) is the chest centre. Tilts are applied in game.
 RING_PIVOT = Vector((0, 0, 1.3))
-for i, (R, w) in enumerate(((0.36, 0.022), (0.44, 0.018), (0.52, 0.015))):
+for i, (R, w) in enumerate(((0.31, 0.018), (0.37, 0.015), (0.43, 0.013))):
     prim("torus", f"LS_Ring{i}", RING_PIVOT, (1, 1, 1), m="iron", fx=f"Ring{i}", R=R, r=w, seg=56, ring=8, square=1.6)
-    prim("torus", f"LS_RingInlay{i}", RING_PIVOT, (1, 1, 1), m="violet", fx=f"Ring{i}", R=R, r=w * 0.35, seg=56,
-         ring=6, square=4.5)
+    prim("torus", f"LS_RingInlay{i}", RING_PIVOT, (1, 1, 1), m="violet", fx=f"Ring{i}", R=R, r=w * 1.12, seg=56,
+         ring=8, square=0.28)
     n = 6 + i * 2
     for k in range(n):
         a = 2 * math.pi * k / n
