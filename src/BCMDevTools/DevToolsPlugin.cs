@@ -26,7 +26,7 @@ using Path = System.IO.Path;
 
 namespace BCMDevTools
 {
-    [BepInPlugin(Guid, "BCM Dev Tools", "1.0.6")]
+    [BepInPlugin(Guid, "BCM Dev Tools", "1.0.7")]
     public partial class DevToolsPlugin : BaseUnityPlugin
     {
         public const string Guid = "com.a6407805.bcmdevtools";
@@ -73,7 +73,7 @@ namespace BCMDevTools
             {
                 Directory.CreateDirectory(SharedDir);
                 File.WriteAllText(MarkerFile, "BCM Dev Tools " + DateTime.Now.ToString("o"));  // shows TEST LEVEL in the launcher
-                if (File.Exists(FlagFile)) { File.Delete(FlagFile); _quick = Quick.WaitTitle; _testSession = true; Logger.LogInfo("Quick test requested"); }
+                if (File.Exists(FlagFile)) { File.Delete(FlagFile); _quick = Quick.WaitTitle; _testSession = true; Application.runInBackground = true; Logger.LogInfo("Quick test requested"); }
                 else Logger.LogInfo("Normal launch (PLAY): dev tools stay off. Use TEST LEVEL in the launcher.");
             }
             catch (Exception e) { Logger.LogWarning("Shared files: " + e.Message); }
