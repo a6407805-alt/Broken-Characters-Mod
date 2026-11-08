@@ -384,7 +384,7 @@ namespace BerserkFury
 
             if (Progress >= 1f && isAuthority)
             {
-                if (Strike < 2 && inputBank && inputBank.skill3.down) BeginStrike(Strike + 1);
+                if (Strike < 2 && inputBank && inputBank.skill2.down) BeginStrike(Strike + 1);
                 else outer.SetNextStateToMain();
             }
         }
