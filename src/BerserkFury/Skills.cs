@@ -18,6 +18,10 @@ namespace BerserkFury
 
         private float _duration;
 
+        public static int LastMuzzle;      // 0 = left claw, 1 = right claw, 2 = mouth
+        static int _cycle;
+        static float _lastHitSound;
+
         public override void OnEnter()
         {
             base.OnEnter();
@@ -25,35 +29,61 @@ namespace BerserkFury
             Ray aim = GetAimRay();
             StartAimMode(aim, 2f, false);
 
-            _alternateSide = !_alternateSide;
-            LastShotTime = Time.time; LastShotRight = _alternateSide; LastShooter = gameObject;
-            Vector3 sideOffset = characterBody.gameObject.transform.right * (_alternateSide ? 0.9f : -0.9f) + Vector3.up * 1.5f;
+            // left claw -> right claw -> mouth, repeating
+            int muzzle = _cycle++ % 3;
+            _alternateSide = muzzle == 1;
+            LastShotTime = Time.time; LastShotRight = muzzle == 1; LastMuzzle = muzzle; LastShooter = gameObject;
+
+            Vector3 from = BerserkFuryLook.Muzzle(gameObject, muzzle,
+                aim.origin + characterBody.gameObject.transform.right * (muzzle == 0 ? -0.9f : muzzle == 1 ? 0.9f : 0f) + Vector3.up * 1.2f);
+            // converge on whatever the crosshair is on
+            Vector3 target = aim.GetPoint(120f);
+            bool hitHurtbox = false;
+            if (Physics.Raycast(aim, out RaycastHit hit, 120f, LayerIndex.world.mask | LayerIndex.entityPrecise.mask, QueryTriggerInteraction.Ignore))
+            {
+                target = hit.point;
+                hitHurtbox = hit.collider && hit.collider.GetComponent<HurtBox>();
+            }
+            Vector3 dir = (target - from).normalized;
+            bool mouth = muzzle == 2;
 
             if (isAuthority)
             {
-                FireBusterShot(aim, sideOffset);
+                FireBusterShot(new Ray(from, dir), mouth);
                 CheckMeleeClaw(aim);
             }
 
-            if (!(isAuthority && BerserkFurySfx.Play("m1"))) Util.PlaySound("Play_golem_laser_fire", gameObject);
+            // blue beam (everyone sees it)
+            BerserkFuryBeam.Spawn(from, target, mouth ? 0.55f : 0.32f, mouth ? 0.2f : 0.14f);
+
+            if (isAuthority)
+            {
+                if (!BerserkFurySfx.Play(mouth ? "m1_mouth" : "m1")) Util.PlaySound("Play_golem_laser_fire", gameObject);
+                if (hitHurtbox && Time.time - _lastHitSound > 0.5f) { _lastHitSound = Time.time; BerserkFurySfx.Play("m1_hit"); }
+            }
+            else Util.PlaySound("Play_golem_laser_fire", gameObject);
         }
 
-        private void FireBusterShot(Ray aim, Vector3 offset)
+        private void FireBusterShot(Ray ray, bool mouth)
         {
-            Vector3 origin = aim.origin + offset;
+            GameObject impact = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/ImpactEffects/ImpactLightning")
+                                ?? LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/ImpactEffects/ImpactToolbotRebar");
             BulletAttack attack = new BulletAttack
             {
                 owner = gameObject,
                 weapon = gameObject,
-                origin = origin,
-                aimVector = aim.direction,
+                origin = ray.origin,
+                aimVector = ray.direction,
                 minSpread = 0f,
-                maxSpread = 0.4f,
+                maxSpread = 0f,
                 bulletCount = 1,
-                damage = damageStat * DamageCoeff,
-                force = 600f,
-                tracerEffectPrefab = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/Tracers/TracerToolbotRebar"),
-                hitEffectPrefab = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/ImpactEffects/ImpactToolbotRebar"),
+                radius = mouth ? 0.6f : 0.35f,
+                smartCollision = true,
+                maxDistance = 150f,
+                damage = damageStat * DamageCoeff * (mouth ? 1.3f : 1f),
+                force = mouth ? 900f : 600f,
+                tracerEffectPrefab = null,
+                hitEffectPrefab = impact,
                 isCrit = RollCrit(),
                 damageType = DamageType.Generic
             };

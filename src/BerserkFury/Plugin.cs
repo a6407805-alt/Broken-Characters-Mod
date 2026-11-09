@@ -21,7 +21,7 @@ namespace BerserkFury
     {
         public const string PluginGUID = "com.bcm.berserkfury";
         public const string PluginName = "BerserkFury";
-        public const string PluginVersion = "0.2.7";
+        public const string PluginVersion = "0.2.8";
         public const string TokenPrefix = "BCM_BERSERKFURY_";
 
         public static ManualLogSource Log;
@@ -254,7 +254,7 @@ namespace BerserkFury
             LanguageAPI.Add(TokenPrefix + "DESCRIPTION",
                 "<color=#9C27B0>Berserk Fury</color> is an apex combat Zoid straight from <color=#00E5FF>Zoids: Battle Legends</color>.\n\n" +
                 "<color=#E040FB>[PASSIVE] Organoid Drive & E-Shield:</color> Dealing damage accumulates <color=#E040FB>Particle Energy</color>. At 100%, enter Overdrive for +25% attack speed and +20% move speed. Sprinting deploys an <color=#00E5FF>E-Shield</color> deflecting incoming projectiles.\n" +
-                "<color=#E040FB>[M1] Twin Buster Blaster:</color> Fire alternating particle beams for <style=cIsDamage>320% damage</style>. Close-range strikes inflict bleed.\n" +
+                "<color=#E040FB>[M1] Twin Buster Blaster:</color> Fire blue lasers from the left claw, right claw, then the mouth, for <style=cIsDamage>320% damage</style>. Close-range strikes inflict bleed.\n" +
                 "<color=#E040FB>[M2] Buster Claw Slash:</color> The back claws fold into blades and swing forward: left slash, right slash, then a twin overhead slam. Hold to chain the combo. <style=cIsDamage>320% / 320% / 600% + stun</style>.\n" +
                 "<color=#E040FB>[SHIFT] Magneser Drill Thrust:</color> Thrust spinning drill claws forward, shredding enemies for <style=cIsDamage>7x85% damage</style>.\n" +
                 "<color=#E040FB>[R] Charged Particle Cannon (CPC):</color> Anchor into the ground and discharge a screen-clearing particle mega-beam for <style=cIsDamage>3000%+ total damage</style>.");
