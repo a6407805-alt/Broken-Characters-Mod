@@ -330,3 +330,147 @@ namespace BerserkFury
         }
     }
 }
+
+namespace BerserkFury
+{
+    /// <summary>
+    /// Charged Particle Cannon visuals: during the charge the two claw guns and the mouth gather blue energy and thin
+    /// feeder beams flicker toward a point in front of the jaw; when it fires all three lock into that point and one
+    /// enormous beam (pulsing core + wide glow) blasts out to whatever it hits.
+    /// </summary>
+    public class BerserkFuryCpcBeam : MonoBehaviour
+    {
+        ChargedParticleCannonState _state;
+        GameObject _bodyObj;
+        CharacterBody _body;
+        readonly LineRenderer[] _feed = new LineRenderer[3], _feedCore = new LineRenderer[3];
+        LineRenderer _main, _mainCore, _mainGlow;
+        Light _convLight, _endLight;
+        readonly Light[] _muzzle = new Light[3];
+        float _shakeT;
+
+        static readonly Color Blue = BerserkFuryBeam.Blue;
+        static readonly Color Deep = new Color(0.1f, 0.3f, 1f);
+
+        public static BerserkFuryCpcBeam Create(ChargedParticleCannonState state)
+        {
+            Material mat = BerserkFuryLook.TrailMaterial();
+            if (!mat || !state.outer) return null;
+            GameObject g = new GameObject("BF_CPC");
+            var fx = g.AddComponent<BerserkFuryCpcBeam>();
+            fx._state = state;
+            fx._bodyObj = state.outer.gameObject;
+            fx._body = fx._bodyObj.GetComponent<CharacterBody>();
+            for (int i = 0; i < 3; i++)
+            {
+                fx._feed[i] = Line(g, mat, new Color(Blue.r, Blue.g, Blue.b, 0.6f));
+                fx._feedCore[i] = Line(g, mat, new Color(0.9f, 0.97f, 1f, 1f));
+                fx._muzzle[i] = MakeLight(g, 6f);
+            }
+            fx._mainGlow = Line(g, mat, new Color(Deep.r, Deep.g, Deep.b, 0.35f));
+            fx._main = Line(g, mat, new Color(Blue.r, Blue.g, Blue.b, 0.8f));
+            fx._mainCore = Line(g, mat, new Color(0.95f, 0.98f, 1f, 1f));
+            fx._convLight = MakeLight(g, 14f);
+            fx._endLight = MakeLight(g, 18f);
+            return fx;
+        }
+
+        static LineRenderer Line(GameObject parent, Material mat, Color c)
+        {
+            GameObject g = new GameObject("line");
+            g.transform.SetParent(parent.transform, false);
+            LineRenderer lr = g.AddComponent<LineRenderer>();
+            lr.sharedMaterial = mat; lr.useWorldSpace = true; lr.positionCount = 2;
+            lr.startColor = lr.endColor = c;
+            lr.shadowCastingMode = ShadowCastingMode.Off; lr.receiveShadows = false;
+            lr.numCapVertices = 6;
+            lr.startWidth = lr.endWidth = 0f;
+            return lr;
+        }
+
+        static Light MakeLight(GameObject parent, float range)
+        {
+            GameObject g = new GameObject("light"); g.transform.SetParent(parent.transform, false);
+            Light l = g.AddComponent<Light>();
+            l.type = LightType.Point; l.color = Blue; l.range = range; l.intensity = 0f; l.shadows = LightShadows.None;
+            return l;
+        }
+
+        static Ray AimOf(GameObject bodyObj)
+        {
+            InputBankTest ib = bodyObj ? bodyObj.GetComponent<InputBankTest>() : null;
+            if (ib) return new Ray(ib.aimOrigin, ib.aimDirection);
+            return new Ray(bodyObj.transform.position + Vector3.up * 1.6f, bodyObj.transform.forward);
+        }
+
+        /// <summary>Where the three beams meet: 7 m ahead of the jaw along the aim.</summary>
+        public static Vector3 ConvergePoint(GameObject bodyObj, Ray aim)
+        {
+            Vector3 mouth = BerserkFuryLook.Muzzle(bodyObj, 2, bodyObj.transform.position + Vector3.up * 1.6f + bodyObj.transform.forward * 1.8f);
+            return mouth + aim.direction * 7f;
+        }
+
+        public static Vector3 EndPoint(GameObject bodyObj, Ray aim)
+        {
+            Vector3 from = ConvergePoint(bodyObj, aim);
+            if (Physics.Raycast(from, aim.direction, out RaycastHit hit, 220f, LayerIndex.world.mask, QueryTriggerInteraction.Ignore)) return hit.point;
+            return from + aim.direction * 220f;
+        }
+
+        void LateUpdate()
+        {
+            if (!_bodyObj || _state == null || _state.outer == null || _state.outer.state != _state) { Destroy(gameObject); return; }
+            float t = Time.time, dt = Time.deltaTime;
+            Ray aim = AimOf(_bodyObj);
+            Vector3 conv = ConvergePoint(_bodyObj, aim);
+            Vector3 end = EndPoint(_bodyObj, aim);
+            Vector3 fallback = _bodyObj.transform.position + Vector3.up * 2f;
+            Vector3[] muzzles =
+            {
+                BerserkFuryLook.Muzzle(_bodyObj, 0, fallback), BerserkFuryLook.Muzzle(_bodyObj, 1, fallback), BerserkFuryLook.Muzzle(_bodyObj, 2, fallback)
+            };
+
+            float charge = _state.ChargeProgress;
+            bool firing = _state.Firing;
+            float flicker = 0.75f + 0.25f * Mathf.Sin(t * 47f) * Mathf.Sin(t * 23f);
+
+            for (int i = 0; i < 3; i++)
+            {
+                // charge: energy gathers at each muzzle; feeder beams flicker on in the last third
+                float w = firing ? (i == 2 ? 0.9f : 0.7f) * flicker : (charge > 0.65f && UnityEngine.Random.value < charge ? 0.12f + charge * 0.15f : 0f);
+                Set(_feed[i], muzzles[i], conv, w, w * 0.9f);
+                Set(_feedCore[i], muzzles[i], conv, w * 0.35f, w * 0.3f);
+                _muzzle[i].transform.position = muzzles[i];
+                _muzzle[i].intensity = firing ? 6f * flicker : charge * charge * 5f * flicker;
+            }
+
+            // the merged beam: unreasonable
+            float mw = firing ? 3.4f * flicker : 0f;
+            Set(_mainGlow, conv, end, mw * 2.2f, mw * 2.6f);
+            Set(_main, conv, end, mw, mw * 1.2f);
+            Set(_mainCore, conv, end, mw * 0.4f, mw * 0.45f);
+            _convLight.transform.position = conv;
+            _convLight.intensity = firing ? 10f * flicker : charge * 4f;
+            _endLight.transform.position = end - aim.direction * 1.5f;
+            _endLight.intensity = firing ? 12f * flicker : 0f;
+
+            if (firing && _body && _body.hasEffectiveAuthority)
+            {
+                _shakeT -= dt;
+                if (_shakeT <= 0f)
+                {
+                    _shakeT = 0.25f;
+                    ShakeEmitter.CreateSimpleShakeEmitter(conv, new Wave { amplitude = 0.6f, frequency = 30f }, 0.3f, 30f, true);
+                }
+            }
+        }
+
+        static void Set(LineRenderer lr, Vector3 a, Vector3 b, float w0, float w1)
+        {
+            if (!lr) return;
+            lr.SetPosition(0, a); lr.SetPosition(1, b);
+            lr.startWidth = w0; lr.endWidth = w1;
+            lr.enabled = w0 > 0.001f;
+        }
+    }
+}

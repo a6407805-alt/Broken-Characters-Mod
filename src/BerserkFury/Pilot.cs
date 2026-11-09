@@ -517,6 +517,23 @@ namespace BerserkFury
         static readonly string[] Pool = new string[8];
 
         public static float Volume = 0.8f;
+        static readonly System.Collections.Generic.Dictionary<string, string> ByName = new System.Collections.Generic.Dictionary<string, string>();
+
+        /// <summary>Stops the last instance of a named sound (e.g. cut the CPC siren when the beam fires).</summary>
+        public static void Stop(string name)
+        {
+            try
+            {
+                if (ByName.TryGetValue(name, out string alias))
+                {
+                    Mci("stop " + alias, null, 0, System.IntPtr.Zero);
+                    Mci("close " + alias, null, 0, System.IntPtr.Zero);
+                    ByName.Remove(name);
+                    for (int i = 0; i < Pool.Length; i++) if (Pool[i] == alias) Pool[i] = null;
+                }
+            }
+            catch { }
+        }
 
         static string FileFor(string name)
         {
@@ -565,6 +582,7 @@ namespace BerserkFury
                 if (mp3) Mci("setaudio " + alias + " volume to " + (int)(Volume * 1000), null, 0, System.IntPtr.Zero);
                 Mci("play " + alias, null, 0, System.IntPtr.Zero);
                 Pool[slot] = alias;
+                ByName[name] = alias;
                 return true;
             }
             catch { return false; }

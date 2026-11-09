@@ -143,8 +143,8 @@
         "berserk",
         "zoid"
       ],
-      "version": "0.2.8",
-      "note": "Active WIP (v0.2.8): blue M1 lasers from claw guns + mouth; polish - new icons, 5 colour skins, claw glow/trails/lights; M2 = Buster Claw Slash melee combo, Shift = Magneser Drill, claws stay shut while running; heavier stride (hips sink, feet stay planted), tail anchors for CPC; E-Shield square removed; pilot banter + COMMAND exchanges, custom SFX slots, articulated Buster Claws, heavy T-rex walk;: Zoids Battle Legends port with Buster Claws, E-Shield, Magneser Drills, and Charged Particle Cannon (CPC)"
+      "version": "0.2.9",
+      "note": "Active WIP (v0.2.9): CPC - siren charge, 3 beams converge into one huge beam; blue M1 lasers; polish - new icons, 5 colour skins, claw glow/trails/lights; M2 = Buster Claw Slash melee combo, Shift = Magneser Drill, claws stay shut while running; heavier stride (hips sink, feet stay planted), tail anchors for CPC; E-Shield square removed; pilot banter + COMMAND exchanges, custom SFX slots, articulated Buster Claws, heavy T-rex walk;: Zoids Battle Legends port with Buster Claws, E-Shield, Magneser Drills, and Charged Particle Cannon (CPC)"
     }
   ]
 }

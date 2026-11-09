@@ -251,8 +251,9 @@ namespace BerserkFury
     // ================================================================ Special: Charged Particle Cannon (CPC)
     public class ChargedParticleCannonState : BaseSkillState
     {
-        public static float ChargeDuration = 1.0f;
-        public static float FiringDuration = 2.4f;
+        public static float ChargeDuration = 2.4f;   // warning siren plays through the charge
+        public static float FiringDuration = 2.8f;
+        BerserkFuryCpcBeam _fx;
         private bool _isFiring;
         public bool Firing => _isFiring;
         public float ChargeProgress => Mathf.Clamp01(fixedAge / ChargeDuration);
@@ -275,10 +276,13 @@ namespace BerserkFury
             if (passive) passive.IsChargingSpecial = true;
 
             if (!(isAuthority && BerserkFurySfx.Play("cpc_charge"))) Util.PlaySound("Play_golem_laser_charge", gameObject);
+            _fx = BerserkFuryCpcBeam.Create(this);
         }
 
         public override void OnExit()
         {
+            if (_fx) UnityEngine.Object.Destroy(_fx.gameObject);
+            if (isAuthority) BerserkFurySfx.Stop("cpc_charge");
             var passive = GetComponent<BerserkFuryPassiveController>();
             if (passive) passive.IsChargingSpecial = false;
             base.OnExit();
@@ -301,6 +305,7 @@ namespace BerserkFury
             if (!_isFiring && fixedAge >= ChargeDuration)
             {
                 _isFiring = true;
+                if (isAuthority) BerserkFurySfx.Stop("cpc_charge");   // siren ends, then the blast
                 if (!(isAuthority && BerserkFurySfx.Play("cpc_fire"))) Util.PlaySound("Play_titan_laser_fire", gameObject);
             }
 
@@ -323,8 +328,8 @@ namespace BerserkFury
                         teamIndex = TeamComponent.GetObjectTeam(gameObject),
                         baseDamage = damageStat * 6f,
                         baseForce = 1500f,
-                        position = aim.origin + aim.direction * 30f,
-                        radius = 12f,
+                        position = BerserkFuryCpcBeam.EndPoint(gameObject, aim),
+                        radius = 14f,
                         falloffModel = BlastAttack.FalloffModel.None,
                         crit = true,
                         damageType = DamageType.IgniteOnHit
@@ -338,22 +343,25 @@ namespace BerserkFury
 
         private void FireParticleBeamTick(Ray aim)
         {
-            Vector3 mouthOrigin = transform.position + Vector3.up * 1.6f + transform.forward * 1.8f;
+            // the three beams meet in front of the jaw; the merged beam carries on from there
+            Vector3 origin = BerserkFuryCpcBeam.ConvergePoint(gameObject, aim);
             BulletAttack beam = new BulletAttack
             {
                 owner = gameObject,
                 weapon = gameObject,
-                origin = mouthOrigin,
+                origin = origin,
                 aimVector = aim.direction,
                 minSpread = 0f,
-                maxSpread = 0.1f,
+                maxSpread = 0f,
                 bulletCount = 1,
-                damage = damageStat * 1.6f,
-                force = 800f,
-                radius = 1.2f,
+                damage = damageStat * 2.2f,
+                force = 1200f,
+                radius = 2.6f,
+                maxDistance = 220f,
                 stopperMask = LayerIndex.world.mask,
-                tracerEffectPrefab = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/Tracers/TracerGolem"),
-                hitEffectPrefab = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/ImpactEffects/ImpactToolbotRebar"),
+                tracerEffectPrefab = null,
+                hitEffectPrefab = LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/ImpactEffects/ImpactLightning")
+                                  ?? LegacyResourcesAPI.Load<GameObject>("Prefabs/Effects/ImpactEffects/ImpactToolbotRebar"),
                 isCrit = RollCrit(),
                 damageType = DamageType.BypassArmor
             };
