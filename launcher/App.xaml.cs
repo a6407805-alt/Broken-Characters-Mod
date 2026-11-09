@@ -11,6 +11,7 @@ namespace BrokenCharactersLauncher
     {
         protected override void OnStartup(StartupEventArgs e)
         {
+            WineCompat.ApplyToApp(); // Linux/Wine: software drawing, or the window stays black
             base.OnStartup(e);
             int i = Array.IndexOf(e.Args, "--screenshot-publish");
             if (i >= 0 && i + 1 < e.Args.Length)

@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -97,6 +98,7 @@ namespace BrokenCharactersLauncher
         public MainWindow()
         {
             InitializeComponent();
+            WineCompat.Apply(this); // Linux/Wine: no see-through window (it draws black there)
             LocationChanged += DockSidePanels; // GUIDE / CREATOR side panels follow the launcher
             SizeChanged += DockSidePanels;
         }
@@ -489,8 +491,14 @@ namespace BrokenCharactersLauncher
             // see. The launcher has its own key box instead, so in that case the extras are skipped for now.
             bool askedAboutExtras = File.Exists(ExtrasKeyFile) || File.Exists(ExtrasSkipFile);
             string args = $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\"" + (askedAboutExtras ? "" : " -SkipExtras");
+            if (WineCompat.IsWine)
+            {
+                // Wine has no Steam registry: point the installer at the Linux Steam copy of the game.
+                string? game = StagingSync.FindGameFolders().FirstOrDefault();
+                if (game != null) args += $" -GameDir \"{game}\"";
+            }
 
-            var psi = new ProcessStartInfo("powershell.exe", args)
+            var psi = new ProcessStartInfo(WineCompat.PowerShellExe(), args)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,            // no console window; we show progress ourselves
@@ -515,7 +523,9 @@ namespace BrokenCharactersLauncher
             }
             catch (System.ComponentModel.Win32Exception ex)
             {
-                throw new InvalidOperationException("Windows PowerShell couldn't be started: " + ex.Message, ex);
+                throw new InvalidOperationException(WineCompat.IsWine
+                    ? "PowerShell isn't installed in Wine. In a Linux terminal run:  winetricks powershell  then open the launcher again."
+                    : "Windows PowerShell couldn't be started: " + ex.Message, ex);
             }
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();

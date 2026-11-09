@@ -40,6 +40,7 @@ namespace BrokenCharactersLauncher
             _key = key ?? "";
             _owner = owner;
             InitializeComponent();
+            WineCompat.Apply(this); // Linux/Wine: no see-through window (it draws black there)
             if (!owner)
             {
                 TitleRest.Text = "  STATUS";

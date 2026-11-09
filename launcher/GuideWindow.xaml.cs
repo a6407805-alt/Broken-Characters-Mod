@@ -17,6 +17,7 @@ namespace BrokenCharactersLauncher
         public GuideWindow()
         {
             InitializeComponent();
+            WineCompat.Apply(this); // Linux/Wine: no see-through window (it draws black there)
         }
 
         // ------------------------------------------------------------------ extras key unlock (KeyVault.cs)
