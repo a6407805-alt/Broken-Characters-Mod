@@ -33,6 +33,7 @@ namespace BrokenCharactersLauncher
         public PublishWindow(string? screenshotPath = null)
         {
             InitializeComponent();
+            WineCompat.Apply(this); // Linux/Wine: no see-through window (it draws black there)
             _screenshotPath = screenshotPath;
         }
 

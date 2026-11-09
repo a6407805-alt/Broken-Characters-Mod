@@ -57,6 +57,7 @@ namespace BrokenCharactersLauncher
         public JukeboxWindow(string? screenshotPath = null)
         {
             InitializeComponent();
+            WineCompat.Apply(this); // Linux/Wine: no see-through window (it draws black there)
             _screenshotPath = screenshotPath;
             SongList.ItemsSource = _rows;
             _player.MediaEnded += (_, _) => StopPreview();

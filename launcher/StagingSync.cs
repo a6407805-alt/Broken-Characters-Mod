@@ -385,6 +385,7 @@ namespace BrokenCharactersLauncher
             return libs.Distinct(StringComparer.OrdinalIgnoreCase)
                        .Select(l => Path.Combine(l, "steamapps", "common", "Risk of Rain 2"))
                        .Where(g => File.Exists(Path.Combine(g, "Risk of Rain 2.exe")))
+                       .Concat(WineCompat.LinuxGameFolders()) // Linux Steam, when the launcher runs under Wine
                        .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
 
