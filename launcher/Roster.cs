@@ -23,6 +23,8 @@ namespace BrokenCharactersLauncher
         public string Name { get; init; } = "";
         public string Tagline { get; init; } = "";
         public DateTimeOffset Added { get; init; }
+        /// <summary>Last real update (version bump or source edit), from merge_roster.py. Sorts the roster.</summary>
+        public DateTimeOffset Updated { get; init; }
         public ImageSource? Portrait { get; init; }
         public Color AccentColor { get; init; } = Color.FromRgb(0xFF, 0xC9, 0x28);
         public Brush AccentBrush => new SolidColorBrush(AccentColor);
@@ -104,6 +106,7 @@ namespace BrokenCharactersLauncher
                         Name = Str(c, "name"),
                         Tagline = Str(c, "tagline"),
                         Added = DateTimeOffset.TryParse(Str(c, "added"), CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTimeOffset d) ? d : DateTimeOffset.MinValue,
+                        Updated = DateTimeOffset.TryParse(Str(c, "updated"), CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTimeOffset u) ? u : DateTimeOffset.MinValue,
                         Portrait = Image(Str(c, "image"), imageBase),
                         AccentColor = ParseColor(Str(c, "accent")),
                         Status = Str(c, "status"),
@@ -116,13 +119,14 @@ namespace BrokenCharactersLauncher
             ReadTiles(root, "maps", data.Maps, imageBase);
             ReadTiles(root, "modes", data.Modes, imageBase);
 
-            // Newest characters are pinned to the far left.
-            data.Characters.Sort((a, b) => b.Added.CompareTo(a.Added));
+            // Owner's rule: the most recently modded characters come first (last update, else when it was added).
+            static DateTimeOffset Latest(CharacterEntry c) => c.Updated > c.Added ? c.Updated : c.Added;
+            data.Characters.Sort((a, b) => Latest(b).CompareTo(Latest(a)));
 
             // NEW badge: the 3 most recent additions, if they were added in the last 14 days
             // (a character can also force it with "new": true in the JSON).
             DateTimeOffset cutoff = DateTimeOffset.Now.AddDays(-14);
-            foreach (CharacterEntry c in data.Characters.Take(3))
+            foreach (CharacterEntry c in data.Characters.OrderByDescending(x => x.Added).Take(3))
                 if (c.Added >= cutoff) c.IsNew = true;
 
             return data;

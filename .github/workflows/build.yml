@@ -143,6 +143,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # merge_roster.py sorts characters by their last real update (git history)
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
@@ -197,10 +199,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0  # newest-first roster order comes from git history
+          filter: blob:none
           sparse-checkout: |
             launcher
             release
             mods
+            src
       - name: Merge the roster cards (launchers download roster.json from the release)
         run: |
           # New characters without a card get one automatically, with a picture (card-<Mod>.png on the release).

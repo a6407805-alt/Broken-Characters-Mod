@@ -15,6 +15,10 @@ straight to `main`; read CONTRIBUTING.md for the new-character checklist and the
   mods/<Mod> character without one (NOT_CHARACTERS lists utility/map/mode mods); the publish job makes card-<Mod>.png
   (mod's icon.png / Icons/portrait.png, else a lettered placeholder) on the release. Replace placeholders with real
   art in launcher/Assets/Roster/<Mod>.png. Maps/modes are manual entries in roster.json with Assets/Tiles/<X>.png.
+  Portraits (owner, Nov 8): every character faces RIGHT with its face near the centre (512x512, face at 50%/42%);
+  `release/portraits/make_portraits.py` has the per-character face point / zoom / mirror used. Roster order = most
+  recently modded first: merge_roster.py writes `"updated"` (last manifest version bump or src/unity edit; bulk
+  plugin uploads don't count) and the launcher sorts by it (needs fetch-depth 0 in CI).
 - Creator window (`launcher/Publisher.cs`, `PublishWindow.xaml*`): lets any creator upload mods through the
   GitHub API. Every creator may update EVERY mod (owner's rule: one shared pack); `creators.json` just records who added a mod. Don't commit dlls into `mods/<Mod>/` when `src/<Mod>/` exists.
   Before changing a mod you don't own, check `creators.json` and `git log -- src/<Mod>`.

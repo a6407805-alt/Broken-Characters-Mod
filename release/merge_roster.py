@@ -41,6 +41,7 @@ MOD_FOLDER = {
     "REAPER": "Reaper",
     "THE DUELIST": "Duelist",
     "THE SURVEYOR": "Surveyor",
+    "MOMMY MILKERS": "MommyMilkers",
 }
 
 
@@ -189,7 +190,68 @@ for mod_dir in sorted((root / "mods").iterdir()) if (root / "mods").is_dir() els
     entry = {"name": name, "tagline": tagline(manifest), "added": added or datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
              "accent": color, "status": "yellow" if ver and parse_ver(ver) >= (0, 3, 0) else "red", "version": ver, "image": image}
     data["characters"].insert(0, entry)
+    MOD_FOLDER[name] = folder
     known_names.add(name)
     print("auto card for " + folder + ": " + name)
+
+# ---------------------------------------------------------------- newest work first
+# Owner's rule: the most recently modded characters come first. "updated" = the last commit that touched the
+# character's mods/<Mod>, src/<Mod> or unity/<Mod> folder (needs the full git history: fetch-depth 0 in CI).
+for card_file in cards_dir.glob("*.json") if cards_dir.is_dir() else []:
+    try:
+        for entry in json.loads(card_file.read_text(encoding="utf-8-sig")).get("characters", []):
+            MOD_FOLDER.setdefault(str(entry.get("name", "")).strip().upper(), card_file.stem)
+    except Exception:
+        pass
+
+
+def git(*args: str) -> str:
+    try:
+        return subprocess.run(["git"] + list(args), capture_output=True, text=True, cwd=root, timeout=30).stdout
+    except Exception:
+        return ""
+
+
+def manifest_version_at(commit: str, path: str) -> str:
+    try:
+        return str(json.loads(git("show", commit + ":" + path).lstrip("\ufeff") or "{}").get("version_number", ""))
+    except Exception:
+        return ""
+
+
+def last_modded(folder: str) -> str:
+    """When the character last really changed: its manifest version went up, or its source (src/unity) was edited.
+    Bulk uploads that copy a whole plugins folder touch every mod without changing it, so plain file dates lie."""
+    best = ""
+    man = "mods/" + folder + "/manifest.json"
+    for line in git("log", "--format=%H %aI", "--", man).splitlines()[:15]:
+        sha, when = line.split(" ", 1)
+        new_v, old_v = manifest_version_at(sha, man), manifest_version_at(sha + "^", man)
+        if new_v and old_v and parse_ver(new_v) > parse_ver(old_v):
+            best = when
+            break
+    for p in ("src/" + folder, "unity/" + folder):
+        if (root / p).exists():
+            when = git("log", "-1", "--format=%aI", "--", p).strip()
+            if when and sort_key({"added": when}) > sort_key({"added": best}):
+                best = when
+    return best
+
+
+def sort_key(char: dict):
+    for k in ("updated", "added"):
+        try:
+            return datetime.datetime.fromisoformat(str(char.get(k, "")).replace("Z", "+00:00")).timestamp()
+        except Exception:
+            continue
+    return 0.0
+
+
+for char in data["characters"]:
+    folder = MOD_FOLDER.get(str(char.get("name", "")).strip().upper())
+    when = last_modded(folder) if folder else ""
+    if when:
+        char["updated"] = when
+data["characters"].sort(key=sort_key, reverse=True)
 
 base_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
